@@ -1677,15 +1677,6 @@ async def запустить_ивент(interaction: discord.Interaction, тип
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="модер", description="🛡️ Панель модератора")
-@is_moderator()
-async def модер(interaction: discord.Interaction):
-    embed = Design.create_embed("🛡️ ПАНЕЛЬ МОДЕРАТОРА", """
-@bot.tree.command(name="модер", description="🛡️ Панель модератора")
-@is_moderator()
-async def модер(interaction: discord.Interaction):
-    embed = Design.create_embed("🛡️ ПАНЕЛЬ МОДЕРАТОРА", """
-
 @bot.tree.command(name="модер", description="Панель модератора")
 @is_moderator()
 async def модер(interaction: discord.Interaction):
@@ -1711,10 +1702,7 @@ async def модер(interaction: discord.Interaction):
     
     embed = Design.create_embed("ПАНЕЛЬ МОДЕРАТОРА", description, "moderation")
     await interaction.response.send_message(embed=embed, ephemeral=True)
-        
-    except Exception as e:
-        print(f"Ошибка в команде модер: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка при выполнении команды", ephemeral=True)
+
 # 👑 АДМИН КОМАНДЫ
 @bot.tree.command(name="выдать", description="[АДМИН] Выдать монеты")
 @is_admin()
@@ -1804,6 +1792,7 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+
 
 
 

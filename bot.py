@@ -36,13 +36,15 @@ economic_bans = {}
 # 🔧 ИСПРАВЛЕННЫЕ ФУНКЦИИ ПРОВЕРКИ ПРАВ
 def is_admin():
     async def predicate(interaction: discord.Interaction):
+        # ТОЛЬКО указанные админы
         return interaction.user.id in ADMIN_IDS
     return commands.check(predicate)
 
 def is_moderator():
     async def predicate(interaction: discord.Interaction):
+        # ТОЛЬКО указанные модераторские роли
         user_roles = [role.id for role in interaction.user.roles]
-        return any(role_id in MODERATION_ROLES for role_id in user_roles) or interaction.user.id in ADMIN_IDS
+        return any(role_id in MODERATION_ROLES for role_id in user_roles)
     return commands.check(predicate)
 
 # 🔒 ФУНКЦИЯ ПРОВЕРКИ ЭКОНОМИЧЕСКОГО БАНА
@@ -1182,7 +1184,7 @@ async def монетка(interaction: discord.Interaction, ставка: int = 0
     
     await interaction.response.send_message(embed=embed)
 
-# 🛡️ ИСПРАВЛЕННЫЕ КОМАНДЫ МОДЕРАЦИИ С ПРОВЕРКОЙ ПРАВ
+# 🛡️ КОМАНДЫ МОДЕРАЦИИ С ПРОВЕРКОЙ ПРАВ
 @bot.tree.command(name="пред", description="Выдать предупреждение (3 пред = мут на 1 час)")
 @is_moderator()
 async def пред(interaction: discord.Interaction, пользователь: discord.Member, причина: str = "Не указана"):
@@ -1241,192 +1243,84 @@ async def пред(interaction: discord.Interaction, пользователь: d
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
 
-@bot.tree.command(name="мут", description="Замутить пользователя")
+@bot.tree.command(name="снять_пред", description="Снять предупреждение с пользователя")
 @is_moderator()
-async def мут(interaction: discord.Interaction, пользователь: discord.Member, время: str, причина: str = "Не указана"):
+async def снять_пред(interaction: discord.Interaction, пользователь: discord.Member, количество: int = 1):
     try:
         # Проверка прав целевого пользователя
         target_roles = [role.id for role in пользователь.roles]
         if any(role_id in MODERATION_ROLES for role_id in target_roles) or пользователь.id in ADMIN_IDS:
-            await interaction.response.send_message("❌ Нельзя замутить модератора или администратора!", ephemeral=True)
+            await interaction.response.send_message("❌ Нельзя снять предупреждение с модератора или администратора!", ephemeral=True)
             return
         
-        if await check_user_banned(interaction, пользователь):
+        if пользователь.id not in user_warns or user_warns[пользователь.id] <= 0:
+            await interaction.response.send_message("❌ У пользователя нет предупреждений!", ephemeral=True)
             return
         
-        if await check_user_muted(interaction, пользователь):
+        if количество <= 0:
+            await interaction.response.send_message("❌ Количество должно быть положительным!", ephemeral=True)
             return
         
-        seconds = parse_time(время)
+        current_warns = user_warns[пользователь.id]
+        new_warns = max(0, current_warns - количество)
+        user_warns[пользователь.id] = new_warns
         
-        if seconds <= 0:
-            await interaction.response.send_message("❌ Неверный формат времени! Используйте: 1с, 5м, 1ч, 2д, 1н", ephemeral=True)
-            return
-        
-        if seconds > 604800:
-            await interaction.response.send_message("❌ Максимальное время мута - 1 неделя", ephemeral=True)
-            return
-        
-        mute_role = discord.utils.get(interaction.guild.roles, name="Muted")
-        if not mute_role:
-            mute_role = await interaction.guild.create_role(name="Muted")
-            for channel in interaction.guild.channels:
-                await channel.set_permissions(mute_role, send_messages=False, speak=False)
-        
-        await пользователь.add_roles(mute_role)
-        
-        mute_data[пользователь.id] = {
-            'end_time': datetime.now() + timedelta(seconds=seconds),
-            'reason': причина,
-            'moderator': interaction.user.display_name,
-            'guild_id': interaction.guild.id
-        }
-        
-        time_display = ""
-        if seconds >= 604800:
-            time_display = f"{seconds // 604800} недель"
-        elif seconds >= 86400:
-            time_display = f"{seconds // 86400} дней"
-        elif seconds >= 3600:
-            time_display = f"{seconds // 3600} часов"
-        elif seconds >= 60:
-            time_display = f"{seconds // 60} минут"
-        else:
-            time_display = f"{seconds} секунд"
-        
-        embed = Design.create_embed("✅ Мут", 
+        embed = Design.create_embed("✅ Предупреждение снято", 
                                   f"**Пользователь:** {пользователь.mention}\n"
-                                  f"**Длительность:** {time_display}\n"
-                                  f"**Причина:** {причина}", "success")
+                                  f"**Снято предупреждений:** {min(количество, current_warns)}\n"
+                                  f"**Текущие пред:** {new_warns}/3\n"
+                                  f"**Модератор:** {interaction.user.mention}", "success")
         await interaction.response.send_message(embed=embed)
         
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
 
-@bot.tree.command(name="размут", description="Снять мут с пользователя")
+@bot.tree.command(name="варны", description="Посмотреть предупреждения пользователя")
 @is_moderator()
-async def размут(interaction: discord.Interaction, пользователь: discord.Member):
+async def варны(interaction: discord.Interaction, пользователь: discord.Member):
+    try:
+        current_warns = user_warns.get(пользователь.id, 0)
+        
+        embed = Design.create_embed("📊 Предупреждения пользователя", 
+                                  f"**Пользователь:** {пользователь.mention}\n"
+                                  f"**Текущие пред:** {current_warns}/3\n"
+                                  f"**До мута осталось:** {max(0, 3 - current_warns)} пред", 
+                                  "info" if current_warns < 3 else "warning")
+        
+        if current_warns >= 3:
+            embed.add_field(name="⚠️ Внимание", value="Пользователь должен получить мут за 3 предупреждения!", inline=False)
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+
+@bot.tree.command(name="снять_все_варны", description="Снять все предупреждения с пользователя")
+@is_moderator()
+async def снять_все_варны(interaction: discord.Interaction, пользователь: discord.Member):
     try:
         # Проверка прав целевого пользователя
         target_roles = [role.id for role in пользователь.roles]
         if any(role_id in MODERATION_ROLES for role_id in target_roles) or пользователь.id in ADMIN_IDS:
-            await interaction.response.send_message("❌ Нельзя снять мут с модератора или администратора!", ephemeral=True)
+            await interaction.response.send_message("❌ Нельзя снять предупреждения с модератора или администратора!", ephemeral=True)
             return
         
-        mute_role = discord.utils.get(interaction.guild.roles, name="Muted")
-        if not mute_role or mute_role not in пользователь.roles:
-            await interaction.response.send_message("❌ Пользователь не в муте!", ephemeral=True)
+        if пользователь.id not in user_warns or user_warns[пользователь.id] <= 0:
+            await interaction.response.send_message("❌ У пользователя нет предупреждений!", ephemeral=True)
             return
         
-        await пользователь.remove_roles(mute_role)
-        if пользователь.id in mute_data:
-            del mute_data[пользователь.id]
-        if пользователь.id in user_warns:
-            user_warns[пользователь.id] = 0
+        removed_warns = user_warns[пользователь.id]
+        user_warns[пользователь.id] = 0
         
-        embed = Design.create_embed("✅ Размут", f"Мут с {пользователь.mention} снят", "success")
+        embed = Design.create_embed("✅ Все предупреждения сняты", 
+                                  f"**Пользователь:** {пользователь.mention}\n"
+                                  f"**Снято предупреждений:** {removed_warns}\n"
+                                  f"**Текущие пред:** 0/3\n"
+                                  f"**Модератор:** {interaction.user.mention}", "success")
         await interaction.response.send_message(embed=embed)
         
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-
-@bot.tree.command(name="бан", description="Забанить пользователя")
-@is_moderator()
-async def бан(interaction: discord.Interaction, пользователь: discord.Member, причина: str = "Не указана"):
-    try:
-        # Проверка прав целевого пользователя
-        target_roles = [role.id for role in пользователь.roles]
-        if any(role_id in MODERATION_ROLES for role_id in target_roles) or пользователь.id in ADMIN_IDS:
-            await interaction.response.send_message("❌ Нельзя забанить модератора или администратора!", ephemeral=True)
-            return
-        
-        if await check_user_banned(interaction, пользователь):
-            return
-        
-        await пользователь.ban(reason=причина)
-        embed = Design.create_embed("✅ Бан", f"Пользователь {пользователь.mention} забанен\n**Причина:** {причина}", "success")
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-
-@bot.tree.command(name="разбан", description="Разбанить пользователя")
-@is_moderator()
-async def разбан(interaction: discord.Interaction, пользователь_id: str):
-    try:
-        user_id = int(пользователь_id)
-        await interaction.guild.unban(discord.Object(id=user_id))
-        embed = Design.create_embed("✅ Разбан", f"Пользователь с ID {user_id} разбанен", "success")
-        await interaction.response.send_message(embed=embed)
-    except ValueError:
-        await interaction.response.send_message("❌ Неверный ID пользователя!", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-
-@bot.tree.command(name="кик", description="Кикнуть пользователя")
-@is_moderator()
-async def кик(interaction: discord.Interaction, пользователь: discord.Member, причина: str = "Не указана"):
-    try:
-        # Проверка прав целевого пользователя
-        target_roles = [role.id for role in пользователь.roles]
-        if any(role_id in MODERATION_ROLES for role_id in target_roles) or пользователь.id in ADMIN_IDS:
-            await interaction.response.send_message("❌ Нельзя кикнуть модератора или администратора!", ephemeral=True)
-            return
-        
-        await пользователь.kick(reason=причина)
-        embed = Design.create_embed("✅ Кик", f"Пользователь {пользователь.mention} кикнут\n**Причина:** {причина}", "success")
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-
-@bot.tree.command(name="очистить", description="Очистить сообщения")
-@is_moderator()
-async def очистить(interaction: discord.Interaction, количество: int):
-    try:
-        if количество > 100:
-            await interaction.response.send_message("❌ Можно удалить не более 100 сообщений за раз", ephemeral=True)
-            return
-            
-        deleted = await interaction.channel.purge(limit=количество + 1)
-        embed = Design.create_embed("✅ Очистка", f"Удалено {len(deleted) - 1} сообщений", "success")
-        await interaction.response.send_message(embed=embed, delete_after=5)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-
-# 🎵 КОМАНДЫ МУЗЫКИ
-@bot.tree.command(name="play", description="Добавить трек в очередь (YouTube ссылка или название)")
-async def play(interaction: discord.Interaction, запрос: str):
-    await bot.music.play_music(interaction, запрос)
-
-@bot.tree.command(name="стоп", description="Остановить музыку и отключиться")
-async def стоп(interaction: discord.Interaction):
-    try:
-        await bot.music.stop_music(interaction.guild.id)
-        embed = Design.create_embed("⏹️ Музыка", "Воспроизведение остановлено", "music")
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-
-@bot.tree.command(name="скип", description="Пропустить текущий трек")
-async def скип(interaction: discord.Interaction):
-    try:
-        guild_id = interaction.guild.id
-        if guild_id in bot.music.voice_clients:
-            voice_client = bot.music.voice_clients[guild_id]
-            if voice_client.is_playing():
-                voice_client.stop()
-                embed = Design.create_embed("⏭️ Музыка", "Трек пропущен", "music")
-                await interaction.response.send_message(embed=embed)
-            else:
-                await interaction.response.send_message("❌ Сейчас ничего не играет", ephemeral=True)
-        else:
-            await interaction.response.send_message("❌ Бот не подключен к голосовому каналу", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-
-@bot.tree.command(name="очередь", description="Показать очередь треков")
-async def очередь(interaction: discord.Interaction):
-    embed = bot.music.get_queue_embed(interaction.guild.id)
-    await interaction.response.send_message(embed=embed)
 
 # 🏦 КОМАНДЫ КРЕДИТОВ
 class CreditModal(discord.ui.Modal):
@@ -1784,14 +1678,12 @@ async def запустить_ивент(interaction: discord.Interaction, тип
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="модер", description="🛡️ Панель модератора")
+@is_moderator()
 async def модер(interaction: discord.Interaction):
-    is_moderator_user = any(role.id in MODERATION_ROLES for role in interaction.user.roles)
-    is_admin_user = interaction.user.id in ADMIN_IDS
-    
-    if not is_moderator_user and not is_admin_user:
-        await interaction.response.send_message("❌ У вас нет прав модератора!", ephemeral=True)
-        return
-    
+    embed = Design.create_embed("🛡️ ПАНЕЛЬ МОДЕРАТОРА", """
+@bot.tree.command(name="модер", description="🛡️ Панель модератора")
+@is_moderator()
+async def модер(interaction: discord.Interaction):
     embed = Design.create_embed("🛡️ ПАНЕЛЬ МОДЕРАТОРА", """
 **⚡ КОМАНДЫ МОДЕРАЦИИ:**
 
@@ -1799,6 +1691,9 @@ async def модер(interaction: discord.Interaction):
 `/мут @user время причина` - Замутить
 `/размут @user` - Снять мут
 `/пред @user причина` - Предупреждение  
+`/снять_пред @user количество` - Снять пред
+`/снять_все_варны @user` - Снять все варны
+`/варны @user` - Посмотреть варны
 `/бан @user причина` - Забанить
 `/разбан user_id` - Разбанить
 `/кик @user причина` - Кикнуть
@@ -1811,13 +1706,6 @@ async def модер(interaction: discord.Interaction):
 `/юзер @user` - Информация
 `/сервер` - Информация о сервере
     """, "moderation")
-    
-    if is_admin_user:
-        embed.add_field(
-            name="👑 ДОПОЛНИТЕЛЬНО ДЛЯ АДМИНОВ:",
-            value="Используйте `/админ` для управления экономикой",
-            inline=False
-        )
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
 

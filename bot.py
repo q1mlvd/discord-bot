@@ -1097,6 +1097,13 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # 🚀 ЗАПУСК
+@bot.tree.command(name="синхронизировать", description="[АДМИН] Пересинхронизировать команды")
+@is_admin()
+async def синхронизировать(interaction: discord.Interaction):
+    await bot.tree.sync()
+    embed = Design.create_embed("✅ Синхронизация", "Команды пересинхронизированы!", "success")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 if __name__ == "__main__":
     try:
         print("🚀 Запуск бота...")
@@ -1105,3 +1112,4 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+

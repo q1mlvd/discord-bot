@@ -1811,8 +1811,6 @@ async def открыть_лутбокс(interaction: discord.Interaction, тип
     await interaction.response.send_message(embed=embed)
 
 # ⛏️ КОМАНДЫ МАЙНИНГА
-@bot.tree.command(name="ферма", description="Информация о майнинг ферме")
-async def ферма(interaction: discord.Interaction):
     user_id = interaction.user.id
     
     if user_id not in user_mining_farms:
@@ -1850,8 +1848,6 @@ async def создать_ферму(interaction: discord.Interaction):
                               "Используйте `/собрать_доход` каждые 12 часов", "success")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="собрать_доход", description="Собрать доход с фермы")
-async def собрать_доход(interaction: discord.Interaction):
     success, message = await bot.mining_system.collect_income(interaction.user.id)
     
     if success:
@@ -1952,7 +1948,6 @@ async def ивенты(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
-# 🔧 ОБРАБОТЧИКИ
 @bot.event
 async def on_ready():
     print(f'✅ Бот {bot.user} запущен!')
@@ -1981,10 +1976,61 @@ async def on_message(message):
     
     await bot.process_commands(message)
 
+# 🆕 ДОБАВЬ НОВЫЕ КОМАНДЫ СЮДА:
+
+@bot.tree.command(name="ферма", description="Информация о майнинг ферме")
+async def ферма(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    
+    if user_id not in user_mining_farms:
+        embed = Design.create_embed("⛏️ Майнинг ферма", 
+                                  "У вас еще нет фермы!\nИспользуйте `/создать_ферму` чтобы начать майнить", "info")
+    else:
+        farm = user_mining_farms[user_id]
+        level_data = bot.mining_system.farm_levels[farm["level"]]
+        
+        can_collect = True
+        time_left = "✅ Можно собрать"
+        
+        if "last_collected" in farm and farm["last_collected"]:
+            last_collect = datetime.fromisoformat(farm["last_collected"])
+            time_passed = datetime.now() - last_collect
+            if time_passed.seconds < 43200:
+                can_collect = False
+                hours_left = 11 - (time_passed.seconds // 3600)
+                minutes_left = 59 - ((time_passed.seconds % 3600) // 60)
+                time_left = f"⏳ Через {hours_left}ч {minutes_left}м"
+        
+        embed = Design.create_embed("⛏️ Ваша ферма", 
+                                  f"**Уровень:** {farm['level']}\n"
+                                  f"**Доход:** {level_data['income']} монет/12ч\n"
+                                  f"**Следующий уровень:** {level_data['upgrade_cost']} монет\n"
+                                  f"**Статус:** {time_left}", "info")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="собрать_доход", description="Собрать доход с фермы")
+async def собрать_доход(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        success, message = await bot.mining_system.collect_income(interaction.user.id)
+        
+        if success:
+            embed = Design.create_embed("💰 Доход собран!", message, "success")
+        else:
+            embed = Design.create_embed("❌ Ошибка", message, "danger")
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        embed = Design.create_embed("❌ Критическая ошибка", 
+                                  "Произошла ошибка при обработке запроса", "danger")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        print(f"Ошибка в команде собрать_доход: {e}")
+
 @bot.tree.command(name="модер", description="🛡️ Панель модератора")
 async def модер(interaction: discord.Interaction):
-    """Панель управления для модераторов"""
-    # Проверяем что пользователь модератор
     is_moderator = any(role.id in MODERATION_ROLES for role in interaction.user.roles)
     is_admin_user = interaction.user.id in ADMIN_IDS
     
@@ -2009,25 +2055,14 @@ async def модер(interaction: discord.Interaction):
 `/юзер @user` - Информация о пользователе
 `/сервер` - Информация о сервере
 `/статистика` - Статистика бота
-
-🎫 **Тикеты и жалобы:**
-- Автоматические тикеты при заказах
-- Ветки для выдачи ролей из лутбоксов
     """, "moderation")
     
-    # Если пользователь еще и админ - покажем дополнительную информацию
     if is_admin_user:
         embed.add_field(
             name="👑 ДОПОЛНИТЕЛЬНО ДЛЯ АДМИНОВ:",
             value="Используйте `/админ` для управления экономикой",
             inline=False
         )
-    
-    embed.add_field(
-        name="📋 ЧЕК-ЛИСТ МОДЕРАТОРА:",
-        value="• Проверяйте тикеты каждые 2 часа\n• Отвечайте на жалобы в течение 24 часов\n• Следите за порядком в чатах\n• Проверяйте ветки с ролями из лутбоксов",
-        inline=False
-    )
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -2047,4 +2082,3 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
-

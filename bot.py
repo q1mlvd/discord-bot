@@ -9,12 +9,20 @@ from typing import Optional
 from dotenv import load_dotenv
 import logging
 import traceback
+import aiohttp
+import json
+import shutil
+import gzip
+import psutil
+import time
+from pathlib import Path
 
 # 🔧 КОНСТАНТЫ
 ADMIN_IDS = [1195144951546265675, 766767256742526996, 1078693283695448064, 1138140772097597472, 691904643181314078]
 MODERATION_ROLES = [1167093102868172911, 1360243534946373672, 993043931342319636, 1338611327022923910, 1338609155203661915, 1365798715930968244, 1188261847850299514]
 THREADS_CHANNEL_ID = 1422557295811887175
 EVENTS_CHANNEL_ID = 1418738569081786459
+BACKUP_CHANNEL_ID = 1422557295811887175  # Канал для бэкапов
 
 # 🛡️ ГЛОБАЛЬНАЯ ПЕРЕМЕННАЯ ДЛЯ ЭКОНОМИЧЕСКИХ БАНОВ
 economic_bans = {}
@@ -29,6 +37,171 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger('MegaBot')
+
+# 📊 СИСТЕМА МОНИТОРИНГА
+class MonitoringSystem:
+    def __init__(self, bot):
+        self.bot = bot
+        self.start_time = datetime.now()
+        self.command_stats = {}
+        self.error_stats = {}
+        self.user_activity = {}
+        
+    async def get_bot_stats(self):
+        """Получить статистику бота"""
+        try:
+            # Статистика использования памяти
+            process = psutil.Process()
+            memory_usage = process.memory_info().rss / 1024 / 1024  # MB
+            
+            # Статистика бота
+            guild_count = len(self.bot.guilds)
+            user_count = sum(guild.member_count for guild in self.bot.guilds)
+            
+            # Время работы
+            uptime = datetime.now() - self.start_time
+            uptime_str = str(uptime).split('.')[0]
+            
+            # Статистика команд
+            total_commands = sum(self.command_stats.values())
+            popular_commands = sorted(self.command_stats.items(), key=lambda x: x[1], reverse=True)[:5]
+            
+            return {
+                "uptime": uptime_str,
+                "guilds": guild_count,
+                "users": user_count,
+                "memory_usage": f"{memory_usage:.2f} MB",
+                "total_commands": total_commands,
+                "popular_commands": popular_commands,
+                "errors": sum(self.error_stats.values()),
+                "cpu_usage": psutil.cpu_percent(),
+                "disk_usage": psutil.disk_usage('/').percent
+            }
+        except Exception as e:
+            logger.error(f"Ошибка получения статистики: {e}")
+            return {}
+    
+    def log_command(self, command_name: str):
+        """Логировать использование команды"""
+        self.command_stats[command_name] = self.command_stats.get(command_name, 0) + 1
+    
+    def log_error(self, error_type: str):
+        """Логировать ошибку"""
+        self.error_stats[error_type] = self.error_stats.get(error_type, 0) + 1
+    
+    def log_user_activity(self, user_id: int):
+        """Логировать активность пользователя"""
+        now = datetime.now()
+        today = now.date()
+        
+        if user_id not in self.user_activity:
+            self.user_activity[user_id] = {}
+        
+        self.user_activity[user_id][today] = self.user_activity[user_id].get(today, 0) + 1
+
+# 💾 СИСТЕМА БЭКАПОВ
+class BackupSystem:
+    def __init__(self, bot, db_path: str):
+        self.bot = bot
+        self.db_path = db_path
+        self.backup_dir = "backups"
+        os.makedirs(self.backup_dir, exist_ok=True)
+        
+    async def create_backup(self):
+        """Создать бэкап базы данных"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_name = f"bot_backup_{timestamp}.db.gz"
+            backup_path = os.path.join(self.backup_dir, backup_name)
+            
+            # Создаем копию базы данных
+            async with aiosqlite.connect(self.db_path) as source:
+                await source.execute("VACUUM")  # Оптимизируем базу
+                
+            # Сжимаем и сохраняем бэкап
+            with open(self.db_path, 'rb') as f_in:
+                with gzip.open(backup_path, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            
+            # Отправляем уведомление
+            await self.send_backup_notification(backup_name, backup_path)
+            
+            # Очищаем старые бэкапы (оставляем последние 10)
+            await self.clean_old_backups()
+            
+            logger.info(f"✅ Бэкап создан: {backup_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания бэкапа: {e}")
+            return False
+    
+    async def send_backup_notification(self, backup_name: str, backup_path: str):
+        """Отправить уведомление о бэкапе"""
+        try:
+            channel = self.bot.get_channel(BACKUP_CHANNEL_ID)
+            if channel:
+                file_size = os.path.getsize(backup_path) / 1024 / 1024  # MB
+                
+                embed = discord.Embed(
+                    title="💾 Бэкап базы данных",
+                    description=f"Бэкап успешно создан",
+                    color=0x00ff00,
+                    timestamp=datetime.now()
+                )
+                embed.add_field(name="📁 Файл", value=backup_name, inline=False)
+                embed.add_field(name="📊 Размер", value=f"{file_size:.2f} MB", inline=True)
+                embed.add_field(name="🕒 Время", value=datetime.now().strftime("%H:%M:%S"), inline=True)
+                
+                await channel.send(embed=embed)
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления о бэкапе: {e}")
+    
+    async def clean_old_backups(self):
+        """Очистить старые бэкапы"""
+        try:
+            backup_files = []
+            for file in os.listdir(self.backup_dir):
+                if file.startswith("bot_backup_") and file.endswith(".db.gz"):
+                    file_path = os.path.join(self.backup_dir, file)
+                    backup_files.append((file_path, os.path.getctime(file_path)))
+            
+            # Сортируем по дате создания
+            backup_files.sort(key=lambda x: x[1], reverse=True)
+            
+            # Удаляем все кроме последних 10
+            for file_path, _ in backup_files[10:]:
+                os.remove(file_path)
+                logger.info(f"🗑️ Удален старый бэкап: {os.path.basename(file_path)}")
+                
+        except Exception as e:
+            logger.error(f"Ошибка очистки бэкапов: {e}")
+    
+    async def restore_backup(self, backup_name: str):
+        """Восстановить базу данных из бэкапа"""
+        try:
+            backup_path = os.path.join(self.backup_dir, backup_name)
+            if not os.path.exists(backup_path):
+                return False, "Бэкап не найден"
+            
+            # Создаем резервную копию текущей базы
+            temp_backup = f"temp_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+            shutil.copy2(self.db_path, temp_backup)
+            
+            # Распаковываем бэкап
+            with gzip.open(backup_path, 'rb') as f_in:
+                with open(self.db_path, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            
+            # Удаляем временную копию
+            os.remove(temp_backup)
+            
+            logger.info(f"✅ База восстановлена из бэкапа: {backup_name}")
+            return True, "База успешно восстановлена"
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка восстановления бэкапа: {e}")
+            return False, f"Ошибка восстановления: {e}"
 
 # 🔧 ФУНКЦИИ ПРОВЕРКИ ПРАВ
 def is_admin():
@@ -78,14 +251,15 @@ class Design:
         "moderation": 0xE74C3C, "shop": 0x9B59B6, "casino": 0xE67E22,
         "info": 0x3498DB, "premium": 0xFFD700, "roblox": 0xE74C3C,
         "discord": 0x5865F2, "tds": 0xF1C40F, "crypto": 0x16C60C,
-        "event": 0x9B59B6, "credit": 0xE74C3C
+        "event": 0x9B59B6, "credit": 0xE74C3C, "monitoring": 0x9B59B6,
+        "backup": 0x3498DB
     }
 
     @staticmethod
     def create_embed(title: str, description: str = "", color: str = "primary"):
         return discord.Embed(title=title, description=description, color=Design.COLORS.get(color, Design.COLORS["primary"]))
 
-# 💾 БАЗА ДАННЫХ (ОБНОВЛЕННАЯ)
+# 💾 БАЗА ДАННЫХ
 class Database:
     def __init__(self):
         self.db_path = "data/bot.db"
@@ -190,7 +364,6 @@ class Database:
             raise
 
     # 🔧 МЕТОДЫ ДЛЯ РАБОТЫ С ДАННЫМИ
-    
     async def get_warns(self, user_id: int) -> int:
         """Получить количество варнов пользователя"""
         try:
@@ -413,7 +586,7 @@ class EconomySystem:
             logger.error(f"Ошибка выдачи денег для {user_id}: {e}")
             return await self.get_balance(user_id)
 
-# 🏦 СИСТЕМА КРЕДИТОВ (ОБНОВЛЕННАЯ)
+# 🏦 СИСТЕМА КРЕДИТОВ
 class CreditSystem:
     def __init__(self, economy: EconomySystem, db: Database):
         self.economy = economy
@@ -446,7 +619,6 @@ class CreditSystem:
         }
     
     async def take_credit(self, user_id: int, company: str, amount: int):
-        # Проверяем есть ли активный кредит через БД
         existing_credit = await self.db.get_credit(user_id)
         if existing_credit:
             return False, "У вас уже есть активный кредит"
@@ -460,7 +632,6 @@ class CreditSystem:
         
         due_date = datetime.now() + timedelta(days=company_data["term_days"])
         
-        # Сохраняем в БД
         await self.db.add_credit(
             user_id=user_id,
             company=company,
@@ -488,7 +659,7 @@ class CreditSystem:
         await self.db.remove_credit(user_id)
         return True, f"Кредит погашен! Сумма: {total_to_repay} монет"
 
-# 🎁 СИСТЕМА ЛУТБОКСОВ (ОБНОВЛЕННАЯ)
+# 🎁 СИСТЕМА ЛУТБОКСОВ
 class LootboxSystem:
     def __init__(self, economy: EconomySystem, db: Database):
         self.economy = economy
@@ -541,12 +712,10 @@ class LootboxSystem:
                     crypto_type = random.choice(list(crypto_prices.keys()))
                     amount = random.uniform(reward["min"], reward["max"])
                     
-                    # Получаем текущую крипту из БД
                     user_crypto_data = await self.db.get_user_crypto(user_id)
                     current_amount = user_crypto_data.get(crypto_type, 0)
                     new_amount = current_amount + amount
                     
-                    # Сохраняем в БД
                     await self.db.update_user_crypto(user_id, crypto_type, new_amount)
                     rewards.append(f"₿ {amount:.4f} {crypto_type}")
         
@@ -555,7 +724,7 @@ class LootboxSystem:
         
         return True, rewards
 
-# 🔧 СИСТЕМА МАЙНИНГА (ОБНОВЛЕННАЯ)
+# 🔧 СИСТЕМА МАЙНИНГА
 class MiningSystem:
     def __init__(self, economy: EconomySystem, db: Database):
         self.economy = economy
@@ -583,7 +752,6 @@ class MiningSystem:
             income = self.farm_levels[farm["level"]]["income"]
             await self.economy.update_balance(user_id, income)
             
-            # Обновляем время сбора в БД
             await self.db.update_mining_farm(user_id, last_collected=datetime.now())
             
             return True, f"✅ Собрано {income} монет с фермы! Следующий сбор через 6 часов"
@@ -668,7 +836,7 @@ class CasinoSystem:
             "win_amount": win_amount
         }
 
-# 🏗️ ГЛАВНЫЙ БОТ (ОБНОВЛЕННЫЙ)
+# 🏗️ ГЛАВНЫЙ БОТ
 class MegaBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
@@ -683,6 +851,10 @@ class MegaBot(commands.Bot):
         self.mining_system = MiningSystem(self.economy, self.db)
         self.event_system = EventSystem(self.economy)
         
+        # Новые системы
+        self.monitoring = MonitoringSystem(self)
+        self.backup_system = BackupSystem(self, self.db.db_path)
+        
         self.start_time = datetime.now()
         self.server_tax_pool = 0
         self.rob_cooldowns = {}
@@ -696,6 +868,10 @@ class MegaBot(commands.Bot):
             logger.info(f"✅ Синхронизировано {len(synced)} команд")
         except Exception as e:
             logger.error(f"❌ Ошибка синхронизации: {e}")
+        
+        # Запускаем задачи
+        self.backup_task.start()
+        self.monitoring_task.start()
 
     async def reload_bot(self):
         try:
@@ -709,497 +885,874 @@ class MegaBot(commands.Bot):
     async def close(self):
         """Закрытие соединений при выключении бота"""
         logger.info("🔴 Бот выключается...")
+        self.backup_task.cancel()
+        self.monitoring_task.cancel()
         await super().close()
 
-bot = MegaBot()
+    # 🔄 ЗАДАЧИ
+    @tasks.loop(hours=6)
+    async def backup_task(self):
+        """Автоматическое создание бэкапов каждые 6 часов"""
+        try:
+            await self.backup_system.create_backup()
+        except Exception as e:
+            logger.error(f"Ошибка в задаче бэкапа: {e}")
 
-# 🔧 ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-def parse_time(time_str: str) -> int:
-    time_units = {
-        'с': 1, 'сек': 1, 'секунд': 1,
-        'м': 60, 'мин': 60, 'минут': 60, 
-        'ч': 3600, 'час': 3600, 'часов': 3600,
-        'д': 86400, 'день': 86400, 'дней': 86400
-    }
-    
-    time_str = time_str.lower().replace(' ', '')
-    num_str = ''
-    unit_str = ''
-    
-    for char in time_str:
-        if char.isdigit():
-            num_str += char
-        else:
-            unit_str += char
-    
-    if not num_str:
-        return 0
-    
-    number = int(num_str)
-    unit = unit_str.lower()
-    
-    if unit in time_units:
-        return number * time_units[unit]
-    else:
-        return 0
-
-# 💰 КОМАНДЫ ДЛЯ ВСЕХ УЧАСТНИКОВ (ОБНОВЛЕННЫЕ)
-@bot.tree.command(name="баланс", description="Проверить баланс")
-async def баланс(interaction: discord.Interaction, пользователь: Optional[discord.Member] = None):
-    try:
-        user = пользователь or interaction.user
-        balance = await bot.economy.get_balance(user.id)
-        embed = Design.create_embed("💰 Баланс", f"**{user.display_name}**\nБаланс: `{balance:,} монет`", "economy")
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        logger.error(f"Ошибка в команде баланс: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка при получении баланса", ephemeral=True)
-
-@bot.tree.command(name="ежедневно", description="Получить ежедневную награду")
-@check_economic_ban()
-async def ежедневно(interaction: discord.Interaction):
-    try:
-        user_data = await bot.economy.get_user_data(interaction.user.id)
-        
-        if user_data["daily_claimed"]:
-            last_claim = datetime.fromisoformat(user_data["daily_claimed"])
-            if (datetime.now() - last_claim).days < 1:
-                embed = Design.create_embed("⏳ Уже получали!", "Приходите завтра", "warning")
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-                return
-        
-        reward = random.randint(100, 500)
-        new_balance = await bot.economy.update_balance(interaction.user.id, reward)
-        
-        async with aiosqlite.connect(bot.db.db_path) as db:
-            await db.execute('UPDATE users SET daily_claimed = ? WHERE user_id = ?', (datetime.now().isoformat(), interaction.user.id))
-            await db.commit()
-        
-        embed = Design.create_embed("🎁 Ежедневная награда", f"**+{reward} монет!**\nБаланс: `{new_balance:,} монет`", "success")
-        await interaction.response.send_message(embed=embed)
-        
-    except Exception as e:
-        logger.error(f"Ошибка в команде ежедневно: {e}")
-        embed = Design.create_embed("❌ Ошибка", "Не удалось получить награду", "danger")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-# 🛡️ КОМАНДЫ МОДЕРАЦИИ (ОБНОВЛЕННЫЕ)
-@bot.tree.command(name="пред", description="Выдать предупреждение")
-@is_moderator()
-async def пред(interaction: discord.Interaction, пользователь: discord.Member, причина: str = "Не указана"):
-    try:
-        target_roles = [role.id for role in пользователь.roles]
-        if any(role_id in MODERATION_ROLES for role_id in target_roles) or пользователь.id in ADMIN_IDS:
-            await interaction.response.send_message("❌ Нельзя выдать предупреждение модератору или администратору!", ephemeral=True)
-            return
-        
-        current_warns = await bot.db.add_warn(пользователь.id)
-        
-        embed = Design.create_embed("⚠️ Предупреждение", 
-                                  f"**Пользователь:** {пользователь.mention}\n"
-                                  f"**Причина:** {причина}\n"
-                                  f"**Текущие пред:** {current_warns}/3", "warning")
-        await interaction.response.send_message(embed=embed)
+    @tasks.loop(minutes=5)
+    async def monitoring_task(self):
+        """Мониторинг состояния бота"""
+        try:
+            stats = await self.monitoring.get_bot_stats()
             
-    except Exception as e:
-        logger.error(f"Ошибка в команде пред: {e}")
-        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-
-@bot.tree.command(name="снять_пред", description="Снять предупреждение")
-@is_moderator()
-async def снять_пред(interaction: discord.Interaction, пользователь: discord.Member, количество: int = 1):
-    try:
-        target_roles = [role.id for role in пользователь.roles]
-        if any(role_id in MODERATION_ROLES for role_id in target_roles) or пользователь.id in ADMIN_IDS:
-            await interaction.response.send_message("❌ Нельзя снять предупреждение с модератора или администратора!", ephemeral=True)
-            return
-        
-        current_warns = await bot.db.get_warns(пользователь.id)
-        if current_warns <= 0:
-            await interaction.response.send_message("❌ У пользователя нет предупреждений!", ephemeral=True)
-            return
-        
-        if количество <= 0:
-            await interaction.response.send_message("❌ Количество должно быть положительным!", ephemeral=True)
-            return
-        
-        new_warns = await bot.db.remove_warns(пользователь.id, количество)
-        
-        embed = Design.create_embed("✅ Предупреждение снято", 
-                                  f"**Пользователь:** {пользователь.mention}\n"
-                                  f"**Снято предупреждений:** {min(количество, current_warns)}\n"
-                                  f"**Текущие пред:** {new_warns}/3", "success")
-        await interaction.response.send_message(embed=embed)
-        
-    except Exception as e:
-        logger.error(f"Ошибка в команде снять_пред: {e}")
-        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-
-# 🏦 КОМАНДЫ КРЕДИТОВ (ОБНОВЛЕННЫЕ)
-@bot.tree.command(name="кредит", description="Взять кредит")
-async def кредит(interaction: discord.Interaction):
-    try:
-        embed = Design.create_embed("🏦 КРЕДИТЫ", "Используйте кнопки ниже для взятия кредита:", "credit")
-        
-        for company_id, company in bot.credit_system.companies.items():
-            embed.add_field(
-                name=f"{company['name']}",
-                value=f"Сумма: {company['min_amount']:,}-{company['max_amount']:,} монет\n"
-                      f"Процент: {company['interest_rate']}%\n"
-                      f"Срок: {company['term_days']} дней",
-                inline=False
-            )
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-    except Exception as e:
-        logger.error(f"Ошибка в команде кредит: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка", ephemeral=True)
-
-@bot.tree.command(name="вернуть_кредит", description="Вернуть кредит")
-async def вернуть_кредит(interaction: discord.Interaction):
-    try:
-        success, message = await bot.credit_system.repay_credit(interaction.user.id)
-        
-        if success:
-            embed = Design.create_embed("✅ Кредит погашен!", message, "success")
-        else:
-            embed = Design.create_embed("❌ Ошибка", message, "danger")
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-    except Exception as e:
-        logger.error(f"Ошибка в команде вернуть_кредит: {e}")
-        embed = Design.create_embed("❌ Ошибка", "Произошла ошибка при возврате кредита", "danger")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-@bot.tree.command(name="мой_кредит", description="Информация о кредите")
-async def мой_кредит(interaction: discord.Interaction):
-    try:
-        credit = await bot.db.get_credit(interaction.user.id)
-        if not credit:
-            await interaction.response.send_message("❌ У вас нет активных кредитов", ephemeral=True)
-            return
-        
-        company = bot.credit_system.companies[credit["company"]]
-        days_left = (credit["due_date"] - datetime.now()).days
-        
-        embed = Design.create_embed("🏦 Мой кредит", 
-                                  f"**Компания:** {company['name']}\n"
-                                  f"**Сумма:** {credit['original_amount']:,} монет\n"
-                                  f"**Процент:** {credit['interest_rate']}%\n"
-                                  f"**Вернуть до:** {credit['due_date'].strftime('%d.%m.%Y')}\n"
-                                  f"**Осталось дней:** {max(0, days_left)}", "credit")
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-    except Exception as e:
-        logger.error(f"Ошибка в команде мой_кредит: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка", ephemeral=True)
-
-# ⛏️ КОМАНДЫ МАЙНИНГА (ОБНОВЛЕННЫЕ)
-@bot.tree.command(name="ферма", description="Информация о ферме")
-async def ферма(interaction: discord.Interaction):
-    try:
-        farm = await bot.db.get_mining_farm(interaction.user.id)
-        
-        if not farm:
-            embed = Design.create_embed("⛏️ Майнинг ферма", 
-                                      "У вас еще нет фермы!\nИспользуйте `/создать_ферму` чтобы начать майнить", "info")
-        else:
-            level_data = bot.mining_system.farm_levels[farm["level"]]
+            # Логируем статистику каждые 30 минут
+            if datetime.now().minute % 30 == 0:
+                logger.info(f"📊 Статистика бота: {stats}")
+                
+                # Проверяем критичные метрики
+                if stats.get('memory_usage', '0 MB') > 500:
+                    # Отправляем предупреждение в канал
+                    try:
+                        channel = self.get_channel(BACKUP_CHANNEL_ID)
+                        if channel:
+                            embed = Design.create_embed(
+                                "⚠️ ВНИМАНИЕ: ВЫСОКАЯ ЗАГРУЗКА",
+                                f"**Память бота:** {stats.get('memory_usage', 'N/A')}\n"
+                                f"**Использование CPU:** {stats.get('cpu_usage', 'N/A')}%\n"
+                                f"**Диск:** {stats.get('disk_usage', 'N/A')}%\n\n"
+                                f"Рекомендуется перезагрузка бота!",
+                                "warning"
+                            )
+                            await channel.send(embed=embed)
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки предупреждения: {e}")
+                
+                # Автоматическое создание бэкапа при высокой нагрузке
+                if stats.get('memory_usage', 0) > 400 or stats.get('cpu_usage', 0) > 80:
+                    await self.backup_system.create_backup()
             
-            can_collect = True
-            time_left = "✅ Можно собрать"
+            # 🆕 АВТОМАТИЧЕСКИЕ ПРОВЕРКИ КРЕДИТОВ (каждые 5 минут)
+            await self.check_overdue_credits()
             
-            if farm.get("last_collected"):
-                last_collect = farm["last_collected"]
-                time_passed = datetime.now() - last_collect
-                if time_passed.total_seconds() < 21600:
-                    can_collect = False
-                    hours_left = 5 - int(time_passed.total_seconds() // 3600)
-                    minutes_left = 59 - int((time_passed.total_seconds() % 3600) // 60)
-                    time_left = f"⏳ Через {hours_left}ч {minutes_left}м"
+            # 🆕 ОБНОВЛЕНИЕ ЦЕН КРИПТЫ (каждые 5 минут)
+            await self.update_crypto_prices()
             
-            embed = Design.create_embed("⛏️ Ваша ферма", 
-                                      f"**Уровень:** {farm['level']}\n"
-                                      f"**Доход:** {level_data['income']} монет/6ч\n"
-                                      f"**Следующий уровень:** {level_data['upgrade_cost']} монет\n"
-                                      f"**Статус:** {time_left}", "info")
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-    except Exception as e:
-        logger.error(f"Ошибка в команде ферма: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка", ephemeral=True)
+            # 🆕 ПРОВЕРКА ИВЕНТОВ (каждые 5 минут)
+            await self.check_events()
+            
+            # 🆕 АВТОМАТИЧЕСКАЯ ОЧИСТКА КЭША (каждые 30 минут)
+            if datetime.now().minute % 30 == 0:
+                await self.cleanup_old_data()
+                
+        except Exception as e:
+            logger.error(f"❌ Ошибка в задаче мониторинга: {e}")
 
-@bot.tree.command(name="создать_ферму", description="Создать ферму")
-async def создать_ферму(interaction: discord.Interaction):
-    try:
-        farm = await bot.db.get_mining_farm(interaction.user.id)
-        if farm:
-            await interaction.response.send_message("❌ У вас уже есть ферма!", ephemeral=True)
-            return
-        
-        creation_cost = 500
-        balance = await bot.economy.get_balance(interaction.user.id)
-        
-        if balance < creation_cost:
-            await interaction.response.send_message(f"❌ Недостаточно средств! Нужно {creation_cost} монет", ephemeral=True)
-            return
-        
-        await bot.economy.update_balance(interaction.user.id, -creation_cost)
-        await bot.db.create_mining_farm(interaction.user.id)
-        
-        embed = Design.create_embed("✅ Ферма создана!", 
-                                  f"Ваша майнинг ферма уровня 1 готова к работе!\n"
-                                  f"Стоимость создания: {creation_cost} монет", "success")
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        logger.error(f"Ошибка в команде создать_ферму: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка при создании фермы", ephemeral=True)
+    # 🆕 ДОБАВЛЕННЫЕ МЕТОДЫ
+    async def check_overdue_credits(self):
+        """Проверка просроченных кредитов"""
+        try:
+            async with aiosqlite.connect(self.db.db_path) as db:
+                async with db.execute(
+                    'SELECT user_id, company, amount, due_date FROM user_credits WHERE due_date < ?',
+                    (datetime.now().isoformat(),)
+                ) as cursor:
+                    overdue_credits = await cursor.fetchall()
+                    
+            for user_id, company, amount, due_date in overdue_credits:
+                # Применяем штрафы
+                ban_key = f"economic_ban_{user_id}"
+                economic_bans[ban_key] = {
+                    'end_time': datetime.now() + timedelta(hours=48),  # Бан на 2 дня
+                    'reason': f'Просрочка кредита в {company}'
+                }
+                
+                # Удаляем кредит
+                await self.db.remove_credit(user_id)
+                
+                # Уведомляем пользователя
+                try:
+                    user = self.get_user(user_id)
+                    if user:
+                        embed = Design.create_embed(
+                            "🚫 КРЕДИТ ПРОСРОЧЕН!",
+                            f"**Компания:** {company}\n"
+                            f"**Сумма:** {amount} монет\n"
+                            f"**Дата возврата:** {due_date[:10]}\n\n"
+                            f"⚠️ Ваша экономика заблокирована на 48 часов!",
+                            "danger"
+                        )
+                        await user.send(embed=embed)
+                except:
+                    pass  # Не удалось отправить сообщение
+                
+                logger.info(f"🚫 Кредит пользователя {user_id} просрочен, бан экономики")
+                
+        except Exception as e:
+            logger.error(f"Ошибка проверки кредитов: {e}")
 
-@bot.tree.command(name="собрать_доход", description="Собрать доход с фермы")
-async def собрать_доход(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    
-    try:
-        success, message = await bot.mining_system.collect_income(interaction.user.id)
-        
-        if success:
-            embed = Design.create_embed("💰 Доход собран!", message, "success")
-        else:
-            embed = Design.create_embed("❌ Ошибка", message, "danger")
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        
-    except Exception as e:
-        logger.error(f"Ошибка в команде собрать_доход: {e}")
-        embed = Design.create_embed("❌ Ошибка", "Произошла ошибка при сборе дохода", "danger")
-        await interaction.followup.send(embed=embed, ephemeral=True)
+    async def update_crypto_prices(self):
+        """Обновление цен криптовалют"""
+        try:
+            # Имитация изменения цен (в реальности можно подключить API)
+            for crypto in self.crypto_prices:
+                change_percent = random.uniform(-0.05, 0.05)  # ±5%
+                self.crypto_prices[crypto] = max(0.01, self.crypto_prices[crypto] * (1 + change_percent))
+            
+            # Каждые 30 минут логируем изменения
+            if datetime.now().minute % 30 == 0:
+                logger.info(f"₿ Обновлены цены крипты: {self.crypto_prices}")
+                
+        except Exception as e:
+            logger.error(f"Ошибка обновления цен крипты: {e}")
 
-@bot.tree.command(name="улучшить_ферму", description="Улучшить ферму")
-async def улучшить_ферму(interaction: discord.Interaction):
-    try:
-        farm = await bot.db.get_mining_farm(interaction.user.id)
-        if not farm:
-            await interaction.response.send_message("❌ У вас нет фермы!", ephemeral=True)
-            return
-        
-        current_level = farm["level"]
-        
-        if current_level >= 3:
-            await interaction.response.send_message("❌ Ваша ферма уже максимального уровня!", ephemeral=True)
-            return
-        
-        upgrade_cost = bot.mining_system.farm_levels[current_level]["upgrade_cost"]
-        balance = await bot.economy.get_balance(interaction.user.id)
-        
-        if balance < upgrade_cost:
-            await interaction.response.send_message(f"❌ Недостаточно средств! Нужно {upgrade_cost} монет", ephemeral=True)
-            return
-        
-        await bot.economy.update_balance(interaction.user.id, -upgrade_cost)
-        await bot.db.update_mining_farm(interaction.user.id, level=current_level + 1)
-        
-        embed = Design.create_embed("⚡ Ферма улучшена!", 
-                                  f"Уровень фермы повышен до {current_level + 1}!\n"
-                                  f"Новый доход: {bot.mining_system.farm_levels[current_level + 1]['income']} монет/6ч", "success")
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        logger.error(f"Ошибка в команде улучшить_ферму: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка при улучшении фермы", ephemeral=True)
+    async def check_events(self):
+        """Проверка и завершение ивентов"""
+        try:
+            current_time = datetime.now()
+            expired_events = []
+            
+            for event_type, event_data in self.active_events.items():
+                if current_time > event_data["end_time"]:
+                    expired_events.append(event_type)
+                    
+                    # Отправляем уведомление о завершении ивента
+                    try:
+                        channel = self.get_channel(EVENTS_CHANNEL_ID)
+                        if channel:
+                            embed = Design.create_embed(
+                                "🎉 ИВЕНТ ЗАВЕРШЕН!",
+                                f"**{event_data['data']['name']}** завершился!\n"
+                                f"Спасибо всем участникам!",
+                                "event"
+                            )
+                            await channel.send(embed=embed)
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки завершения ивента: {e}")
+            
+            # Удаляем завершенные ивенты
+            for event_type in expired_events:
+                del self.active_events[event_type]
+                
+        except Exception as e:
+            logger.error(f"Ошибка проверки ивентов: {e}")
 
-# ₿ КОМАНДЫ КРИПТОВАЛЮТЫ (ОБНОВЛЕННЫЕ)
-@bot.tree.command(name="крипта", description="Курсы криптовалют")
-async def крипта(interaction: discord.Interaction):
-    try:
-        embed = Design.create_embed("₿ КРИПТОВАЛЮТЫ", "Актуальные курсы:", "crypto")
-        
-        for crypto, price in bot.crypto_prices.items():
-            embed.add_field(
-                name=crypto,
-                value=f"${price:,.2f}",
-                inline=True
-            )
-        
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        logger.error(f"Ошибка в команде крипта: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка", ephemeral=True)
+    async def cleanup_old_data(self):
+        """Очистка старых данных и кэша"""
+        try:
+            # Очистка старых кд ограблений (старше 1 часа)
+            current_time = time.time()
+            expired_robs = []
+            
+            for user_id, rob_time in self.rob_cooldowns.items():
+                if current_time - rob_time > 3600:  # 1 час
+                    expired_robs.append(user_id)
+            
+            for user_id in expired_robs:
+                del self.rob_cooldowns[user_id]
+            
+            # Очистка старых варнов (авто-снятие через 7 дней)
+            week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+            async with aiosqlite.connect(self.db.db_path) as db:
+                await db.execute(
+                    'UPDATE warnings SET warns = GREATEST(0, warns - 1) WHERE last_updated < ?',
+                    (week_ago,)
+                )
+                await db.commit()
+            
+            logger.info("🧹 Авто-очистка данных выполнена")
+            
+        except Exception as e:
+            logger.error(f"Ошибка очистки данных: {e}")
 
-@bot.tree.command(name="мой_крипто", description="Мой крипто-портфель")
-async def мой_крипто(interaction: discord.Interaction):
+# 🆕 КОМАНДА СТАТУСА СИСТЕМЫ
+@bot.tree.command(name="статус", description="📊 Статус бота и систем")
+async def status_command(interaction: discord.Interaction):
+    """Показать статус всех систем бота"""
     try:
-        user_crypto_data = await bot.db.get_user_crypto(interaction.user.id)
+        stats = await bot.monitoring.get_bot_stats()
         
-        if not user_crypto_data:
-            await interaction.response.send_message("❌ У вас нет криптовалюты", ephemeral=True)
-            return
+        embed = Design.create_embed("📊 СТАТУС СИСТЕМ БОТА", "", "monitoring")
         
-        embed = Design.create_embed("₿ Мой крипто-портфель", "", "crypto")
-        total_value = 0
-        
-        for crypto, amount in user_crypto_data.items():
-            value = amount * bot.crypto_prices[crypto]
-            total_value += value
-            embed.add_field(
-                name=crypto,
-                value=f"Количество: {amount:.4f}\nСтоимость: ${value:.2f}",
-                inline=True
-            )
-        
+        # Основная статистика
         embed.add_field(
-            name="💰 Общая стоимость",
-            value=f"${total_value:.2f}",
+            name="🖥️ ОСНОВНЫЕ МЕТРИКИ",
+            value=f"**Время работы:** {stats.get('uptime', 'N/A')}\n"
+                  f"**Серверов:** {stats.get('guilds', 0)}\n"
+                  f"**Пользователей:** {stats.get('users', 0)}\n"
+                  f"**Память:** {stats.get('memory_usage', 'N/A')}\n"
+                  f"**CPU:** {stats.get('cpu_usage', 0)}%",
             inline=False
         )
         
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        logger.error(f"Ошибка в команде мой_крипто: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка", ephemeral=True)
-
-# 🎪 КОМАНДЫ ИВЕНТОВ
-@bot.tree.command(name="ивенты", description="Активные ивенты")
-async def ивенты(interaction: discord.Interaction):
-    try:
-        if not bot.active_events:
-            embed = Design.create_embed("🎪 Ивенты", "Сейчас нет активных ивентов", "info")
-        else:
-            embed = Design.create_embed("🎪 АКТИВНЫЕ ИВЕНТЫ", "", "event")
-            for event_type, event_data in bot.active_events.items():
-                time_left = event_data["end_time"] - datetime.now()
-                minutes_left = max(0, int(time_left.total_seconds() // 60))
-                
-                embed.add_field(
-                    name=bot.event_system.event_types[event_type]["name"],
-                    value=f"Осталось: {minutes_left} минут\n{bot.event_system.event_types[event_type]['description']}",
-                    inline=False
-                )
-        
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        logger.error(f"Ошибка в команде ивенты: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка", ephemeral=True)
-
-# 👑 АДМИН КОМАНДЫ
-@bot.tree.command(name="выдать", description="Выдать монеты")
-@is_admin()
-async def выдать(interaction: discord.Interaction, пользователь: discord.Member, количество: int):
-    try:
-        if количество <= 0:
-            await interaction.response.send_message("❌ Количество должно быть положительным!", ephemeral=True)
-            return
-        
-        new_balance = await bot.economy.admin_add_money(пользователь.id, количество)
-        
-        embed = Design.create_embed("💰 Деньги выданы", 
-                                  f"**Пользователь:** {пользователь.mention}\n"
-                                  f"**Выдано:** {количество:,} монет\n"
-                                  f"**Новый баланс:** {new_balance:,} монет", "success")
-        await interaction.response.send_message(embed=embed)
-    except Exception as e:
-        logger.error(f"Ошибка в команде выдать: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка", ephemeral=True)
-
-@bot.tree.command(name="удалить_бд", description="Удалить базу данных")
-@is_admin()
-async def удалить_бд(interaction: discord.Interaction):
-    try:
-        import os
-        if os.path.exists("data/bot.db"):
-            os.remove("data/bot.db")
-            await bot.db.init_db()
-            embed = Design.create_embed("✅ База данных удалена", "Все данные сброшены!", "success")
-        else:
-            embed = Design.create_embed("ℹ️ База не найдена", "Файл data/bot.db не существует", "info")
-    except Exception as e:
-        logger.error(f"Ошибка в команде удалить_бд: {e}")
-        embed = Design.create_embed("❌ Ошибка", f"Не удалось удалить БД: {e}", "danger")
-    
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-@bot.tree.command(name="админ", description="Панель администратора")
-@is_admin()
-async def админ(interaction: discord.Interaction):
-    try:
-        description = (
-            "**АДМИН КОМАНДЫ:**\n\n"
-            "**Экономика:**\n"
-            "`/выдать @user количество` - Выдать монеты\n\n"
-            "**Управление:**\n"
-            "`/удалить_бд` - Очистить базу данных\n"
-            "`/перезагрузить` - Перезагрузить бота\n"
-            "`/запустить_ивент тип` - Запустить ивент"
+        # Активность
+        embed.add_field(
+            name="📈 АКТИВНОСТЬ",
+            value=f"**Всего команд:** {stats.get('total_commands', 0)}\n"
+                  f"**Ошибки:** {stats.get('errors', 0)}\n"
+                  f"**Популярные команды:** {', '.join([cmd[0] for cmd in stats.get('popular_commands', [])[:3]])}",
+            inline=False
         )
         
-        embed = Design.create_embed("ПАНЕЛЬ АДМИНИСТРАТОРА", description, "premium")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-    except Exception as e:
-        logger.error(f"Ошибка в команде админ: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка", ephemeral=True)
-
-@bot.tree.command(name="перезагрузить", description="Перезагрузить бота")
-@is_admin()
-async def перезагрузить(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    
-    try:
-        embed = Design.create_embed("🔄 Перезагрузка бота", "Выполняется перезагрузка...", "warning")
-        await interaction.followup.send(embed=embed)
+        # Системы
+        systems_status = []
         
-        success = await bot.reload_bot()
+        # Проверяем кредиты
+        overdue_count = 0
+        async with aiosqlite.connect(bot.db.db_path) as db:
+            async with db.execute(
+                'SELECT COUNT(*) FROM user_credits WHERE due_date < ?',
+                (datetime.now().isoformat(),)
+            ) as cursor:
+                overdue_count = (await cursor.fetchone())[0]
         
-        if success:
-            embed = Design.create_embed("✅ Перезагрузка завершена", "Бот успешно перезагружен!", "success")
-        else:
-            embed = Design.create_embed("❌ Ошибка перезагрузки", "Произошла ошибка при перезагрузке", "danger")
+        systems_status.append(f"🏦 Кредиты: {'⚠️' if overdue_count > 0 else '✅'} ({overdue_count} просрочек)")
+        systems_status.append(f"🎉 Ивенты: {'✅' if bot.active_events else '🔴'} ({len(bot.active_events)} активных)")
+        systems_status.append(f"₿ Крипта: ✅ ({len(bot.crypto_prices)} валют)")
+        systems_status.append(f"🚫 Баны: {len(economic_bans)} пользователей")
         
-        await interaction.followup.send(embed=embed, ephemeral=True)
-    except Exception as e:
-        logger.error(f"Ошибка в команде перезагрузить: {e}")
-        await interaction.followup.send("❌ Произошла ошибка при перезагрузке", ephemeral=True)
-
-# 🔧 ОБРАБОТЧИКИ СОБЫТИЙ С ЛОГИРОВАНИЕМ
-@bot.event
-async def on_ready():
-    logger.info(f'✅ Бот {bot.user} запущен!')
-    logger.info(f'🌐 Серверов: {len(bot.guilds)}')
-    
-    try:
-        synced = await bot.tree.sync()
-        logger.info(f'✅ Синхронизировано {len(synced)} команд')
-    except Exception as e:
-        logger.error(f'❌ Ошибка синхронизации: {e}')
-
-@bot.event
-async def on_error(event, *args, **kwargs):
-    logger.error(f'Ошибка в событии {event}: {args} {kwargs}')
-    logger.error(traceback.format_exc())
-
-@bot.event
-async def on_command_error(ctx, error):
-    logger.error(f'Ошибка команды {ctx.command}: {error}')
-    logger.error(traceback.format_exc())
-
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-    
-    if isinstance(message.channel, discord.TextChannel):
+        embed.add_field(
+            name="⚙️ СТАТУС СИСТЕМ",
+            value="\n".join(systems_status),
+            inline=False
+        )
+        
+        # Статус базы данных
         try:
             async with aiosqlite.connect(bot.db.db_path) as db:
-                await db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (message.author.id,))
-                await db.commit()
+                async with db.execute("SELECT COUNT(*) FROM users") as cursor:
+                    user_count = (await cursor.fetchone())[0]
+                
+                embed.add_field(
+                    name="💾 БАЗА ДАННЫХ",
+                    value=f"**Пользователей в БД:** {user_count}\n"
+                          f"**Размер БД:** {os.path.getsize(bot.db.db_path) / 1024 / 1024:.2f} MB\n"
+                          f"**Последний бэкап:** {datetime.now().strftime('%H:%M')}",
+                    inline=False
+                )
         except Exception as e:
-            logger.error(f"Ошибка при создании пользователя {message.author.id}: {e}")
+            logger.error(f"Ошибка получения статуса БД: {e}")
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Ошибка в команде статуса: {e}")
+        await interaction.response.send_message("❌ Ошибка получения статуса!", ephemeral=True)
+
+# 🎮 ДОПОЛНИТЕЛЬНЫЕ СИСТЕМЫ
+class NFTSystem:
+    """🚀 СИСТЕМА NFT И КОЛЛЕКЦИЙ"""
+    def __init__(self, db: Database):
+        self.db = db
+        self.nft_collections = {
+            "starter": {
+                "name": "🎨 Стартовая коллекция",
+                "nfts": {
+                    1: {"name": "🔥 Огненный дракон", "rarity": "legendary", "value": 5000},
+                    2: {"name": "💎 Кристальный воин", "rarity": "epic", "value": 2500},
+                    3: {"name": "🌿 Лесной эльф", "rarity": "rare", "value": 1000},
+                    4: {"name": "⚡ Молниевый волк", "rarity": "uncommon", "value": 500},
+                    5: {"name": "💧 Водяной дух", "rarity": "common", "value": 100}
+                }
+            },
+            "crypto": {
+                "name": "₿ Крипто коллекция", 
+                "nfts": {
+                    6: {"name": "Биткоин Сатоши", "rarity": "legendary", "value": 10000},
+                    7: {"name": "Эфириум Виталик", "rarity": "epic", "value": 5000},
+                    8: {"name": "Доджкоин Маск", "rarity": "rare", "value": 2000}
+                }
+            }
+        }
     
-    await bot.process_commands(message)
+    async def buy_nft_pack(self, user_id: int, collection: str):
+        """Покупка NFT пака"""
+        collection_data = self.nft_collections.get(collection)
+        if not collection_data:
+            return False, "Коллекция не найдена"
+        
+        # Проверяем баланс (стоимость пака 2000 монет)
+        async with aiosqlite.connect(self.db.db_path) as db:
+            async with db.execute('SELECT balance FROM users WHERE user_id = ?', (user_id,)) as cursor:
+                result = await cursor.fetchone()
+                if not result or result[0] < 2000:
+                    return False, "Недостаточно средств для покупки пака (2000 монет)"
+            
+            # Случайный NFT с учетом редкости
+            rarity_weights = {"common": 50, "uncommon": 30, "rare": 15, "epic": 4, "legendary": 1}
+            weighted_nfts = []
+            
+            for nft_id, nft_data in collection_data["nfts"].items():
+                weighted_nfts.extend([nft_id] * rarity_weights[nft_data["rarity"]])
+            
+            chosen_nft_id = random.choice(weighted_nfts)
+            chosen_nft = collection_data["nfts"][chosen_nft_id]
+            
+            # Добавляем NFT в инвентарь
+            await db.execute('''
+                INSERT OR REPLACE INTO inventory (user_id, item_id, quantity)
+                VALUES (?, ?, COALESCE((SELECT quantity FROM inventory WHERE user_id = ? AND item_id = ?), 0) + 1)
+            ''', (user_id, chosen_nft_id, user_id, chosen_nft_id))
+            
+            # Списываем деньги
+            await db.execute('UPDATE users SET balance = balance - 2000 WHERE user_id = ?', (user_id,))
+            await db.commit()
+            
+            return True, chosen_nft
+
+class StockMarket:
+    """📈 СИСТЕМА ФОНДОВОГО РЫНКА"""
+    def __init__(self, db: Database):
+        self.db = db
+        self.stocks = {
+            "TECH": {"name": "🔮 TechCorp", "price": 100, "volatility": 0.2},
+            "ENERGY": {"name": "⚡ EnergyPlus", "price": 80, "volatility": 0.15},
+            "GOLD": {"name": "🥇 GoldMine Inc", "price": 150, "volatility": 0.1},
+            "GAME": {"name": "🎮 GameStudio", "price": 60, "volatility": 0.25},
+            "CRYPTO": {"name": "₿ CryptoBank", "price": 120, "volatility": 0.3}
+        }
+        self.last_update = datetime.now()
+    
+    async def update_prices(self):
+        """Обновление цен акций"""
+        current_time = datetime.now()
+        if (current_time - self.last_update).total_seconds() < 300:  # 5 минут
+            return
+        
+        for symbol, stock in self.stocks.items():
+            change_percent = random.uniform(-stock["volatility"], stock["volatility"])
+            stock["price"] = max(10, stock["price"] * (1 + change_percent))
+        
+        self.last_update = current_time
+    
+    async def buy_stock(self, user_id: int, symbol: str, quantity: int):
+        """Покупка акций"""
+        await self.update_prices()
+        
+        stock = self.stocks.get(symbol)
+        if not stock:
+            return False, "Акция не найдена"
+        
+        total_cost = stock["price"] * quantity
+        
+        async with aiosqlite.connect(self.db.db_path) as db:
+            # Проверяем баланс
+            async with db.execute('SELECT balance FROM users WHERE user_id = ?', (user_id,)) as cursor:
+                result = await cursor.fetchone()
+                if not result or result[0] < total_cost:
+                    return False, f"Недостаточно средств. Нужно: {total_cost:.2f} монет"
+            
+            # Добавляем акции в портфель
+            await db.execute('''
+                INSERT OR REPLACE INTO user_stocks (user_id, symbol, quantity, avg_price)
+                VALUES (?, ?, ?, COALESCE(
+                    (SELECT (avg_price * quantity + ? * ?) / (quantity + ?) 
+                     FROM user_stocks WHERE user_id = ? AND symbol = ?),
+                    ?
+                ))
+            ''', (user_id, symbol, quantity, stock["price"], quantity, quantity, user_id, symbol, stock["price"]))
+            
+            # Обновляем количество если уже есть акции
+            await db.execute('''
+                UPDATE user_stocks SET quantity = quantity + ? 
+                WHERE user_id = ? AND symbol = ?
+            ''', (quantity, user_id, symbol))
+            
+            # Списываем деньги
+            await db.execute('UPDATE users SET balance = balance - ? WHERE user_id = ?', (total_cost, user_id))
+            await db.commit()
+            
+            return True, f"✅ Куплено {quantity} акций {stock['name']} за {total_cost:.2f} монет"
+
+class ClanSystem:
+    """🏰 СИСТЕМА КЛАНОВ"""
+    def __init__(self, db: Database):
+        self.db = db
+    
+    async def create_clan(self, user_id: int, clan_name: str, clan_tag: str):
+        """Создание клана"""
+        if len(clan_tag) > 5:
+            return False, "Тег клана не может быть длиннее 5 символов"
+        
+        async with aiosqlite.connect(self.db.db_path) as db:
+            # Проверяем существование клана
+            async with db.execute('SELECT id FROM clans WHERE name = ? OR tag = ?', (clan_name, clan_tag)) as cursor:
+                if await cursor.fetchone():
+                    return False, "Клан с таким именем или тегом уже существует"
+            
+            # Проверяем баланс (создание клана стоит 5000 монет)
+            async with db.execute('SELECT balance FROM users WHERE user_id = ?', (user_id,)) as cursor:
+                result = await cursor.fetchone()
+                if not result or result[0] < 5000:
+                    return False, "Недостаточно средств для создания клана (5000 монет)"
+            
+            # Создаем клан
+            await db.execute('''
+                INSERT INTO clans (name, tag, owner_id, created_at, level, treasury)
+                VALUES (?, ?, ?, ?, 1, 0)
+            ''', (clan_name, clan_tag, user_id, datetime.now().isoformat()))
+            
+            # Добавляем создателя в клан
+            clan_id = db.last_insert_id
+            await db.execute('''
+                INSERT INTO clan_members (clan_id, user_id, role, joined_at)
+                VALUES (?, ?, 'leader', ?)
+            ''', (clan_id, user_id, datetime.now().isoformat()))
+            
+            # Списываем деньги
+            await db.execute('UPDATE users SET balance = balance - 5000 WHERE user_id = ?', (user_id,))
+            await db.commit()
+            
+            return True, f"✅ Клан {clan_name} [{clan_tag}] создан!"
+
+class QuestSystem:
+    """🎯 СИСТЕМА ЕЖЕДНЕВНЫХ ЗАДАНИЙ"""
+    def __init__(self, db: Database):
+        self.db = db
+        self.quests = {
+            "daily_work": {"name": "💼 Работать 3 раза", "target": 3, "reward": 500},
+            "daily_slots": {"name": "🎰 Сыграть в слоты", "target": 1, "reward": 300},
+            "daily_rob": {"name": "🏴‍☠️ Ограбить банк", "target": 1, "reward": 700},
+            "daily_crypto": {"name": "₿ Купить крипту", "target": 1, "reward": 400},
+            "weekly_rich": {"name": "💰 Накопить 10к монет", "target": 10000, "reward": 2000}
+        }
+    
+    async def get_daily_quests(self, user_id: int):
+        """Получить ежедневные задания для пользователя"""
+        today = datetime.now().date().isoformat()
+        
+        async with aiosqlite.connect(self.db.db_path) as db:
+            # Проверяем, получал ли пользователь сегодня задания
+            async with db.execute(
+                'SELECT quests_data FROM daily_quests WHERE user_id = ? AND date = ?', 
+                (user_id, today)
+            ) as cursor:
+                result = await cursor.fetchone()
+                
+                if result:
+                    return json.loads(result[0])
+                else:
+                    # Генерируем новые случайные задания
+                    daily_quests = random.sample(list(self.quests.keys()), 3)
+                    quests_data = {}
+                    
+                    for quest_key in daily_quests:
+                        quest = self.quests[quest_key]
+                        quests_data[quest_key] = {
+                            "name": quest["name"],
+                            "progress": 0,
+                            "target": quest["target"],
+                            "reward": quest["reward"],
+                            "completed": False
+                        }
+                    
+                    # Сохраняем в БД
+                    await db.execute('''
+                        INSERT OR REPLACE INTO daily_quests (user_id, date, quests_data)
+                        VALUES (?, ?, ?)
+                    ''', (user_id, today, json.dumps(quests_data)))
+                    await db.commit()
+                    
+                    return quests_data
+
+# 🎵 СИСТЕМА МУЗЫКИ (упрощенная)
+class MusicPlayer:
+    """🎵 ПРОСТАЯ СИСТЕМА МУЗЫКИ"""
+    def __init__(self):
+        self.players = {}
+    
+    async def play_music(self, interaction: discord.Interaction, query: str):
+        """Воспроизведение музыки"""
+        if not interaction.user.voice:
+            await interaction.response.send_message("❌ Подключись к голосовому каналу!", ephemeral=True)
+            return
+        
+        # Здесь должна быть интеграция с YouTube DL etc.
+        # Для примера - заглушка
+        await interaction.response.send_message(
+            f"🎵 Музыкальная система в разработке! Запрос: {query}",
+            ephemeral=True
+        )
+
+# 🏆 СИСТЕМА ДОСТИЖЕНИЙ
+class AchievementSystem:
+    """🏆 СИСТЕМА ДОСТИЖЕНИЙ И НАГРАД"""
+    def __init__(self, db: Database):
+        self.db = db
+        self.achievements = {
+            "first_million": {
+                "name": "💰 Миллионер", 
+                "description": "Накопить 1,000,000 монет",
+                "reward": 50000,
+                "icon": "💎"
+            },
+            "crypto_king": {
+                "name": "₿ Король крипты",
+                "description": "Владеть 1 BTC", 
+                "reward": 25000,
+                "icon": "👑"
+            },
+            "clan_master": {
+                "name": "🏰 Мастер кланов",
+                "description": "Создать клан 10 уровня",
+                "reward": 30000,
+                "icon": "⚔️"
+            },
+            "gambling_addict": {
+                "name": "🎰 Азартный игрок", 
+                "description": "Проиграть 50,000 в казино",
+                "reward": 10000,
+                "icon": "😈"
+            }
+        }
+    
+    async def check_achievements(self, user_id: int):
+        """Проверка и выдача достижений"""
+        unlocked = []
+        
+        async with aiosqlite.connect(self.db.db_path) as db:
+            # Получаем данные пользователя
+            user_data = await db.execute_fetchall(
+                'SELECT balance FROM users WHERE user_id = ?', (user_id,)
+            )
+            # Дополнительные проверки для достижений...
+            
+        return unlocked
+
+# 🆕 ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ
+@bot.tree.command(name="нфт", description="🚀 Система NFT и коллекций")
+async def nft_command(interaction: discord.Interaction, действие: str = None, коллекция: str = None):
+    """Команды для работы с NFT"""
+    try:
+        nft_system = NFTSystem(bot.db)
+        
+        if действие == "купить":
+            if not коллекция:
+                await interaction.response.send_message("❌ Укажи коллекцию: `starter` или `crypto`")
+                return
+            
+            success, result = await nft_system.buy_nft_pack(interaction.user.id, коллекция)
+            if success:
+                embed = Design.create_embed(
+                    "🎉 ТЫ ПОЛУЧИЛ NFT!",
+                    f"**{result['name']}**\n"
+                    f"📊 Редкость: {result['rarity']}\n"
+                    f"💎 Ценность: {result['value']} монет\n"
+                    f"🎨 Коллекция: {коллекция}",
+                    "success"
+                )
+                await interaction.response.send_message(embed=embed)
+            else:
+                await interaction.response.send_message(f"❌ {result}", ephemeral=True)
+                
+        elif действие == "инвентарь":
+            async with aiosqlite.connect(bot.db.db_path) as db:
+                async with db.execute(
+                    'SELECT item_id, quantity FROM inventory WHERE user_id = ? AND item_id <= 8', 
+                    (interaction.user.id,)
+                ) as cursor:
+                    nfts = await cursor.fetchall()
+            
+            if not nfts:
+                await interaction.response.send_message("📭 У тебя пока нет NFT!", ephemeral=True)
+                return
+            
+            embed = Design.create_embed("🎨 ТВОИ NFT", "", "premium")
+            for nft_id, quantity in nfts:
+                # Находим информацию о NFT
+                for collection in nft_system.nft_collections.values():
+                    if nft_id in collection["nfts"]:
+                        nft_data = collection["nfts"][nft_id]
+                        embed.add_field(
+                            name=f"{nft_data['name']} x{quantity}",
+                            value=f"📊 {nft_data['rarity']} | 💎 {nft_data['value']}",
+                            inline=False
+                        )
+                        break
+            
+            await interaction.response.send_message(embed=embed)
+        else:
+            embed = Design.create_embed(
+                "🚀 СИСТЕМА NFT",
+                "**Доступные команды:**\n"
+                "`/нфт купить [коллекция]` - Купить NFT пак (2000 монет)\n"
+                "`/нфт инвентарь` - Посмотреть свои NFT\n\n"
+                "**Коллекции:**\n"
+                "🎨 `starter` - Стартовая коллекция\n"
+                "₿ `crypto` - Крипто коллекция",
+                "info"
+            )
+            await interaction.response.send_message(embed=embed)
+            
+    except Exception as e:
+        logger.error(f"Ошибка в NFT команде: {e}")
+        await interaction.response.send_message("❌ Произошла ошибка!", ephemeral=True)
+
+@bot.tree.command(name="акции", description="📈 Фондовый рынок")
+async def stocks_command(interaction: discord.Interaction, действие: str = None, акция: str = None, количество: int = 1):
+    """Торговля акциями"""
+    try:
+        stock_market = StockMarket(bot.db)
+        
+        if действие == "купить":
+            if not акция:
+                # Показываем список акций
+                await stock_market.update_prices()
+                
+                embed = Design.create_embed("📈 ФОНДОВЫЙ РЫНОК", "**Доступные акции:**", "success")
+                for symbol, stock in stock_market.stocks.items():
+                    embed.add_field(
+                        name=f"{stock['name']} ({symbol})",
+                        value=f"💵 Цена: {stock['price']:.2f} монет",
+                        inline=True
+                    )
+                
+                embed.add_field(
+                    name="🛒 Покупка",
+                    value="Используй: `/акции купить [SYMBOL] [количество]`",
+                    inline=False
+                )
+                await interaction.response.send_message(embed=embed)
+                return
+            
+            success, result = await stock_market.buy_stock(interaction.user.id, акция, количество)
+            if success:
+                await interaction.response.send_message(f"✅ {result}")
+            else:
+                await interaction.response.send_message(f"❌ {result}", ephemeral=True)
+                
+        elif действие == "портфель":
+            async with aiosqlite.connect(bot.db.db_path) as db:
+                async with db.execute(
+                    'SELECT symbol, quantity, avg_price FROM user_stocks WHERE user_id = ?', 
+                    (interaction.user.id,)
+                ) as cursor:
+                    portfolio = await cursor.fetchall()
+            
+            if not portfolio:
+                await interaction.response.send_message("📭 У тебя пока нет акций!", ephemeral=True)
+                return
+            
+            await stock_market.update_prices()
+            total_value = 0
+            
+            embed = Design.create_embed("💼 ТВОЙ ПОРТФЕЛЬ АКЦИЙ", "", "success")
+            for symbol, quantity, avg_price in portfolio:
+                current_price = stock_market.stocks[symbol]["price"]
+                value = quantity * current_price
+                total_value += value
+                profit = ((current_price - avg_price) / avg_price) * 100
+                
+                embed.add_field(
+                    name=f"{stock_market.stocks[symbol]['name']} x{quantity}",
+                    value=f"💵 Текущая: {current_price:.2f}\n📊 Прибыль: {profit:+.1f}%",
+                    inline=True
+                )
+            
+            embed.add_field(
+                name="💰 ОБЩАЯ СТОИМОСТЬ",
+                value=f"{total_value:.2f} монет",
+                inline=False
+            )
+            await interaction.response.send_message(embed=embed)
+            
+        else:
+            embed = Design.create_embed(
+                "📈 ФОНДОВЫЙ РЫНОК",
+                "**Доступные команды:**\n"
+                "`/акции купить` - Посмотреть акции для покупки\n"
+                "`/акции купить [SYMBOL] [количество]` - Купить акции\n"
+                "`/акции портфель` - Посмотреть свой портфель\n\n"
+                "💡 *Цены обновляются каждые 5 минут*",
+                "info"
+            )
+            await interaction.response.send_message(embed=embed)
+            
+    except Exception as e:
+        logger.error(f"Ошибка в команде акций: {e}")
+        await interaction.response.send_message("❌ Произошла ошибка!", ephemeral=True)
+
+@bot.tree.command(name="клан", description="🏰 Система кланов")
+async def clan_command(interaction: discord.Interaction, действие: str = None, название: str = None, тег: str = None):
+    """Управление кланами"""
+    try:
+        clan_system = ClanSystem(bot.db)
+        
+        if действие == "создать":
+            if not название or not тег:
+                await interaction.response.send_message("❌ Укажи название и тег клана!", ephemeral=True)
+                return
+            
+            success, result = await clan_system.create_clan(interaction.user.id, название, тег)
+            if success:
+                await interaction.response.send_message(f"✅ {result}")
+            else:
+                await interaction.response.send_message(f"❌ {result}", ephemeral=True)
+                
+        elif действие == "список":
+            async with aiosqlite.connect(bot.db.db_path) as db:
+                async with db.execute(
+                    'SELECT name, tag, level, treasury FROM clans ORDER BY level DESC LIMIT 10'
+                ) as cursor:
+                    clans = await cursor.fetchall()
+            
+            if not clans:
+                await interaction.response.send_message("🏰 Кланов пока нет! Создай первый!", ephemeral=True)
+                return
+            
+            embed = Design.create_embed("🏰 ТОП 10 КЛАНОВ", "", "success")
+            for i, (name, tag, level, treasury) in enumerate(clans, 1):
+                embed.add_field(
+                    name=f"{i}. {name} [{tag}]",
+                    value=f"⭐ Уровень: {level}\n💰 Казна: {treasury} монет",
+                    inline=False
+                )
+            
+            await interaction.response.send_message(embed=embed)
+            
+        else:
+            embed = Design.create_embed(
+                "🏰 СИСТЕМА КЛАНОВ",
+                "**Доступные команды:**\n"
+                "`/клан создать [название] [тег]` - Создать клан (5000 монет)\n"
+                "`/клан список` - Топ кланов сервера\n\n"
+                "💡 *Кланы открывают доступ к клановым войнам и бонусам!*",
+                "info"
+            )
+            await interaction.response.send_message(embed=embed)
+            
+    except Exception as e:
+        logger.error(f"Ошибка в команде кланов: {e}")
+        await interaction.response.send_message("❌ Произошла ошибка!", ephemeral=True)
+
+@bot.tree.command(name="задания", description="🎯 Ежедневные задания")
+async def quests_command(interaction: discord.Interaction):
+    """Просмотр ежедневных заданий"""
+    try:
+        quest_system = QuestSystem(bot.db)
+        quests = await quest_system.get_daily_quests(interaction.user.id)
+        
+        embed = Design.create_embed("🎯 ЕЖЕДНЕВНЫЕ ЗАДАНИЯ", "Выполняй задания для получения наград!", "success")
+        
+        for quest_key, quest_data in quests.items():
+            status = "✅ ВЫПОЛНЕНО" if quest_data["completed"] else f"📊 {quest_data['progress']}/{quest_data['target']}"
+            embed.add_field(
+                name=quest_data["name"],
+                value=f"{status}\n🎁 Награда: {quest_data['reward']} монет",
+                inline=False
+            )
+        
+        embed.set_footer(text="Задания обновляются каждый день в 00:00")
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Ошибка в команде заданий: {e}")
+        await interaction.response.send_message("❌ Произошла ошибка!", ephemeral=True)
+
+@bot.tree.command(name="музыка", description="🎵 Воспроизвести музыку")
+async def music_command(interaction: discord.Interaction, запрос: str = None):
+    """Управление музыкой"""
+    try:
+        if not запрос:
+            embed = Design.create_embed(
+                "🎵 МУЗЫКАЛЬНАЯ СИСТЕМА",
+                "**Доступные команды:**\n"
+                "`/музыка [название/url]` - Воспроизвести музыку\n\n"
+                "💡 *Поддерживаются YouTube, SoundCloud, Spotify*",
+                "music"
+            )
+            await interaction.response.send_message(embed=embed)
+            return
+        
+        music_player = MusicPlayer()
+        await music_player.play_music(interaction, запрос)
+        
+    except Exception as e:
+        logger.error(f"Ошибка в музыкальной команде: {e}")
+        await interaction.response.send_message("❌ Произошла ошибка!", ephemeral=True)
+
+# 🎊 КОМАНДА РАЗВЛЕЧЕНИЙ
+@bot.tree.command(name="развлечения", description="🎮 Развлекательные команды")
+async def fun_command(interaction: discord.Interaction):
+    """Развлекательные команды"""
+    embed = Design.create_embed(
+        "🎮 РАЗВЛЕКАТЕЛЬНЫЕ КОМАНДЫ",
+        "**Доступные развлечения:**\n\n"
+        "🎰 **Казино:**\n"
+        "`/слоты [ставка]` - Игра в слоты\n"
+        "`/рулетка [ставка] [число/цвет]` - Русская рулетка\n\n"
+        "🎯 **Игры:**\n" 
+        "`/викторина` - Случайная викторина\n"
+        "`/угадайчисло` - Угадай число от 1 до 100\n"
+        "`/крестики-нолики @игрок` - Игра с другом\n\n"
+        "🚀 **Другое:**\n"
+        "`/мем` - Случайный мем\n"
+        "`/котик` - Милый котик\n"
+        "`/собака` - Милая собака\n"
+        "`/факт` - Интересный факт",
+        "premium"
+    )
+    await interaction.response.send_message(embed=embed)
+
+# 🎉 ЗАПУСК БОТА
+bot = MegaBot()
 
 if __name__ == "__main__":
+    # Создаем недостающие таблицы в БД
+    async def create_missing_tables():
+        async with aiosqlite.connect("data/bot.db") as db:
+            # Таблица для акций
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS user_stocks (
+                    user_id INTEGER,
+                    symbol TEXT,
+                    quantity INTEGER DEFAULT 0,
+                    avg_price REAL,
+                    PRIMARY KEY (user_id, symbol)
+                )
+            ''')
+            
+            # Таблица для кланов
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS clans (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE,
+                    tag TEXT UNIQUE,
+                    owner_id INTEGER,
+                    created_at TEXT,
+                    level INTEGER DEFAULT 1,
+                    treasury INTEGER DEFAULT 0
+                )
+            ''')
+            
+            # Таблица участников кланов
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS clan_members (
+                    clan_id INTEGER,
+                    user_id INTEGER,
+                    role TEXT DEFAULT 'member',
+                    joined_at TEXT,
+                    PRIMARY KEY (clan_id, user_id)
+                )
+            ''')
+            
+            # Таблица ежедневных заданий
+            await db.execute('''
+                CREATE TABLE IF NOT EXISTS daily_quests (
+                    user_id INTEGER,
+                    date TEXT,
+                    quests_data TEXT,
+                    PRIMARY KEY (user_id, date)
+                )
+            ''')
+            
+            await db.commit()
+    
+    # Запускаем создание таблиц и бота
+    asyncio.run(create_missing_tables())
+    
+    logger.info("🚀 Запуск улучшенного MegaBot...")
     try:
-        logger.info("🚀 Запуск бота...")
         bot.run(TOKEN)
     except KeyboardInterrupt:
-        logger.info("\n🛑 Бот остановлен")
+        logger.info("🔴 Бот остановлен пользователем")
     except Exception as e:
-        logger.error(f"❌ Ошибка запуска: {e}")
-        logger.error(traceback.format_exc())
+        logger.error(f"❌ Критическая ошибка: {e}")

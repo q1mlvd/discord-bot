@@ -11,12 +11,9 @@ from dotenv import load_dotenv
 # 🔧 АДМИНЫ (твои ID)
 ADMIN_IDS = [1195144951546265675, 766767256742526996, 1138140772097597472]
 
-# 🎵 ДЛЯ МУЗЫКИ
-import yt_dlp
-import asyncio
-
-# Словарь для хранения варнов пользователей
+# 🛡️ ДЛЯ МОДЕРАЦИИ
 user_warns = {}
+mute_data = {}  # Храним данные о мутах
 
 def is_admin():
     """Проверка прав администратора"""
@@ -53,7 +50,6 @@ class Database:
     
     async def init_db(self):
         async with aiosqlite.connect(self.db_path) as db:
-            # Таблица пользователей
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY,
@@ -64,8 +60,6 @@ class Database:
                     work_cooldown TEXT
                 )
             ''')
-            
-            # Таблица инвентаря
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS inventory (
                     user_id INTEGER,
@@ -74,8 +68,6 @@ class Database:
                     PRIMARY KEY (user_id, item_id)
                 )
             ''')
-            
-            # Таблица заказов
             await db.execute('DROP TABLE IF EXISTS orders')
             await db.execute('''
                 CREATE TABLE orders (
@@ -93,7 +85,6 @@ class Database:
                     payment_screenshot TEXT
                 )
             ''')
-            
             await db.commit()
             print("✅ База данных инициализирована")
 
@@ -121,59 +112,42 @@ class EconomySystem:
             return await self.get_balance(user_id)
     
     async def get_user_data(self, user_id: int):
-        """Получить все данные пользователя"""
         async with aiosqlite.connect(self.db.db_path) as db:
             async with db.execute('SELECT balance, level, xp, daily_claimed, work_cooldown FROM users WHERE user_id = ?', (user_id,)) as cursor:
                 result = await cursor.fetchone()
                 if result:
                     return {
-                        "balance": result[0],
-                        "level": result[1],
-                        "xp": result[2],
-                        "daily_claimed": result[3],
-                        "work_cooldown": result[4]
+                        "balance": result[0], "level": result[1], "xp": result[2],
+                        "daily_claimed": result[3], "work_cooldown": result[4]
                     }
                 else:
                     await db.execute('INSERT INTO users (user_id) VALUES (?)', (user_id,))
                     await db.commit()
-                    return {
-                        "balance": 1000,
-                        "level": 1,
-                        "xp": 0,
-                        "daily_claimed": None,
-                        "work_cooldown": None
-                    }
+                    return {"balance": 1000, "level": 1, "xp": 0, "daily_claimed": None, "work_cooldown": None}
     
     async def add_xp(self, user_id: int, xp_gain: int):
-        """Добавить опыт пользователю"""
         async with aiosqlite.connect(self.db.db_path) as db:
             await db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
             await db.execute('UPDATE users SET xp = xp + ? WHERE user_id = ?', (xp_gain, user_id))
-            
             async with db.execute('SELECT xp, level FROM users WHERE user_id = ?', (user_id,)) as cursor:
                 user_data = await cursor.fetchone()
                 if user_data:
                     xp, level = user_data
                     xp_needed = level * 100
-                    
                     if xp >= xp_needed:
                         await db.execute('UPDATE users SET level = level + 1, xp = xp - ? WHERE user_id = ?', (xp_needed, user_id))
                         level_up = True
                     else:
                         level_up = False
-            
             await db.commit()
             return level_up
 
     async def reset_weekly_xp(self):
-        """Сброс опыта всех пользователей каждую неделю"""
         async with aiosqlite.connect(self.db.db_path) as db:
             await db.execute('UPDATE users SET xp = 0 WHERE xp > 0')
             await db.commit()
     
-    # 🔧 АДМИН МЕТОДЫ
     async def admin_add_money(self, user_id: int, amount: int):
-        """Админская выдача денег"""
         async with aiosqlite.connect(self.db.db_path) as db:
             await db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
             await db.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
@@ -181,7 +155,6 @@ class EconomySystem:
             return await self.get_balance(user_id)
     
     async def admin_set_money(self, user_id: int, amount: int):
-        """Админская установка баланса"""
         async with aiosqlite.connect(self.db.db_path) as db:
             await db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
             await db.execute('UPDATE users SET balance = ? WHERE user_id = ?', (amount, user_id))
@@ -189,7 +162,6 @@ class EconomySystem:
             return await self.get_balance(user_id)
     
     async def admin_reset_cooldowns(self, user_id: int):
-        """Сброс кулдаунов"""
         async with aiosqlite.connect(self.db.db_path) as db:
             await db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
             await db.execute('UPDATE users SET daily_claimed = NULL, work_cooldown = NULL WHERE user_id = ?', (user_id,))
@@ -240,8 +212,6 @@ class ShopSystem:
         self.payment_details = "**💳 Реквизиты для оплаты:**\nКарта: `2200 0000 0000 0000`\nТинькофф\nПолучатель: Иван Иванов"
     
     async def create_order(self, user_id: int, item_id: int, quantity: int = 1, details: str = ""):
-        """Создание заказа с тикетом"""
-        # Находим товар
         product = None
         category_name = ""
         for cat_name, category in self.categories.items():
@@ -253,33 +223,23 @@ class ShopSystem:
         if not product:
             return {"success": False, "error": "Товар не найден"}
         
-        # Расчет цены
         if product.get("per_unit"):
             total_price = product["price"] * quantity
         else:
             total_price = product["price"]
             quantity = 1
         
-        # Создаем заказ в БД
         async with aiosqlite.connect(self.db.db_path) as db:
             cursor = await db.execute('''
                 INSERT INTO orders (user_id, category, product_name, quantity, price, details, order_time)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', (user_id, category_name, product["name"], quantity, total_price, details, datetime.now().isoformat()))
-            
             order_id = cursor.lastrowid
             await db.commit()
         
-        return {
-            "success": True, 
-            "order_id": order_id,
-            "product": product,
-            "total_price": total_price,
-            "quantity": quantity
-        }
+        return {"success": True, "order_id": order_id, "product": product, "total_price": total_price, "quantity": quantity}
     
     async def get_user_orders(self, user_id: int):
-        """Получить заказы пользователя"""
         async with aiosqlite.connect(self.db.db_path) as db:
             async with db.execute('''
                 SELECT id, product_name, quantity, price, status, order_time 
@@ -288,7 +248,6 @@ class ShopSystem:
                 return await cursor.fetchall()
     
     async def update_order_status(self, order_id: int, status: str, admin_id: int = None, screenshot: str = None):
-        """Обновить статус заказа"""
         async with aiosqlite.connect(self.db.db_path) as db:
             if status == "выполнен":
                 await db.execute('''
@@ -301,7 +260,6 @@ class ShopSystem:
             await db.commit()
     
     def get_product_by_id(self, item_id: int):
-        """Найти товар по ID"""
         for category in self.categories.values():
             if item_id in category["items"]:
                 return category["items"][item_id]
@@ -349,7 +307,6 @@ class CasinoSystem:
 class ModerationSystem:
     async def create_ticket(self, user: discord.Member, reason: str):
         guild = user.guild
-        
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
@@ -374,7 +331,7 @@ class ModerationSystem:
         await channel.send(embed=embed)
         return channel
 
-# 🎵 МУЗЫКА
+# 🎵 МУЗЫКА - УПРОЩЕННАЯ
 class MusicPlayer:
     def __init__(self):
         self.queues = {}
@@ -386,7 +343,6 @@ class MusicPlayer:
         return self.queues[guild_id]
     
     async def connect_to_voice_channel(self, interaction: discord.Interaction):
-        """Подключение к голосовому каналу"""
         if not interaction.user.voice:
             await interaction.response.send_message("❌ Вы не в голосовом канале! Зайдите в голосовой канал.", ephemeral=True)
             return None
@@ -408,12 +364,10 @@ class MusicPlayer:
             return None
 
     async def play_music(self, interaction: discord.Interaction, query: str):
-        """Упрощенное воспроизведение музыки"""
         voice_client = await self.connect_to_voice_channel(interaction)
         if not voice_client:
             return
         
-        # Добавляем в очередь (без реального воспроизведения)
         queue = self.get_queue(interaction.guild.id)
         queue.append({
             'title': query,
@@ -427,7 +381,6 @@ class MusicPlayer:
         await interaction.response.send_message(embed=embed)
 
     async def stop_music(self, guild_id: int):
-        """Остановка музыки"""
         if guild_id in self.voice_clients:
             voice_client = self.voice_clients[guild_id]
             if voice_client.is_playing():
@@ -464,7 +417,6 @@ class MegaBot(commands.Bot):
     
     async def setup_hook(self):
         await self.db.init_db()
-        
         try:
             synced = await self.tree.sync()
             print(f"✅ Синхронизировано {len(synced)} команд")
@@ -483,6 +435,79 @@ class MegaBot(commands.Bot):
             print("✅ Еженедельный сброс опыта выполнен")
 
 bot = MegaBot()
+
+# 🔧 ФУНКЦИИ ПРОВЕРОК МУТОВ И БАНОВ
+def parse_time(time_str: str) -> int:
+    """Парсинг времени из строки (1с, 1м, 1ч, 1д, 1н)"""
+    time_units = {
+        'с': 1, 'сек': 1, 'секунд': 1,
+        'м': 60, 'мин': 60, 'минут': 60, 
+        'ч': 3600, 'час': 3600, 'часов': 3600,
+        'д': 86400, 'день': 86400, 'дней': 86400,
+        'н': 604800, 'неделя': 604800, 'недель': 604800
+    }
+    
+    time_str = time_str.lower().replace(' ', '')
+    num_str = ''
+    unit_str = ''
+    
+    for char in time_str:
+        if char.isdigit():
+            num_str += char
+        else:
+            unit_str += char
+    
+    if not num_str:
+        return 0
+    
+    number = int(num_str)
+    unit = unit_str.lower()
+    
+    if unit in time_units:
+        return number * time_units[unit]
+    else:
+        return 0
+
+async def check_user_muted(interaction: discord.Interaction, пользователь: discord.Member) -> bool:
+    """Проверка, замучен ли пользователь"""
+    mute_role = discord.utils.get(interaction.guild.roles, name="Muted")
+    if mute_role and mute_role in пользователь.roles:
+        if пользователь.id in mute_data:
+            mute_info = mute_data[пользователь.id]
+            remaining_time = mute_info['end_time'] - datetime.now()
+            if remaining_time.total_seconds() > 0:
+                hours = int(remaining_time.total_seconds() // 3600)
+                minutes = int((remaining_time.total_seconds() % 3600) // 60)
+                
+                embed = Design.create_embed("⚠️ Пользователь уже в муте", 
+                                          f"**Пользователь:** {пользователь.mention}\n"
+                                          f"**Осталось времени:** {hours}ч {minutes}м\n"
+                                          f"**Причина:** {mute_info['reason']}\n"
+                                          f"**Замутил:** {mute_info['moderator']}", "warning")
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return True
+            else:
+                await пользователь.remove_roles(mute_role)
+                del mute_data[пользователь.id]
+        else:
+            embed = Design.create_embed("⚠️ Пользователь уже в муте", 
+                                      f"**Пользователь:** {пользователь.mention}\n"
+                                      f"**Статус:** В муте (время не указано)", "warning")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return True
+    return False
+
+async def check_user_banned(interaction: discord.Interaction, пользователь: discord.Member) -> bool:
+    """Проверка, забанен ли пользователь"""
+    try:
+        ban_entry = await interaction.guild.fetch_ban(пользователь)
+        embed = Design.create_embed("⚠️ Пользователь забанен", 
+                                  f"**Пользователь:** {пользователь.mention}\n"
+                                  f"**Причина:** {ban_entry.reason or 'Не указана'}", "danger")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return True
+    except discord.NotFound:
+        return False
 
 # 💰 ЭКОНОМИКА КОМАНДЫ
 @bot.tree.command(name="баланс", description="Проверить баланс")
@@ -604,12 +629,8 @@ async def магазин(interaction: discord.Interaction):
 @bot.tree.command(name="категория", description="📦 Показать товары категории")
 async def категория(interaction: discord.Interaction, название: str):
     category_map = {
-        "tds": "🎮 TDS/TDX",
-        "tdx": "🎮 TDS/TDX", 
-        "roblox": "🔴 Roblox",
-        "blox": "🥊 Blox Fruits",
-        "blox fruits": "🥊 Blox Fruits",
-        "discord": "⚡ Discord"
+        "tds": "🎮 TDS/TDX", "tdx": "🎮 TDS/TDX", "roblox": "🔴 Roblox",
+        "blox": "🥊 Blox Fruits", "blox fruits": "🥊 Blox Fruits", "discord": "⚡ Discord"
     }
     
     if название.lower() in category_map:
@@ -617,10 +638,7 @@ async def категория(interaction: discord.Interaction, название:
     
     if название not in bot.shop.categories:
         available_categories = "\n".join([f"• `{cat}`" for cat in bot.shop.categories.keys()])
-        await interaction.response.send_message(
-            f"❌ Категория не найдена!\n\n**Доступные категории:**\n{available_categories}", 
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"❌ Категория не найдена!\n\n**Доступные категории:**\n{available_categories}", ephemeral=True)
         return
     
     category = bot.shop.categories[название]
@@ -720,11 +738,8 @@ async def мои_заказы(interaction: discord.Interaction):
         order_id, product_name, quantity, price, status, order_time = order
         
         status_emoji = {
-            "ожидает оплаты": "⏳",
-            "оплачен": "✅", 
-            "в процессе": "🔄",
-            "выполнен": "🎉",
-            "отменен": "❌"
+            "ожидает оплаты": "⏳", "оплачен": "✅", "в процессе": "🔄",
+            "выполнен": "🎉", "отменен": "❌"
         }.get(status, "❓")
         
         order_date = datetime.fromisoformat(order_time).strftime("%d.%m.%Y %H:%M")
@@ -822,54 +837,28 @@ async def топ(interaction: discord.Interaction, тип: str = "уровень
     
     await interaction.response.send_message(embed=embed)
 
-# 🛡️ МОДЕРАЦИЯ КОМАНДЫ - ИСПРАВЛЕННЫЕ
-def parse_time(time_str: str) -> int:
-    """Парсинг времени из строки (1с, 1м, 1ч, 1д, 1н)"""
-    time_units = {
-        'с': 1, 'сек': 1, 'секунд': 1,
-        'м': 60, 'мин': 60, 'минут': 60, 
-        'ч': 3600, 'час': 3600, 'часов': 3600,
-        'д': 86400, 'день': 86400, 'дней': 86400,
-        'н': 604800, 'неделя': 604800, 'недель': 604800
-    }
-    
-    # Убираем пробелы и приводим к нижнему регистру
-    time_str = time_str.lower().replace(' ', '')
-    
-    # Ищем число и единицу измерения
-    num_str = ''
-    unit_str = ''
-    
-    for char in time_str:
-        if char.isdigit():
-            num_str += char
-        else:
-            unit_str += char
-    
-    if not num_str:
-        return 0
-    
-    number = int(num_str)
-    unit = unit_str.lower()
-    
-    if unit in time_units:
-        return number * time_units[unit]
-    else:
-        return 0
-
+# 🛡️ МОДЕРАЦИЯ КОМАНДЫ - С ПРОВЕРКАМИ!
 @bot.tree.command(name="варн", description="Выдать варн пользователю (3 варна = мут на 1 час)")
 @commands.has_permissions(manage_messages=True)
 async def варн(interaction: discord.Interaction, пользователь: discord.Member, причина: str = "Не указана"):
-    # Инициализируем счетчик варнов для пользователя
-    if пользователь.id not in user_warns:
-        user_warns[пользователь.id] = 0
-    
-    user_warns[пользователь.id] += 1
-    current_warns = user_warns[пользователь.id]
-    
-    if current_warns >= 3:
-        # 3 варна = мут на 1 час
-        try:
+    try:
+        # Проверяем бан
+        if await check_user_banned(interaction, пользователь):
+            return
+        
+        # Проверяем мут
+        if await check_user_muted(interaction, пользователь):
+            return
+        
+        # Инициализируем счетчик варнов
+        if пользователь.id not in user_warns:
+            user_warns[пользователь.id] = 0
+        
+        user_warns[пользователь.id] += 1
+        current_warns = user_warns[пользователь.id]
+        
+        if current_warns >= 3:
+            # 3 варна = мут на 1 час
             mute_role = discord.utils.get(interaction.guild.roles, name="Muted")
             if not mute_role:
                 mute_role = await interaction.guild.create_role(name="Muted")
@@ -878,6 +867,14 @@ async def варн(interaction: discord.Interaction, пользователь: d
                     await channel.set_permissions(mute_role, send_messages=False, speak=False)
             
             await пользователь.add_roles(mute_role)
+            
+            # Сохраняем данные о муте
+            mute_data[пользователь.id] = {
+                'end_time': datetime.now() + timedelta(hours=1),
+                'reason': "Получено 3 предупреждения",
+                'moderator': interaction.user.display_name,
+                'guild_id': interaction.guild.id
+            }
             
             # Сбрасываем варны
             user_warns[пользователь.id] = 0
@@ -891,25 +888,35 @@ async def варн(interaction: discord.Interaction, пользователь: d
             
             # Автоматическое снятие мута через 1 час
             await asyncio.sleep(3600)
-            if mute_role in пользователь.roles:
+            if mute_role in пользователь.roles and пользователь.id in mute_data:
                 await пользователь.remove_roles(mute_role)
+                del mute_data[пользователь.id]
                 embed = Design.create_embed("✅ Мут снят", f"Мут с пользователя {пользователь.mention} снят", "success")
                 await interaction.channel.send(embed=embed)
             
-        except Exception as e:
-            await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-    else:
-        embed = Design.create_embed("⚠️ Варн", 
-                                  f"**Пользователь:** {пользователь.mention}\n"
-                                  f"**Причина:** {причина}\n"
-                                  f"**Текущее количество варнов:** {current_warns}/3\n"
-                                  f"**Следующий варн:** мут на 1 час", "warning")
-        await interaction.response.send_message(embed=embed)
+        else:
+            embed = Design.create_embed("⚠️ Варн", 
+                                      f"**Пользователь:** {пользователь.mention}\n"
+                                      f"**Причина:** {причина}\n"
+                                      f"**Текущее количество варнов:** {current_warns}/3\n"
+                                      f"**Следующий варн:** мут на 1 час", "warning")
+            await interaction.response.send_message(embed=embed)
+            
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
 
 @bot.tree.command(name="мут", description="Замутить пользователя (с, м, ч, д, н)")
 @commands.has_permissions(manage_roles=True)
 async def мут(interaction: discord.Interaction, пользователь: discord.Member, время: str, причина: str = "Не указана"):
     try:
+        # Проверяем бан
+        if await check_user_banned(interaction, пользователь):
+            return
+        
+        # Проверяем мут
+        if await check_user_muted(interaction, пользователь):
+            return
+        
         # Парсим время
         seconds = parse_time(время)
         
@@ -917,7 +924,7 @@ async def мут(interaction: discord.Interaction, пользователь: dis
             await interaction.response.send_message("❌ Неверный формат времени! Используйте: 1с, 5м, 1ч, 2д, 1н", ephemeral=True)
             return
         
-        if seconds > 604800:  # Максимум 1 неделя
+        if seconds > 604800:
             await interaction.response.send_message("❌ Максимальное время мута - 1 неделя", ephemeral=True)
             return
         
@@ -929,6 +936,14 @@ async def мут(interaction: discord.Interaction, пользователь: dis
                 await channel.set_permissions(mute_role, send_messages=False, speak=False)
         
         await пользователь.add_roles(mute_role)
+        
+        # Сохраняем данные о муте
+        mute_data[пользователь.id] = {
+            'end_time': datetime.now() + timedelta(seconds=seconds),
+            'reason': причина,
+            'moderator': interaction.user.display_name,
+            'guild_id': interaction.guild.id
+        }
         
         # Форматируем время для вывода
         time_display = ""
@@ -946,13 +961,17 @@ async def мут(interaction: discord.Interaction, пользователь: dis
         embed = Design.create_embed("✅ Мут", 
                                   f"**Пользователь:** {пользователь.mention}\n"
                                   f"**Длительность:** {time_display}\n"
-                                  f"**Причина:** {причина}", "success")
+                                  f"**Причина:** {причина}\n"
+                                  f"**Замутил:** {interaction.user.mention}", "success")
         await interaction.response.send_message(embed=embed)
         
         # Автоматическое снятие мута
         await asyncio.sleep(seconds)
-        if mute_role in пользователь.roles:
+        if mute_role in пользователь.roles and пользователь.id in mute_data:
             await пользователь.remove_roles(mute_role)
+            del mute_data[пользователь.id]
+            embed = Design.create_embed("✅ Мут снят", f"Мут с пользователя {пользователь.mention} снят", "success")
+            await interaction.channel.send(embed=embed)
         
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
@@ -961,8 +980,12 @@ async def мут(interaction: discord.Interaction, пользователь: dis
 @commands.has_permissions(ban_members=True)
 async def бан(interaction: discord.Interaction, пользователь: discord.Member, причина: str = "Не указана"):
     try:
+        # Проверяем бан
+        if await check_user_banned(interaction, пользователь):
+            return
+        
         await пользователь.ban(reason=причина)
-        embed = Design.create_embed("✅ Бан", f"Пользователь {пользователь.mention} забанен", "success")
+        embed = Design.create_embed("✅ Бан", f"Пользователь {пользователь.mention} забанен\n**Причина:** {причина}", "success")
         await interaction.response.send_message(embed=embed)
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
@@ -972,7 +995,7 @@ async def бан(interaction: discord.Interaction, пользователь: dis
 async def кик(interaction: discord.Interaction, пользователь: discord.Member, причина: str = "Не указана"):
     try:
         await пользователь.kick(reason=причина)
-        embed = Design.create_embed("✅ Кик", f"Пользователь {пользователь.mention} кикнут", "success")
+        embed = Design.create_embed("✅ Кик", f"Пользователь {пользователь.mention} кикнут\n**Причина:** {причина}", "success")
         await interaction.response.send_message(embed=embed)
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
@@ -1000,7 +1023,7 @@ async def тикет(interaction: discord.Interaction, причина: str):
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
 
-# 🎵 МУЗЫКА КОМАНДЫ - УПРОЩЕННЫЕ
+# 🎵 МУЗЫКА КОМАНДЫ
 @bot.tree.command(name="play", description="Добавить трек в очередь (YouTube ссылка или название)")
 async def play(interaction: discord.Interaction, запрос: str):
     await bot.music.play_music(interaction, запрос)
@@ -1208,18 +1231,12 @@ async def on_ready():
     print(f'✅ Бот {bot.user} запущен!')
     print(f'🌐 Серверов: {len(bot.guilds)}')
     
-    # ПРИНУДИТЕЛЬНАЯ СИНХРОНИЗАЦИЯ КОМАНД
     try:
         synced = await bot.tree.sync()
         print(f'✅ Синхронизировано {len(synced)} команд')
-        
-        # Выводим список всех команд для проверки
-        commands_list = [cmd.name for cmd in bot.tree.get_commands()]
-        print(f'📋 Доступные команды: {commands_list}')
     except Exception as e:
         print(f'❌ Ошибка синхронизации: {e}')
     
-    # Запускаем фоновые задачи
     bot.loop.create_task(bot.weekly_reset_task())
 
 @bot.event
@@ -1253,4 +1270,3 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
-

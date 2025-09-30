@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime, timedelta
 import os
 import random
-from typing import Optionalа
+from typing import Optional
 from dotenv import load_dotenv
 import yt_dlp
 import os
@@ -1064,8 +1064,25 @@ async def передать(interaction: discord.Interaction, пользоват�
                               f"**Получено:** {net_amount} монет", "success")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="ограбить", description="Ограбить пользователя")
+# 🔧 ДОБАВЬ ГЛОБАЛЬНУЮ ПЕРЕМЕННУЮ ДЛЯ КУЛДАУНОВ
+rob_cooldowns = {}
+
+@bot.tree.command(name="ограбить", description="Ограбить пользователя (КД: 30 минут)")
 async def ограбить(interaction: discord.Interaction, жертва: discord.Member):
+    # Проверка кулдауна
+    user_id = interaction.user.id
+    current_time = datetime.now()
+    
+    if user_id in rob_cooldowns:
+        time_passed = current_time - rob_cooldowns[user_id]
+        if time_passed.total_seconds() < 1800:  # 30 минут в секундах
+            minutes_left = 30 - int(time_passed.total_seconds() // 60)
+            embed = Design.create_embed("⏳ Кулдаун", 
+                                      f"Подожди еще {minutes_left} минут перед следующим ограблением!", 
+                                      "warning")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+    
     if жертва.id == interaction.user.id:
         await interaction.response.send_message("❌ Нельзя ограбить самого себя!", ephemeral=True)
         return
@@ -1078,20 +1095,36 @@ async def ограбить(interaction: discord.Interaction, жертва: disco
     # Страхование
     insurance_active = user_insurance.get(interaction.user.id, False)
     
-    if random.random() < 0.4:
+    if random.random() < 0.4:  # 40% шанс успеха
         stolen = random.randint(100, min(500, victim_balance))
         await bot.economy.update_balance(жертва.id, -stolen)
         await bot.economy.update_balance(interaction.user.id, stolen)
-        embed = Design.create_embed("💰 Ограбление успешно!", f"**Украдено:** {stolen} монет", "warning")
+        
+        # Обновляем кулдаун при успехе
+        rob_cooldowns[user_id] = current_time
+        
+        embed = Design.create_embed("💰 Ограбление успешно!", 
+                                  f"**Украдено:** {stolen} монет\n"
+                                  f"**Следующее ограбление через:** 30 минут", 
+                                  "warning")
     else:
         fine = random.randint(50, 200)
         if insurance_active:
             fine = fine // 2  # Страхование возвращает 50%
-            embed = Design.create_embed("🚓 Пойманы! (Со страховкой)", f"**Штраф:** {fine} монет (50% возвращено)", "warning")
+            embed = Design.create_embed("🚓 Пойманы! (Со страховкой)", 
+                                      f"**Штраф:** {fine} монет (50% возвращено)\n"
+                                      f"**Следующее ограбление через:** 30 минут", 
+                                      "warning")
         else:
-            embed = Design.create_embed("🚓 Пойманы!", f"**Штраф:** {fine} монет", "danger")
+            embed = Design.create_embed("🚓 Пойманы!", 
+                                      f"**Штраф:** {fine} монет\n"
+                                      f"**Следующее ограбление через:** 30 минут", 
+                                      "danger")
         
         await bot.economy.update_balance(interaction.user.id, -fine)
+        
+        # Обновляем кулдаун при провале
+        rob_cooldowns[user_id] = current_time
     
     await interaction.response.send_message(embed=embed)
 
@@ -2116,5 +2149,6 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+
 
 

@@ -3,3 +3,4 @@ aiosqlite
 python-dotenv
 yt-dlp
 aiohttp
+PyNaCl==1.5.0

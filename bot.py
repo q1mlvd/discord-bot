@@ -11,8 +11,7 @@ from typing import Optional, Dict, List
 from dotenv import load_dotenv
 import yt_dlp
 import aiohttp
-import backup
-import backup_creator
+import shutil
 
 # Настройка логирования
 logging.basicConfig(
@@ -1497,3 +1496,4 @@ if __name__ == "__main__":
         logging.info("\n🛑 Бот остановлен")
     except Exception as e:
         logging.error(f"❌ Ошибка запуска: {e}")
+

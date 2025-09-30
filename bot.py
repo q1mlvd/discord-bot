@@ -1689,7 +1689,7 @@ async def модер(interaction: discord.Interaction):
 @bot.tree.command(name="модер", description="🛡️ Панель модератора")
 @is_moderator()
 async def модер(interaction: discord.Interaction):
-    embed = Design.create_embed("🛡️ ПАНЕЛЬ МОДЕРАТОРА", 
+    description = (
         "**⚡ КОМАНДЫ МОДЕРАЦИИ:**\n\n"
         "🔨 **Наказания:**\n"
         "`/мут @user время причина` - Замутить\n"
@@ -1706,9 +1706,10 @@ async def модер(interaction: discord.Interaction):
         "`/тикет причина` - Создать тикет\n\n"
         "👤 **Информация:**\n"
         "`/юзер @user` - Информация\n"
-        "`/сервер` - Информация о сервере",
-        "moderation"
+        "`/сервер` - Информация о сервере"
     )
+    
+    embed = Design.create_embed("🛡️ ПАНЕЛЬ МОДЕРАТОРА", description, "moderation")
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -1801,4 +1802,5 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+
 

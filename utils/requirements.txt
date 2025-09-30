@@ -1,2 +1,21 @@
-discord.py==2.3.0
-python-dotenv==1.0.0
+import discord
+from discord.ext import commands
+
+ADMIN_IDS = [1195144951546265675, 766767256742526996, 1078693283695448064, 1138140772097597472, 691904643181314078]
+MODERATION_ROLES = [1167093102868172911, 1360243534946373672, 993043931342319636, 1338611327022923910, 1338609155203661915, 1365798715930968244, 1188261847850299514]
+
+def is_admin():
+    async def predicate(interaction: discord.Interaction):
+        return interaction.user.id in ADMIN_IDS
+    return commands.check(predicate)
+
+def is_moderator():
+    async def predicate(interaction: discord.Interaction):
+        user_roles = [role.id for role in interaction.user.roles]
+        return any(role_id in MODERATION_ROLES for role_id in user_roles)
+    return commands.check(predicate)
+
+def is_user():
+    async def predicate(interaction: discord.Interaction):
+        return True  # Все зарегистрированные пользователи
+    return commands.check(predicate)

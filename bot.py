@@ -8,6 +8,19 @@ import random
 from typing import Optional
 from dotenv import load_dotenv
 import yt_dlp
+import os
+import asyncio
+
+async def reset_db():
+    if os.path.exists("data/bot.db"):
+        os.remove("data/bot.db")
+        print("✅ База данных удалена!")
+        
+        # Пересоздаем БД
+        from your_bot_file import Database  # замени на имя твоего файла
+        db = Database()
+        await db.init_db()
+        print("✅ Новая база данных создана!")
 
 # 🔧 КОНСТАНТЫ
 ADMIN_IDS = [1195144951546265675, 766767256742526996, 1078693283695448064, 1138140772097597472, 691904643181314078]
@@ -282,30 +295,47 @@ class LootboxSystem:
                 "name": "📦 Обычный лутбокс",
                 "price": 500,
                 "rewards": [
-                    {"type": "money", "min": 100, "max": 800, "chance": 100}
+                    {"type": "money", "min": 50, "max": 200, "chance": 100},    # Гарантия (мало)
+                    {"type": "money", "min": 300, "max": 600, "chance": 15},    # Средний выигрыш 15%
+                    {"type": "money", "min": 800, "max": 1200, "chance": 5},    # Крупный выигрыш 5%
+                    {"type": "nothing", "chance": 30},                          # Пустота 30%
+                    {"type": "crypto", "min": 0.001, "max": 0.005, "chance": 8} # Крипта 8%
                 ]
             },
             "rare": {
-                "name": "🎁 Редкий лутбокs", 
+                "name": "🎁 Редкий лутбокс", 
                 "price": 1500,
                 "rewards": [
-                    {"type": "money", "min": 500, "max": 2000, "chance": 85},
-                    {"type": "role", "chance": 15}
+                    {"type": "money", "min": 200, "max": 500, "chance": 100},   # Гарантия (мало)
+                    {"type": "money", "min": 700, "max": 1200, "chance": 20},   # Средний выигрыш 20%
+                    {"type": "money", "min": 2000, "max": 3000, "chance": 8},   # Крупный выигрыш 8%
+                    {"type": "nothing", "chance": 25},                          # Пустота 25%
+                    {"type": "crypto", "min": 0.005, "max": 0.01, "chance": 12},# Крипта 12%
+                    {"type": "money", "min": 4000, "max": 6000, "chance": 3}    # ДЖЕКПОТ 3%
                 ]
             },
             "legendary": {
                 "name": "💎 Легендарный лутбокс",
                 "price": 5000,
                 "rewards": [
-                    {"type": "money", "min": 2000, "max": 10000, "chance": 70},
-                    {"type": "role", "chance": 30}
+                    {"type": "money", "min": 500, "max": 1500, "chance": 100},  # Гарантия (мало)
+                    {"type": "money", "min": 2000, "max": 3500, "chance": 25},  # Средний выигрыш 25%
+                    {"type": "money", "min": 5000, "max": 8000, "chance": 12},  # Крупный выигрыш 12%
+                    {"type": "nothing", "chance": 20},                          # Пустота 20%
+                    {"type": "crypto", "min": 0.01, "max": 0.03, "chance": 15}, # Крипта 15%
+                    {"type": "role", "chance": 8},                              # РОЛЬ 8% (только в легендарном)
+                    {"type": "money", "min": 10000, "max": 15000, "chance": 5}  # ДЖЕКПОТ 5%
                 ]
             },
             "crypto": {
                 "name": "₿ Крипто-бокс",
                 "price": 3000,
                 "rewards": [
-                    {"type": "crypto", "chance": 100}
+                    {"type": "crypto", "min": 0.003, "max": 0.008, "chance": 100}, # Гарантия
+                    {"type": "crypto", "min": 0.01, "max": 0.02, "chance": 25},    # Средняя крипта 25%
+                    {"type": "crypto", "min": 0.03, "max": 0.05, "chance": 10},    # Крупная крипта 10%
+                    {"type": "nothing", "chance": 35},                             # Пустота 35%
+                    {"type": "money", "min": 1000, "max": 2000, "chance": 15}      # Деньги 15%
                 ]
             }
         }
@@ -313,7 +343,7 @@ class LootboxSystem:
     async def open_lootbox(self, user_id: int, lootbox_type: str):
         lootbox = self.lootboxes.get(lootbox_type)
         if not lootbox:
-            return False, "Лутбокс не найден"
+            return False, None
         
         balance = await self.economy.get_balance(user_id)
         if balance < lootbox["price"]:
@@ -328,17 +358,66 @@ class LootboxSystem:
                     amount = random.randint(reward["min"], reward["max"])
                     await self.economy.update_balance(user_id, amount)
                     rewards.append(f"💰 {amount} монет")
-                elif reward["type"] == "role":
-                    rewards.append("🎭 Роль (создан тикет)")
+                
+                elif reward["type"] == "nothing":
+                    rewards.append("💨 Пустота...")
+                
                 elif reward["type"] == "crypto":
                     crypto_type = random.choice(list(crypto_prices.keys()))
-                    amount = random.uniform(0.001, 0.01)
+                    amount = random.uniform(reward["min"], reward["max"])
                     if user_id not in user_crypto:
                         user_crypto[user_id] = {}
                     user_crypto[user_id][crypto_type] = user_crypto[user_id].get(crypto_type, 0) + amount
                     rewards.append(f"₿ {amount:.4f} {crypto_type}")
+                
+                elif reward["type"] == "role":
+                    rewards.append("🎭 РОЛЬ (тикет создан)")
+                    # СОЗДАЕМ ТИКЕТ ДЛЯ РОЛИ
+                    await self.create_role_ticket(user_id, lootbox["name"])
+        
+        # Если ВСЕ награды провалились - добавляем пустоту
+        if not rewards:
+            rewards.append("💔 Не повезло... Попробуй еще раз!")
         
         return True, rewards
+    
+    async def create_role_ticket(self, user_id: int, lootbox_name: str):
+        """Создает тикет для выдачи роли"""
+        try:
+            # Получаем канал для тикетов
+            channel = bot.get_channel(1422557295811887175)  # Твой канал
+            if not channel:
+                print("❌ Канал для тикетов не найден!")
+                return
+            
+            # Получаем пользователя
+            user = await bot.fetch_user(user_id)
+            
+            # Создаем тред
+            thread = await channel.create_thread(
+                name=f"роль-{user.display_name}",
+                type=discord.ChannelType.public_thread,
+                reason=f"Выпала роль из {lootbox_name}"
+            )
+            
+            # Пингуем модераторов
+            ping_text = " ".join([f"<@&{role_id}>" for role_id in MODERATION_ROLES])
+            
+            embed = Design.create_embed(
+                "🎭 ВЫПАЛА РОЛЬ ИЗ ЛУТБОКСА!",
+                f"**Пользователь:** {user.mention}\n"
+                f"**Лутбокс:** {lootbox_name}\n"
+                f"**Выдать роль на 7 дней**\n\n"
+                f"*Пользователь выиграл роль в лутбоксе*",
+                "premium"
+            )
+            
+            await thread.send(f"{ping_text}")
+            await thread.send(embed=embed)
+            print(f"✅ Создан тикет для роли пользователя {user_id}")
+            
+        except Exception as e:
+            print(f"❌ Ошибка создания тикета: {e}")
 
 # 🔧 ИСПРАВЛЕННАЯ СИСТЕМА МАЙНИНГА
 class MiningSystem:
@@ -1722,40 +1801,65 @@ async def лутбоксы(interaction: discord.Interaction):
 
 @bot.tree.command(name="открыть_лутбокс", description="Купить и открыть лутбокс")
 async def открыть_лутбокс(interaction: discord.Interaction, тип: str):
-    success, result = await bot.lootbox_system.open_lootbox(interaction.user.id, тип)
+    # Создаем алиасы для типов лутбоксов
+    lootbox_aliases = {
+        "обычный": "common", "common": "common",
+        "редкий": "rare", "rare": "rare", 
+        "легендарный": "legendary", "legendary": "legendary",
+        "крипто": "crypto", "crypto": "crypto", "крипта": "crypto"
+    }
+    
+    # Преобразуем ввод пользователя
+    lootbox_type = lootbox_aliases.get(тип.lower(), тип.lower())
+    
+    success, result = await bot.lootbox_system.open_lootbox(interaction.user.id, lootbox_type)
     
     if not success:
-        await interaction.response.send_message(f"❌ {result}", ephemeral=True)
+        # Показываем доступные лутбоксы при ошибке
+        available_boxes = "\n".join([
+            f"• **обычный** (common) - 500 монет",
+            f"• **редкий** (rare) - 1500 монет", 
+            f"• **легендарный** (legendary) - 5000 монет",
+            f"• **крипто** (crypto) - 3000 монет"
+        ])
+        
+        embed = Design.create_embed("❌ Лутбокс не найден", 
+                                  f"**Доступные лутбоксы:**\n{available_boxes}\n\n"
+                                  f"**Пример:** `/открыть_лутбокс тип: обычный`", "danger")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
     
-    lootbox = bot.lootbox_system.lootboxes[тип]
+    lootbox = bot.lootbox_system.lootboxes[lootbox_type]
     embed = Design.create_embed(f"🎁 Открыт {lootbox['name']}!", "", "success")
     
-    for reward in result:
-        embed.add_field(name="🎉 Награда", value=reward, inline=False)
-        
-        if "Роль" in reward:
-            try:
-                channel = bot.get_channel(THREADS_CHANNEL_ID)
-                if channel:
-                    thread = await channel.create_thread(
-                        name=f"роль-{interaction.user.display_name}",
-                        type=discord.ChannelType.public_thread
-                    )
-                    
-                    role_embed = Design.create_embed(
-                        "🎭 ВЫПАЛА РОЛЬ ИЗ ЛУТБОКСА!",
-                        f"**Пользователь:** {interaction.user.mention}\n"
-                        f"**Тип лутбокса:** {lootbox['name']}\n"
-                        f"**Обсудите какую роль выдать на 3 дня**",
-                        "premium"
-                    )
-                    
-                    ping_text = " ".join([f"<@&{role_id}>" for role_id in MODERATION_ROLES[:2]])
-                    await thread.send(f"{ping_text}")
-                    await thread.send(embed=role_embed)
-            except Exception as e:
-                print(f"Ошибка создания треда для роли: {e}")
+    if not result:  # Если нет наград
+        embed.add_field(name="💔 Не повезло", value="К сожалению, вы ничего не выиграли", inline=False)
+    else:
+        for reward in result:
+            embed.add_field(name="🎉 Награда", value=reward, inline=False)
+            
+            if "Роль" in reward:
+                try:
+                    channel = bot.get_channel(THREADS_CHANNEL_ID)
+                    if channel:
+                        thread = await channel.create_thread(
+                            name=f"роль-{interaction.user.display_name}",
+                            type=discord.ChannelType.public_thread
+                        )
+                        
+                        role_embed = Design.create_embed(
+                            "🎭 ВЫПАЛА РОЛЬ ИЗ ЛУТБОКСА!",
+                            f"**Пользователь:** {interaction.user.mention}\n"
+                            f"**Тип лутбокса:** {lootbox['name']}\n"
+                            f"**Обсудите какую роль выдать на 3 дня**",
+                            "premium"
+                        )
+                        
+                        ping_text = " ".join([f"<@&{role_id}>" for role_id in MODERATION_ROLES[:2]])
+                        await thread.send(f"{ping_text}")
+                        await thread.send(embed=role_embed)
+                except Exception as e:
+                    print(f"Ошибка создания треда для роли: {e}")
     
     await interaction.response.send_message(embed=embed)
 
@@ -2012,3 +2116,4 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+

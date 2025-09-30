@@ -560,7 +560,7 @@ class AchievementSystem:
 
 # 🎮 СИСТЕМА МИНИ-ИГР
 class MiniGameSystem:
-    def __init__(self, economy: EconomySystem):
+    def __init__(self, economy):
         self.economy = economy
     
     async def start_quiz(self, interaction: discord.Interaction, topic: str):
@@ -1496,4 +1496,5 @@ if __name__ == "__main__":
         logging.info("\n🛑 Бот остановлен")
     except Exception as e:
         logging.error(f"❌ Ошибка запуска: {e}")
+
 

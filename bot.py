@@ -116,6 +116,7 @@ class Database:
                     user_id INTEGER,
                     level INTEGER DEFAULT 1,
                     last_collected TEXT,
+                    created_at TEXT,
                     PRIMARY KEY (user_id)
                 )
             ''')
@@ -285,7 +286,7 @@ class LootboxSystem:
                 ]
             },
             "rare": {
-                "name": "🎁 Редкий лутбокс", 
+                "name": "🎁 Редкий лутбокs", 
                 "price": 1500,
                 "rewards": [
                     {"type": "money", "min": 500, "max": 2000, "chance": 85},
@@ -339,8 +340,7 @@ class LootboxSystem:
         
         return True, rewards
 
-# 🔧 ИСПРАВЛЕННАЯ СИСТЕМА МАЙНИНГА:
-
+# 🔧 ИСПРАВЛЕННАЯ СИСТЕМА МАЙНИНГА
 class MiningSystem:
     def __init__(self, economy: EconomySystem):
         self.economy = economy
@@ -358,13 +358,17 @@ class MiningSystem:
             farm = user_mining_farms[user_id]
             
             # Проверяем когда последний раз собирали
-            if "last_collected" in farm and farm["last_collected"]:
-                last_collect = datetime.fromisoformat(farm["last_collected"])
-                time_passed = datetime.now() - last_collect
-                if time_passed.seconds < 43200:  # 12 часов
-                    hours_left = 12 - (time_passed.seconds // 3600)
-                    minutes_left = (43200 - time_passed.seconds) // 60
-                    return False, f"Доход можно собирать раз в 12 часов! Осталось: {hours_left}ч {minutes_left % 60}м"
+            if farm.get("last_collected"):
+                try:
+                    last_collect = datetime.fromisoformat(farm["last_collected"])
+                    time_passed = datetime.now() - last_collect
+                    if time_passed.total_seconds() < 43200:  # 12 часов
+                        hours_left = 11 - int(time_passed.total_seconds() // 3600)
+                        minutes_left = 59 - int((time_passed.total_seconds() % 3600) // 60)
+                        return False, f"Доход можно собирать раз в 12 часов! Осталось: {hours_left}ч {minutes_left}м"
+                except ValueError as e:
+                    print(f"Ошибка формата времени: {e}")
+                    farm["last_collected"] = None
             
             # Начисляем доход
             income = self.farm_levels[farm["level"]]["income"]
@@ -378,62 +382,6 @@ class MiningSystem:
         except Exception as e:
             print(f"Ошибка при сборе дохода: {e}")
             return False, "❌ Произошла ошибка при сборе дохода"
-
-# 🔧 ИСПРАВЛЕННАЯ КОМАНДА СБОРА ДОХОДА:
-@bot.tree.command(name="собрать_доход", description="Собрать доход с фермы")
-async def собрать_доход(interaction: discord.Interaction):
-    # Отвечаем сразу чтобы бот не "зависал"
-    await interaction.response.defer(ephemeral=True)
-    
-    try:
-        success, message = await bot.mining_system.collect_income(interaction.user.id)
-        
-        if success:
-            embed = Design.create_embed("💰 Доход собран!", message, "success")
-        else:
-            embed = Design.create_embed("❌ Ошибка", message, "danger")
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        
-    except Exception as e:
-        embed = Design.create_embed("❌ Критическая ошибка", 
-                                  "Произошла ошибка при обработке запроса", "danger")
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        print(f"Ошибка в команде собрать_доход: {e}")
-
-# 🔧 ТАКЖЕ ОБНОВИ КОМАНДУ ФЕРМЫ:
-@bot.tree.command(name="ферма", description="Информация о майнинг ферме")
-async def ферма(interaction: discord.Interaction):
-    user_id = interaction.user.id
-    
-    if user_id not in user_mining_farms:
-        embed = Design.create_embed("⛏️ Майнинг ферма", 
-                                  "У вас еще нет фермы!\n"
-                                  "Используйте `/создать_ферму` чтобы начать майнить", "info")
-    else:
-        farm = user_mining_farms[user_id]
-        level_data = bot.mining_system.farm_levels[farm["level"]]
-        
-        # Рассчитываем оставшееся время
-        can_collect = True
-        time_left = "✅ Можно собрать"
-        
-        if "last_collected" in farm and farm["last_collected"]:
-            last_collect = datetime.fromisoformat(farm["last_collected"])
-            time_passed = datetime.now() - last_collect
-            if time_passed.seconds < 43200:
-                can_collect = False
-                hours_left = 11 - (time_passed.seconds // 3600)
-                minutes_left = 59 - ((time_passed.seconds % 3600) // 60)
-                time_left = f"⏳ Через {hours_left}ч {minutes_left}м"
-        
-        embed = Design.create_embed("⛏️ Ваша ферма", 
-                                  f"**Уровень:** {farm['level']}\n"
-                                  f"**Доход:** {level_data['income']} монет/12ч\n"
-                                  f"**Следующий уровень:** {level_data['upgrade_cost']} монет\n"
-                                  f"**Статус:** {time_left}", "info")
-    
-    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # 🎪 СИСТЕМА ИВЕНТОВ
 class EventSystem:
@@ -853,7 +801,7 @@ class MegaBot(commands.Bot):
 
     @tasks.loop(hours=3)
     async def random_events(self):
-        if random.random() < 0.3:
+        if random.random() < 0.3 and not active_events:
             event_type = random.choice(list(self.event_system.event_types.keys()))
             await self.event_system.start_event(event_type)
             
@@ -1023,6 +971,7 @@ async def передать(interaction: discord.Interaction, пользоват�
     # Налог 5%
     tax = сумма * 0.05
     net_amount = сумма - tax
+    global server_tax_pool
     server_tax_pool += tax
     
     await bot.economy.update_balance(interaction.user.id, -сумма)
@@ -1811,28 +1760,36 @@ async def открыть_лутбокс(interaction: discord.Interaction, тип
     await interaction.response.send_message(embed=embed)
 
 # ⛏️ КОМАНДЫ МАЙНИНГА
+@bot.tree.command(name="ферма", description="Информация о майнинг ферме")
+async def ферма(interaction: discord.Interaction):
     user_id = interaction.user.id
     
     if user_id not in user_mining_farms:
         embed = Design.create_embed("⛏️ Майнинг ферма", 
-                                  "У вас еще нет фермы!\n"
-                                  "Используйте `/создать_ферму` чтобы начать майнить", "info")
+                                  "У вас еще нет фермы!\nИспользуйте `/создать_ферму` чтобы начать майнить", "info")
     else:
         farm = user_mining_farms[user_id]
         level_data = bot.mining_system.farm_levels[farm["level"]]
         
         can_collect = True
-        if "last_collected" in farm:
+        time_left = "✅ Можно собрать"
+        
+        if "last_collected" in farm and farm["last_collected"]:
             last_collect = datetime.fromisoformat(farm["last_collected"])
-            can_collect = (datetime.now() - last_collect).seconds >= 43200
+            time_passed = datetime.now() - last_collect
+            if time_passed.total_seconds() < 43200:
+                can_collect = False
+                hours_left = 11 - int(time_passed.total_seconds() // 3600)
+                minutes_left = 59 - int((time_passed.total_seconds() % 3600) // 60)
+                time_left = f"⏳ Через {hours_left}ч {minutes_left}м"
         
         embed = Design.create_embed("⛏️ Ваша ферма", 
                                   f"**Уровень:** {farm['level']}\n"
                                   f"**Доход:** {level_data['income']} монет/12ч\n"
                                   f"**Следующий уровень:** {level_data['upgrade_cost']} монет\n"
-                                  f"**Статус:** {'✅ Можно собрать' if can_collect else '⏳ Еще рано'}", "info")
+                                  f"**Статус:** {time_left}", "info")
     
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="создать_ферму", description="Создать майнинг ферму")
 async def создать_ферму(interaction: discord.Interaction):
@@ -1842,20 +1799,46 @@ async def создать_ферму(interaction: discord.Interaction):
         await interaction.response.send_message("❌ У вас уже есть ферма!", ephemeral=True)
         return
     
-    user_mining_farms[user_id] = {"level": 1, "last_collected": None}
+    # Проверяем баланс для создания фермы
+    creation_cost = 500
+    balance = await bot.economy.get_balance(user_id)
+    
+    if balance < creation_cost:
+        await interaction.response.send_message(f"❌ Недостаточно средств! Нужно {creation_cost} монет для создания фермы", ephemeral=True)
+        return
+    
+    await bot.economy.update_balance(user_id, -creation_cost)
+    user_mining_farms[user_id] = {
+        "level": 1, 
+        "last_collected": None,
+        "created_at": datetime.now().isoformat()
+    }
+    
     embed = Design.create_embed("✅ Ферма создана!", 
-                              "Ваша майнинг ферма уровня 1 готова к работе!\n"
-                              "Используйте `/собрать_доход` каждые 12 часов", "success")
+                              f"Ваша майнинг ферма уровня 1 готова к работе!\n"
+                              f"Стоимость создания: {creation_cost} монет\n"
+                              f"Используйте `/собрать_доход` каждые 12 часов", "success")
     await interaction.response.send_message(embed=embed)
 
-    success, message = await bot.mining_system.collect_income(interaction.user.id)
+@bot.tree.command(name="собрать_доход", description="Собрать доход с фермы")
+async def собрать_доход(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     
-    if success:
-        embed = Design.create_embed("💰 Доход собран!", message, "success")
-    else:
-        embed = Design.create_embed("❌ Ошибка", message, "danger")
-    
-    await interaction.response.send_message(embed=embed)
+    try:
+        success, message = await bot.mining_system.collect_income(interaction.user.id)
+        
+        if success:
+            embed = Design.create_embed("💰 Доход собран!", message, "success")
+        else:
+            embed = Design.create_embed("❌ Ошибка", message, "danger")
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        embed = Design.create_embed("❌ Критическая ошибка", 
+                                  "Произошла ошибка при обработке запроса", "danger")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        print(f"Ошибка в команде собрать_доход: {e}")
 
 @bot.tree.command(name="улучшить_ферму", description="Улучшить майнинг ферму")
 async def улучшить_ферму(interaction: discord.Interaction):
@@ -1948,87 +1931,6 @@ async def ивенты(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
-@bot.event
-async def on_ready():
-    print(f'✅ Бот {bot.user} запущен!')
-    print(f'🌐 Серверов: {len(bot.guilds)}')
-    
-    try:
-        synced = await bot.tree.sync()
-        print(f'✅ Синхронизировано {len(synced)} команд')
-    except Exception as e:
-        print(f'❌ Ошибка синхронизации: {e}')
-    
-    bot.loop.create_task(bot.weekly_reset_task())
-
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
-    
-    if isinstance(message.channel, discord.TextChannel):
-        async with aiosqlite.connect(bot.db.db_path) as db:
-            await db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (message.author.id,))
-            await db.commit()
-        
-        xp_gain = random.randint(5, 15)
-        await bot.economy.add_xp(message.author.id, xp_gain)
-    
-    await bot.process_commands(message)
-
-# 🆕 ДОБАВЬ НОВЫЕ КОМАНДЫ СЮДА:
-
-@bot.tree.command(name="ферма", description="Информация о майнинг ферме")
-async def ферма(interaction: discord.Interaction):
-    user_id = interaction.user.id
-    
-    if user_id not in user_mining_farms:
-        embed = Design.create_embed("⛏️ Майнинг ферма", 
-                                  "У вас еще нет фермы!\nИспользуйте `/создать_ферму` чтобы начать майнить", "info")
-    else:
-        farm = user_mining_farms[user_id]
-        level_data = bot.mining_system.farm_levels[farm["level"]]
-        
-        can_collect = True
-        time_left = "✅ Можно собрать"
-        
-        if "last_collected" in farm and farm["last_collected"]:
-            last_collect = datetime.fromisoformat(farm["last_collected"])
-            time_passed = datetime.now() - last_collect
-            if time_passed.seconds < 43200:
-                can_collect = False
-                hours_left = 11 - (time_passed.seconds // 3600)
-                minutes_left = 59 - ((time_passed.seconds % 3600) // 60)
-                time_left = f"⏳ Через {hours_left}ч {minutes_left}м"
-        
-        embed = Design.create_embed("⛏️ Ваша ферма", 
-                                  f"**Уровень:** {farm['level']}\n"
-                                  f"**Доход:** {level_data['income']} монет/12ч\n"
-                                  f"**Следующий уровень:** {level_data['upgrade_cost']} монет\n"
-                                  f"**Статус:** {time_left}", "info")
-    
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-@bot.tree.command(name="собрать_доход", description="Собрать доход с фермы")
-async def собрать_доход(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    
-    try:
-        success, message = await bot.mining_system.collect_income(interaction.user.id)
-        
-        if success:
-            embed = Design.create_embed("💰 Доход собран!", message, "success")
-        else:
-            embed = Design.create_embed("❌ Ошибка", message, "danger")
-        
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        
-    except Exception as e:
-        embed = Design.create_embed("❌ Критическая ошибка", 
-                                  "Произошла ошибка при обработке запроса", "danger")
-        await interaction.followup.send(embed=embed, ephemeral=True)
-        print(f"Ошибка в команде собрать_доход: {e}")
-
 @bot.tree.command(name="модер", description="🛡️ Панель модератора")
 async def модер(interaction: discord.Interaction):
     is_moderator = any(role.id in MODERATION_ROLES for role in interaction.user.roles)
@@ -2073,6 +1975,34 @@ async def синхронизировать(interaction: discord.Interaction):
     await bot.tree.sync()
     embed = Design.create_embed("✅ Синхронизация", "Команды пересинхронизированы!", "success")
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.event
+async def on_ready():
+    print(f'✅ Бот {bot.user} запущен!')
+    print(f'🌐 Серверов: {len(bot.guilds)}')
+    
+    try:
+        synced = await bot.tree.sync()
+        print(f'✅ Синхронизировано {len(synced)} команд')
+    except Exception as e:
+        print(f'❌ Ошибка синхронизации: {e}')
+    
+    bot.loop.create_task(bot.weekly_reset_task())
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+    
+    if isinstance(message.channel, discord.TextChannel):
+        async with aiosqlite.connect(bot.db.db_path) as db:
+            await db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (message.author.id,))
+            await db.commit()
+        
+        xp_gain = random.randint(5, 15)
+        await bot.economy.add_xp(message.author.id, xp_gain)
+    
+    await bot.process_commands(message)
 
 if __name__ == "__main__":
     try:

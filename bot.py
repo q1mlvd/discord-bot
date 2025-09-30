@@ -5,16 +5,9 @@ import asyncio
 from datetime import datetime, timedelta
 import os
 import random
-from typing import Optional, Dict, List
+from typing import Optional
 from dotenv import load_dotenv
 import yt_dlp
-import matplotlib.pyplot as plt
-import io
-import aiohttp
-from fastapi import FastAPI
-import uvicorn
-import threading
-from enum import Enum
 
 # 🔧 КОНСТАНТЫ
 ADMIN_IDS = [1195144951546265675, 766767256742526996, 1078693283695448064, 1138140772097597472, 691904643181314078]
@@ -22,30 +15,23 @@ MODERATION_ROLES = [1167093102868172911, 1360243534946373672, 993043931342319636
 THREADS_CHANNEL_ID = 1422557295811887175
 EVENTS_CHANNEL_ID = 1418738569081786459
 
-# 🛡️ ДАННЫЕ ДЛЯ СИСТЕМ (переносим в классы)
-class DataStorage:
-    def __init__(self):
-        self.user_warns = {}
-        self.mute_data = {}
-        self.user_credits = {}
-        self.user_investments = {}
-        self.user_insurance = {}
-        self.user_lottery_tickets = {}
-        self.server_tax_pool = 0
-        self.user_mining_farms = {}
-        self.crypto_prices = {"BITCOIN": 50000, "ETHEREUM": 3000, "DOGECOIN": 0.15}
-        self.active_events = {}
-        self.user_reports = {}
-        self.user_crypto = {}
-        self.rob_cooldowns = {}
-        self.economic_bans = {}
-        self.user_reputation = {}
-        self.marketplace_items = {}
-        self.stock_prices = {}
-        self.user_stocks = {}
-        self.seasonal_events = {}
+# 🛡️ ДАННЫЕ ДЛЯ СИСТЕМ
+user_warns = {}
+mute_data = {}
+user_credits = {}
+user_investments = {}
+user_insurance = {}
+user_lottery_tickets = {}
+server_tax_pool = 0
+user_mining_farms = {}
+crypto_prices = {"BITCOIN": 50000, "ETHEREUM": 3000, "DOGECOIN": 0.15}
+active_events = {}
+user_reports = {}
+user_crypto = {}
+rob_cooldowns = {}
 
-storage = DataStorage()
+# 🔧 ГЛОБАЛЬНАЯ ПЕРЕМЕННАЯ ДЛЯ ЭКОНОМИЧЕСКИХ БАНОВ
+economic_bans = {}
 
 # 🔧 ФУНКЦИИ ПРОВЕРКИ ПРАВ
 def is_admin():
@@ -63,8 +49,8 @@ def is_moderator():
 def check_economic_ban():
     async def predicate(interaction: discord.Interaction):
         ban_key = f"economic_ban_{interaction.user.id}"
-        if ban_key in storage.economic_bans:
-            ban_info = storage.economic_bans[ban_key]
+        if ban_key in economic_bans:
+            ban_info = economic_bans[ban_key]
             if datetime.now() < ban_info['end_time']:
                 time_left = ban_info['end_time'] - datetime.now()
                 hours_left = int(time_left.total_seconds() // 3600)
@@ -76,7 +62,7 @@ def check_economic_ban():
                 )
                 return False
             else:
-                del storage.economic_bans[ban_key]
+                del economic_bans[ban_key]
         return True
     return commands.check(predicate)
 
@@ -95,15 +81,14 @@ class Design:
         "moderation": 0xE74C3C, "shop": 0x9B59B6, "casino": 0xE67E22,
         "info": 0x3498DB, "premium": 0xFFD700, "roblox": 0xE74C3C,
         "discord": 0x5865F2, "tds": 0xF1C40F, "crypto": 0x16C60C,
-        "event": 0x9B59B6, "credit": 0xE74C3C, "reputation": 0x9B59B6,
-        "marketplace": 0x2ECC71, "stocks": 0xE67E22, "seasonal": 0xFF69B4
+        "event": 0x9B59B6, "credit": 0xE74C3C
     }
 
     @staticmethod
     def create_embed(title: str, description: str = "", color: str = "primary"):
         return discord.Embed(title=title, description=description, color=Design.COLORS.get(color, Design.COLORS["primary"]))
 
-# 💾 БАЗА ДАННЫХ (расширенная)
+# 💾 БАЗА ДАННЫХ
 class Database:
     def __init__(self):
         self.db_path = "data/bot.db"
@@ -111,7 +96,6 @@ class Database:
     
     async def init_db(self):
         async with aiosqlite.connect(self.db_path) as db:
-            # Существующие таблицы
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY,
@@ -148,7 +132,7 @@ class Database:
                 )
             ''')
             
-            # Существующие таблицы
+            # Новые таблицы
             await db.execute('''
                 CREATE TABLE IF NOT EXISTS user_credits (
                     user_id INTEGER,
@@ -170,427 +154,10 @@ class Database:
                 )
             ''')
             
-            # НОВЫЕ ТАБЛИЦЫ ДЛЯ ДОПОЛНЕНИЙ
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS user_reputation (
-                    user_id INTEGER PRIMARY KEY,
-                    reputation INTEGER DEFAULT 0,
-                    total_xp INTEGER DEFAULT 0,
-                    reputation_level INTEGER DEFAULT 1,
-                    last_reputation_update TEXT
-                )
-            ''')
-            
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS marketplace (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    seller_id INTEGER,
-                    item_name TEXT,
-                    item_description TEXT,
-                    price INTEGER,
-                    quantity INTEGER,
-                    category TEXT,
-                    listed_at TEXT,
-                    expires_at TEXT,
-                    status TEXT DEFAULT 'active'
-                )
-            ''')
-            
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS user_stocks (
-                    user_id INTEGER,
-                    stock_symbol TEXT,
-                    quantity INTEGER DEFAULT 0,
-                    average_buy_price REAL,
-                    total_invested INTEGER DEFAULT 0,
-                    PRIMARY KEY (user_id, stock_symbol)
-                )
-            ''')
-            
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS stock_prices (
-                    stock_symbol TEXT PRIMARY KEY,
-                    current_price REAL,
-                    daily_change REAL,
-                    last_updated TEXT
-                )
-            ''')
-            
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS seasonal_events (
-                    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    event_name TEXT,
-                    start_date TEXT,
-                    end_date TEXT,
-                    active BOOLEAN DEFAULT FALSE,
-                    multiplier REAL DEFAULT 1.0
-                )
-            ''')
-            
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS seasonal_items (
-                    user_id INTEGER,
-                    item_id TEXT,
-                    item_name TEXT,
-                    quantity INTEGER DEFAULT 1,
-                    obtained_date TEXT,
-                    event_id INTEGER,
-                    PRIMARY KEY (user_id, item_id)
-                )
-            ''')
-            
-            await db.execute('''
-                CREATE TABLE IF NOT EXISTS tax_records (
-                    user_id INTEGER,
-                    tax_period TEXT,
-                    income INTEGER DEFAULT 0,
-                    tax_paid INTEGER DEFAULT 0,
-                    tax_rate REAL DEFAULT 0.05,
-                    PRIMARY KEY (user_id, tax_period)
-                )
-            ''')
-            
             await db.commit()
             print("✅ База данных инициализирована")
 
-# 🌟 СИСТЕМА РЕПУТАЦИИ И УРОВНЕЙ
-class ReputationSystem:
-    def __init__(self, db: Database):
-        self.db = db
-        self.levels = {
-            1: {"min_rep": 0, "bonus": "Базовая ставка", "multiplier": 1.0},
-            2: {"min_rep": 100, "bonus": "+10% к доходам", "multiplier": 1.1},
-            3: {"min_rep": 300, "bonus": "+20% к доходам", "multiplier": 1.2},
-            4: {"min_rep": 600, "bonus": "+30% к доходам", "multiplier": 1.3},
-            5: {"min_rep": 1000, "bonus": "+50% к доходам", "multiplier": 1.5}
-        }
-    
-    async def get_user_reputation(self, user_id: int) -> Dict:
-        async with aiosqlite.connect(self.db.db_path) as db:
-            async with db.execute('SELECT reputation, reputation_level, total_xp FROM user_reputation WHERE user_id = ?', (user_id,)) as cursor:
-                result = await cursor.fetchone()
-                if result:
-                    return {"reputation": result[0], "level": result[1], "total_xp": result[2]}
-                else:
-                    # Создаем запись если нет
-                    await db.execute('INSERT INTO user_reputation (user_id) VALUES (?)', (user_id,))
-                    await db.commit()
-                    return {"reputation": 0, "level": 1, "total_xp": 0}
-    
-    async def add_reputation(self, user_id: int, amount: int, reason: str = ""):
-        current_data = await self.get_user_reputation(user_id)
-        new_rep = current_data["reputation"] + amount
-        new_xp = current_data["total_xp"] + max(amount, 0)
-        
-        # Проверяем уровень
-        new_level = 1
-        for level, data in sorted(self.levels.items(), reverse=True):
-            if new_rep >= data["min_rep"]:
-                new_level = level
-                break
-        
-        async with aiosqlite.connect(self.db.db_path) as db:
-            await db.execute('''
-                UPDATE user_reputation 
-                SET reputation = ?, reputation_level = ?, total_xp = ?, last_reputation_update = ?
-                WHERE user_id = ?
-            ''', (new_rep, new_level, new_xp, datetime.now().isoformat(), user_id))
-            await db.commit()
-        
-        level_up = new_level > current_data["level"]
-        return new_rep, new_level, level_up
-    
-    def get_level_multiplier(self, level: int) -> float:
-        return self.levels.get(level, {"multiplier": 1.0})["multiplier"]
-
-# 🛒 СИСТЕМА МАРКЕТПЛЕЙСА
-class MarketplaceSystem:
-    def __init__(self, db: Database, economy):
-        self.db = db
-        self.economy = economy
-        self.categories = ["криптовалюта", "предметы", "услуги", "фермы", "другое"]
-    
-    async def list_item(self, user_id: int, item_name: str, description: str, price: int, quantity: int = 1, category: str = "другое"):
-        if category not in self.categories:
-            return False, "Неверная категория"
-        
-        if price <= 0:
-            return False, "Цена должна быть положительной"
-        
-        async with aiosqlite.connect(self.db.db_path) as db:
-            await db.execute('''
-                INSERT INTO marketplace (seller_id, item_name, item_description, price, quantity, category, listed_at, expires_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (user_id, item_name, description, price, quantity, category, datetime.now().isoformat(), 
-                 (datetime.now() + timedelta(days=7)).isoformat()))
-            await db.commit()
-            
-            return True, "Товар успешно выставлен на продажу!"
-    
-    async def get_marketplace_items(self, category: str = None, page: int = 1):
-        limit = 10
-        offset = (page - 1) * limit
-        
-        async with aiosqlite.connect(self.db.db_path) as db:
-            if category and category in self.categories:
-                async with db.execute('''
-                    SELECT * FROM marketplace 
-                    WHERE status = "active" AND category = ? 
-                    ORDER BY listed_at DESC 
-                    LIMIT ? OFFSET ?
-                ''', (category, limit, offset)) as cursor:
-                    items = await cursor.fetchall()
-            else:
-                async with db.execute('''
-                    SELECT * FROM marketplace 
-                    WHERE status = "active" 
-                    ORDER BY listed_at DESC 
-                    LIMIT ? OFFSET ?
-                ''', (limit, offset)) as cursor:
-                    items = await cursor.fetchall()
-            
-            return items
-    
-    async def buy_item(self, buyer_id: int, item_id: int, quantity: int = 1):
-        async with aiosqlite.connect(self.db.db_path) as db:
-            async with db.execute('SELECT * FROM marketplace WHERE id = ? AND status = "active"', (item_id,)) as cursor:
-                item = await cursor.fetchone()
-                
-            if not item:
-                return False, "Товар не найден"
-            
-            seller_id, item_name, description, price, available_quantity = item[1], item[2], item[3], item[4], item[5]
-            
-            if buyer_id == seller_id:
-                return False, "Нельзя купить собственный товар"
-            
-            if available_quantity < quantity:
-                return False, "Недостаточно товара"
-            
-            total_cost = price * quantity
-            buyer_balance = await self.economy.get_balance(buyer_id)
-            
-            if buyer_balance < total_cost:
-                return False, "Недостаточно средств"
-            
-            # Проводим транзакцию
-            await self.economy.update_balance(buyer_id, -total_cost)
-            await self.economy.update_balance(seller_id, total_cost)
-            
-            # Обновляем количество или удаляем товар
-            if available_quantity == quantity:
-                await db.execute('DELETE FROM marketplace WHERE id = ?', (item_id,))
-            else:
-                await db.execute('UPDATE marketplace SET quantity = quantity - ? WHERE id = ?', (quantity, item_id))
-            
-            await db.commit()
-            
-            return True, f"Покупка успешна! Куплено: {quantity} x {item_name}"
-
-# 📈 СИСТЕМА АКЦИЙ И ИНВЕСТИЦИЙ
-class StockMarketSystem:
-    def __init__(self, db: Database, economy):
-        self.db = db
-        self.economy = economy
-        self.stocks = {
-            "DISCORD": {"name": "Discord Inc", "base_price": 100, "volatility": 0.1},
-            "ROBLOX": {"name": "Roblox Corporation", "base_price": 45, "volatility": 0.15},
-            "TS": {"name": "Tower Defense Simulator", "base_price": 25, "volatility": 0.2},
-            "EPIC": {"name": "Epic Games", "base_price": 85, "volatility": 0.12}
-        }
-        
-        # Инициализируем цены
-        for symbol in self.stocks:
-            if symbol not in storage.stock_prices:
-                storage.stock_prices[symbol] = self.stocks[symbol]["base_price"]
-    
-    async def update_stock_prices(self):
-        """Обновляет цены акций с учетом волатильности"""
-        for symbol, data in self.stocks.items():
-            change_percent = random.uniform(-data["volatility"], data["volatility"])
-            current_price = storage.stock_prices.get(symbol, data["base_price"])
-            new_price = max(current_price * (1 + change_percent), data["base_price"] * 0.5)  # Не ниже 50% от базовой
-            storage.stock_prices[symbol] = round(new_price, 2)
-            
-            # Сохраняем в БД
-            async with aiosqlite.connect(self.db.db_path) as db:
-                await db.execute('''
-                    INSERT OR REPLACE INTO stock_prices (stock_symbol, current_price, daily_change, last_updated)
-                    VALUES (?, ?, ?, ?)
-                ''', (symbol, new_price, change_percent * 100, datetime.now().isoformat()))
-                await db.commit()
-    
-    async def buy_stocks(self, user_id: int, symbol: str, quantity: int):
-        if symbol not in self.stocks:
-            return False, "Акция не найдена"
-        
-        current_price = storage.stock_prices.get(symbol, self.stocks[symbol]["base_price"])
-        total_cost = current_price * quantity
-        
-        balance = await self.economy.get_balance(user_id)
-        if balance < total_cost:
-            return False, "Недостаточно средств"
-        
-        await self.economy.update_balance(user_id, -total_cost)
-        
-        async with aiosqlite.connect(self.db.db_path) as db:
-            # Проверяем есть ли уже акции
-            async with db.execute('SELECT quantity, average_buy_price, total_invested FROM user_stocks WHERE user_id = ? AND stock_symbol = ?', 
-                                (user_id, symbol)) as cursor:
-                existing = await cursor.fetchone()
-            
-            if existing:
-                # Обновляем среднюю цену
-                old_quantity, old_avg, old_invested = existing
-                new_quantity = old_quantity + quantity
-                new_invested = old_invested + total_cost
-                new_avg = new_invested / new_quantity
-                
-                await db.execute('''
-                    UPDATE user_stocks 
-                    SET quantity = ?, average_buy_price = ?, total_invested = ?
-                    WHERE user_id = ? AND stock_symbol = ?
-                ''', (new_quantity, new_avg, new_invested, user_id, symbol))
-            else:
-                await db.execute('''
-                    INSERT INTO user_stocks (user_id, stock_symbol, quantity, average_buy_price, total_invested)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (user_id, symbol, quantity, current_price, total_cost))
-            
-            await db.commit()
-            
-        return True, f"Куплено {quantity} акций {symbol} по {current_price} монет за штуку"
-    
-    async def sell_stocks(self, user_id: int, symbol: str, quantity: int):
-        if symbol not in self.stocks:
-            return False, "Акция не найдена"
-        
-        current_price = storage.stock_prices.get(symbol, self.stocks[symbol]["base_price"])
-        
-        async with aiosqlite.connect(self.db.db_path) as db:
-            async with db.execute('SELECT quantity FROM user_stocks WHERE user_id = ? AND stock_symbol = ?', 
-                                (user_id, symbol)) as cursor:
-                existing = await cursor.fetchone()
-            
-            if not existing or existing[0] < quantity:
-                return False, "Недостаточно акций"
-            
-            total_income = current_price * quantity
-            
-            # Обновляем количество
-            await db.execute('UPDATE user_stocks SET quantity = quantity - ? WHERE user_id = ? AND stock_symbol = ?', 
-                           (quantity, user_id, symbol))
-            
-            # Удаляем запись если акций не осталось
-            await db.execute('DELETE FROM user_stocks WHERE user_id = ? AND stock_symbol = ? AND quantity = 0', 
-                           (user_id, symbol))
-            
-            await db.commit()
-        
-        await self.economy.update_balance(user_id, total_income)
-        return True, f"Продано {quantity} акций {symbol} по {current_price} монет за штуку"
-    
-    async def get_user_portfolio(self, user_id: int):
-        async with aiosqlite.connect(self.db.db_path) as db:
-            async with db.execute('SELECT stock_symbol, quantity, average_buy_price FROM user_stocks WHERE user_id = ?', 
-                                (user_id,)) as cursor:
-                stocks = await cursor.fetchall()
-        
-        portfolio = []
-        total_value = 0
-        total_invested = 0
-        
-        for symbol, quantity, avg_price in stocks:
-            current_price = storage.stock_prices.get(symbol, 0)
-            value = current_price * quantity
-            profit = value - (avg_price * quantity)
-            profit_percent = (profit / (avg_price * quantity)) * 100 if avg_price * quantity > 0 else 0
-            
-            portfolio.append({
-                "symbol": symbol,
-                "quantity": quantity,
-                "avg_price": avg_price,
-                "current_price": current_price,
-                "value": value,
-                "profit": profit,
-                "profit_percent": profit_percent
-            })
-            
-            total_value += value
-            total_invested += avg_price * quantity
-        
-        total_profit = total_value - total_invested
-        total_profit_percent = (total_profit / total_invested) * 100 if total_invested > 0 else 0
-        
-        return {
-            "stocks": portfolio,
-            "total_value": total_value,
-            "total_invested": total_invested,
-            "total_profit": total_profit,
-            "total_profit_percent": total_profit_percent
-        }
-
-# 🎄 СИСТЕМА СЕЗОННЫХ СОБЫТИЙ
-class SeasonalEventSystem:
-    def __init__(self, db: Database, economy):
-        self.db = db
-        self.economy = economy
-        self.events = {
-            "halloween": {
-                "name": "🎃 Хэллоуин",
-                "start": "10-25",
-                "end": "11-05",
-                "multiplier": 1.2,
-                "special_items": ["Тыква", "Призрак", "Ведьмина шляпа"]
-            },
-            "christmas": {
-                "name": "🎄 Рождество", 
-                "start": "12-20",
-                "end": "01-05",
-                "multiplier": 1.3,
-                "special_items": ["Подарок", "Снежинка", "Носок"]
-            },
-            "summer": {
-                "name": "☀️ Лето",
-                "start": "06-01", 
-                "end": "08-31",
-                "multiplier": 1.15,
-                "special_items": ["Пляжный мяч", "Солнечные очки", "Кокос"]
-            }
-        }
-    
-    def get_current_event(self):
-        current_date = datetime.now()
-        for event_id, event_data in self.events.items():
-            start_month, start_day = map(int, event_data["start"].split("-"))
-            end_month, end_day = map(int, event_data["end"].split("-"))
-            
-            start_date = datetime(current_date.year, start_month, start_day)
-            end_date = datetime(current_date.year, end_month, end_day)
-            
-            if start_date <= current_date <= end_date:
-                return event_id, event_data
-        
-        return None, None
-    
-    async def give_seasonal_item(self, user_id: int, item_name: str):
-        event_id, event_data = self.get_current_event()
-        if not event_id:
-            return False, "Сейчас нет активных событий"
-        
-        if item_name not in event_data["special_items"]:
-            return False, "Этот предмет не относится к текущему событию"
-        
-        async with aiosqlite.connect(self.db.db_path) as db:
-            await db.execute('''
-                INSERT OR REPLACE INTO seasonal_items (user_id, item_id, item_name, obtained_date, event_id)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (user_id, f"{event_id}_{item_name}", item_name, datetime.now().isoformat(), event_id))
-            await db.commit()
-        
-        return True, f"Получен сезонный предмет: {item_name}"
-
-# 💰 ЭКОНОМИКА (расширенная)
+# 💰 ЭКОНОМИКА
 class EconomySystem:
     def __init__(self, db: Database):
         self.db = db
@@ -634,23 +201,7 @@ class EconomySystem:
             await db.commit()
             return await self.get_balance(user_id)
 
-    async def calculate_tax(self, user_id: int, amount: int) -> int:
-        """Прогрессивный налог в зависимости от дохода"""
-        balance = await self.get_balance(user_id)
-        total_wealth = balance + amount
-        
-        if total_wealth <= 10000:
-            tax_rate = 0.05  # 5%
-        elif total_wealth <= 50000:
-            tax_rate = 0.08  # 8%
-        elif total_wealth <= 100000:
-            tax_rate = 0.12  # 12%
-        else:
-            tax_rate = 0.15  # 15% для богатых
-        
-        return int(amount * tax_rate)
-
-# 🏦 СИСТЕМА КРЕДИТОВ (исправленная)
+# 🏦 СИСТЕМА КРЕДИТОВ
 class CreditSystem:
     def __init__(self, economy: EconomySystem):
         self.economy = economy
@@ -664,7 +215,7 @@ class CreditSystem:
                 "penalty": "Бан экономики на 2 дня"
             },
             "reliable_credit": {
-                "name": "🛡️ Надежный Кредит", 
+                "name": "🛡️ Надежный Кредит",
                 "min_amount": 5000,
                 "max_amount": 15000,
                 "interest_rate": 8,
@@ -682,7 +233,7 @@ class CreditSystem:
         }
     
     async def take_credit(self, user_id: int, company: str, amount: int):
-        if user_id in storage.user_credits:
+        if user_id in user_credits:
             return False, "У вас уже есть активный кредит"
         
         company_data = self.companies.get(company)
@@ -693,7 +244,7 @@ class CreditSystem:
             return False, f"Сумма должна быть от {company_data['min_amount']} до {company_data['max_amount']}"
         
         due_date = datetime.now() + timedelta(days=company_data["term_days"])
-        storage.user_credits[user_id] = {
+        user_credits[user_id] = {
             "company": company,
             "amount": amount,
             "interest_rate": company_data["interest_rate"],
@@ -705,10 +256,10 @@ class CreditSystem:
         return True, f"Кредит одобрен! Вернуть до {due_date.strftime('%d.%m.%Y')}"
 
     async def repay_credit(self, user_id: int):
-        if user_id not in storage.user_credits:
+        if user_id not in user_credits:
             return False, "У вас нет активных кредитов"
         
-        credit = storage.user_credits[user_id]
+        credit = user_credits[user_id]
         total_to_repay = credit["amount"]
         
         balance = await self.economy.get_balance(user_id)
@@ -716,17 +267,157 @@ class CreditSystem:
             return False, f"Недостаточно средств. Нужно: {total_to_repay} монет"
         
         await self.economy.update_balance(user_id, -total_to_repay)
-        del storage.user_credits[user_id]
+        del user_credits[user_id]
         return True, f"Кредит погашен! Сумма: {total_to_repay} монет"
 
-# 🎰 КАЗИНО (исправленное)
+# 🎁 СИСТЕМА ЛУТБОКСОВ
+class LootboxSystem:
+    def __init__(self, economy: EconomySystem):
+        self.economy = economy
+        self.lootboxes = {
+            "common": {
+                "name": "📦 Обычный лутбокс",
+                "price": 500,
+                "rewards": [
+                    {"type": "money", "min": 50, "max": 200, "chance": 100},
+                    {"type": "money", "min": 100, "max": 300, "chance": 20},
+                    {"type": "nothing", "chance": 40},
+                    {"type": "crypto", "min": 0.001, "max": 0.003, "chance": 10}
+                ]
+            },
+            "rare": {
+                "name": "🎁 Редкий лутбокс", 
+                "price": 1500,
+                "rewards": [
+                    {"type": "money", "min": 200, "max": 500, "chance": 100},
+                    {"type": "money", "min": 300, "max": 700, "chance": 25},
+                    {"type": "nothing", "chance": 35},
+                    {"type": "crypto", "min": 0.003, "max": 0.008, "chance": 15},
+                    {"type": "money", "min": 1000, "max": 2000, "chance": 8}
+                ]
+            }
+        }
+    
+    async def open_lootbox(self, user_id: int, lootbox_type: str):
+        lootbox = self.lootboxes.get(lootbox_type)
+        if not lootbox:
+            return False, None
+        
+        balance = await self.economy.get_balance(user_id)
+        if balance < lootbox["price"]:
+            return False, "Недостаточно средств"
+        
+        await self.economy.update_balance(user_id, -lootbox["price"])
+        
+        rewards = []
+        for reward in lootbox["rewards"]:
+            if random.randint(1, 100) <= reward["chance"]:
+                if reward["type"] == "money":
+                    amount = random.randint(reward["min"], reward["max"])
+                    await self.economy.update_balance(user_id, amount)
+                    rewards.append(f"💰 {amount} монет")
+                elif reward["type"] == "nothing":
+                    rewards.append("💨 Пустота...")
+                elif reward["type"] == "crypto":
+                    crypto_type = random.choice(list(crypto_prices.keys()))
+                    amount = random.uniform(reward["min"], reward["max"])
+                    if user_id not in user_crypto:
+                        user_crypto[user_id] = {}
+                    user_crypto[user_id][crypto_type] = user_crypto[user_id].get(crypto_type, 0) + amount
+                    rewards.append(f"₿ {amount:.4f} {crypto_type}")
+        
+        if not rewards:
+            rewards.append("💔 Не повезло... Попробуй еще раз!")
+        
+        return True, rewards
+
+# 🔧 СИСТЕМА МАЙНИНГА
+class MiningSystem:
+    def __init__(self, economy: EconomySystem):
+        self.economy = economy
+        self.farm_levels = {
+            1: {"income": 10, "upgrade_cost": 1000},
+            2: {"income": 25, "upgrade_cost": 5000},
+            3: {"income": 50, "upgrade_cost": 15000}
+        }
+    
+    async def collect_income(self, user_id: int):
+        try:
+            if user_id not in user_mining_farms:
+                return False, "У вас нет фермы"
+            
+            farm = user_mining_farms[user_id]
+            
+            if farm.get("last_collected"):
+                try:
+                    last_collect = datetime.fromisoformat(farm["last_collected"])
+                    time_passed = datetime.now() - last_collect
+                    if time_passed.total_seconds() < 21600:
+                        hours_left = 5 - int(time_passed.total_seconds() // 3600)
+                        minutes_left = 59 - int((time_passed.total_seconds() % 3600) // 60)
+                        return False, f"Доход можно собирать раз в 6 часов! Осталось: {hours_left}ч {minutes_left}м"
+                except ValueError:
+                    farm["last_collected"] = None
+            
+            income = self.farm_levels[farm["level"]]["income"]
+            await self.economy.update_balance(user_id, income)
+            
+            user_mining_farms[user_id]["last_collected"] = datetime.now().isoformat()
+            
+            return True, f"✅ Собрано {income} монет с фермы! Следующий сбор через 6 часов"
+            
+        except Exception as e:
+            print(f"Ошибка при сборе дохода: {e}")
+            return False, "❌ Произошла ошибка при сборе дохода"
+
+# 🎪 СИСТЕМА ИВЕНТОВ
+class EventSystem:
+    def __init__(self, economy: EconomySystem):
+        self.economy = economy
+        self.event_types = {
+            "money_rain": {
+                "name": "💰 Денежный дождь", 
+                "duration": 300, 
+                "multiplier": 2,
+                "description": "ВСЕ денежные операции приносят в 2 раза больше монет!"
+            }
+        }
+    
+    async def start_event(self, event_type: str, bot_instance):
+        event = self.event_types.get(event_type)
+        if not event:
+            return False
+        
+        active_events[event_type] = {
+            "start_time": datetime.now(),
+            "end_time": datetime.now() + timedelta(seconds=event["duration"]),
+            "data": event
+        }
+        
+        try:
+            channel = bot_instance.get_channel(EVENTS_CHANNEL_ID)
+            if channel:
+                embed = Design.create_embed(
+                    "🎉 НАЧАЛСЯ ИВЕНТ!",
+                    f"**{event['name']}**\n\n"
+                    f"📝 **Описание:** {event['description']}\n"
+                    f"⏰ **Длительность:** {event['duration'] // 60} минут",
+                    "event"
+                )
+                await channel.send(embed=embed)
+        except Exception as e:
+            print(f"❌ Ошибка отправки ивента: {e}")
+        
+        return True
+
+# 🎰 КАЗИНО
 class CasinoSystem:
     def __init__(self, economy: EconomySystem):
         self.economy = economy
     
     async def play_slots(self, user_id: int, bet: int):
-        if bet <= 0:  # Исправлено
-            return {"success": False, "error": "Ставка должна быть положительной!"}
+        if bet < 0:
+            return {"success": False, "error": "Ставка не может быть отрицательной!"}
         
         balance = await self.economy.get_balance(user_id)
         if balance < bet:
@@ -755,7 +446,7 @@ class CasinoSystem:
             "win_amount": win_amount
         }
 
-# 🏗️ ГЛАВНЫЙ БОТ (расширенный)
+# 🏗️ ГЛАВНЫЙ БОТ
 class MegaBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.all()
@@ -765,23 +456,12 @@ class MegaBot(commands.Bot):
         self.economy = EconomySystem(self.db)
         self.casino = CasinoSystem(self.economy)
         
-        # Существующие системы
         self.credit_system = CreditSystem(self.economy)
         self.lootbox_system = LootboxSystem(self.economy)
         self.mining_system = MiningSystem(self.economy)
         self.event_system = EventSystem(self.economy)
         
-        # Новые системы
-        self.reputation_system = ReputationSystem(self.db)
-        self.marketplace_system = MarketplaceSystem(self.db, self.economy)
-        self.stock_system = StockMarketSystem(self.db, self.economy)
-        self.seasonal_system = SeasonalEventSystem(self.db, self.economy)
-        
         self.start_time = datetime.now()
-        
-        # Задачи
-        self.update_stock_prices.start()
-        self.check_credits.start()
     
     async def setup_hook(self):
         await self.db.init_db()
@@ -800,40 +480,10 @@ class MegaBot(commands.Bot):
             print(f"❌ Ошибка перезагрузки: {e}")
             return False
 
-    @tasks.loop(minutes=5)
-    async def update_stock_prices(self):
-        await self.stock_system.update_stock_prices()
-    
-    @tasks.loop(hours=1)
-    async def check_credits(self):
-        """Проверка просроченных кредитов"""
-        current_time = datetime.now()
-        users_to_remove = []
-        
-        for user_id, credit in storage.user_credits.items():
-            if current_time > credit["due_date"]:
-                # Наказываем за просрочку
-                storage.economic_bans[f"economic_ban_{user_id}"] = {
-                    'end_time': current_time + timedelta(days=2),
-                    'reason': 'Просрочка кредита'
-                }
-                users_to_remove.append(user_id)
-        
-        for user_id in users_to_remove:
-            del storage.user_credits[user_id]
-
-    @update_stock_prices.before_loop
-    @check_credits.before_loop
-    async def before_tasks(self):
-        await self.wait_until_ready()
-
 bot = MegaBot()
 
-# 🔧 ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (исправленные)
+# 🔧 ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 def parse_time(time_str: str) -> int:
-    if not time_str:
-        return 0
-        
     time_units = {
         'с': 1, 'сек': 1, 'секунд': 1,
         'м': 60, 'мин': 60, 'минут': 60, 
@@ -854,11 +504,7 @@ def parse_time(time_str: str) -> int:
     if not num_str:
         return 0
     
-    try:
-        number = int(num_str)
-    except ValueError:
-        return 0
-    
+    number = int(num_str)
     unit = unit_str.lower()
     
     if unit in time_units:
@@ -866,147 +512,36 @@ def parse_time(time_str: str) -> int:
     else:
         return 0
 
-# 🌟 НОВЫЕ КОМАНДЫ РЕПУТАЦИИ
-@bot.tree.command(name="репутация", description="Проверить репутацию")
-async def репутация(interaction: discord.Interaction, пользователь: Optional[discord.Member] = None):
+# 💰 КОМАНДЫ ДЛЯ ВСЕХ УЧАСТНИКОВ
+@bot.tree.command(name="баланс", description="Проверить баланс")
+async def баланс(interaction: discord.Interaction, пользователь: Optional[discord.Member] = None):
     user = пользователь or interaction.user
-    rep_data = await bot.reputation_system.get_user_reputation(user.id)
-    
-    embed = Design.create_embed(
-        "⭐ Репутация", 
-        f"**{user.display_name}**\n"
-        f"🏅 Уровень репутации: {rep_data['level']}\n"
-        f"⭐ Очки репутации: {rep_data['reputation']}\n"
-        f"📊 Всего опыта: {rep_data['total_xp']}",
-        "reputation"
-    )
-    
-    level_data = bot.reputation_system.levels.get(rep_data['level'], {})
-    if level_data:
-        embed.add_field(name="Бонус уровня", value=level_data.get("bonus", "Нет"), inline=False)
-    
+    balance = await bot.economy.get_balance(user.id)
+    embed = Design.create_embed("💰 Баланс", f"**{user.display_name}**\nБаланс: `{balance:,} монет`", "economy")
     await interaction.response.send_message(embed=embed)
 
-# 🛒 НОВЫЕ КОМАНДЫ МАРКЕТПЛЕЙСА
-@bot.tree.command(name="продать", description="Выставить товар на продажу")
-async def продать(interaction: discord.Interaction, название: str, описание: str, цена: int, количество: int = 1, категория: str = "другое"):
-    success, message = await bot.marketplace_system.list_item(
-        interaction.user.id, название, описание, цена, количество, категория
-    )
+@bot.tree.command(name="ежедневно", description="Получить ежедневную награду")
+@check_economic_ban()
+async def ежедневно(interaction: discord.Interaction):
+    user_data = await bot.economy.get_user_data(interaction.user.id)
     
-    if success:
-        embed = Design.create_embed("🛒 Товар выставлен", message, "marketplace")
-    else:
-        embed = Design.create_embed("❌ Ошибка", message, "danger")
+    if user_data["daily_claimed"]:
+        last_claim = datetime.fromisoformat(user_data["daily_claimed"])
+        if (datetime.now() - last_claim).days < 1:
+            embed = Design.create_embed("⏳ Уже получали!", "Приходите завтра", "warning")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
     
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-@bot.tree.command(name="биржа", description="Просмотреть товары на бирже")
-async def биржа(interaction: discord.Interaction, категория: Optional[str] = None, страница: int = 1):
-    items = await bot.marketplace_system.get_marketplace_items(категория, страница)
+    reward = random.randint(100, 500)
+    new_balance = await bot.economy.update_balance(interaction.user.id, reward)
     
-    if not items:
-        embed = Design.create_embed("🛒 Биржа", "Товаров не найдено", "marketplace")
-        await interaction.response.send_message(embed=embed)
-        return
+    async with aiosqlite.connect(bot.db.db_path) as db:
+        await db.execute('UPDATE users SET daily_claimed = ? WHERE user_id = ?', (datetime.now().isoformat(), interaction.user.id))
+        await db.commit()
     
-    embed = Design.create_embed(f"🛒 Биржа (Страница {страница})", "", "marketplace")
-    
-    for item in items[:5]:  # Показываем первые 5 товаров
-        item_id, seller_id, name, desc, price, quantity, category, listed_at = item[0], item[1], item[2], item[3], item[4], item[5], item[6], item[7]
-        
-        try:
-            seller = await bot.fetch_user(seller_id)
-            seller_name = seller.display_name
-        except:
-            seller_name = "Неизвестный"
-        
-        embed.add_field(
-            name=f"#{item_id} {name}",
-            value=f"💰 Цена: {price} монет\n"
-                  f"📦 Количество: {quantity}\n"
-                  f"🏷️ Категория: {category}\n"
-                  f"👤 Продавец: {seller_name}\n"
-                  f"📝 {desc}",
-            inline=False
-        )
-    
+    embed = Design.create_embed("🎁 Ежедневная награда", f"**+{reward} монет!**\nБаланс: `{new_balance:,} монет`", "success")
     await interaction.response.send_message(embed=embed)
 
-# 📈 НОВЫЕ КОМАНДЫ АКЦИЙ
-@bot.tree.command(name="акции", description="Просмотреть акции")
-async def акции(interaction: discord.Interaction):
-    embed = Design.create_embed("📈 Биржа акций", "Текущие котировки:", "stocks")
-    
-    for symbol, price in storage.stock_prices.items():
-        stock_data = bot.stock_system.stocks.get(symbol, {})
-        embed.add_field(
-            name=f"{symbol} - {stock_data.get('name', 'Unknown')}",
-            value=f"💰 Цена: {price} монет\n"
-                  f"📊 Волатильность: {stock_data.get('volatility', 0)*100}%",
-            inline=True
-        )
-    
-    await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name="купить_акции", description="Купить акции")
-async def купить_акции(interaction: discord.Interaction, акция: str, количество: int):
-    success, message = await bot.stock_system.buy_stocks(interaction.user.id, акция.upper(), количество)
-    
-    if success:
-        embed = Design.create_embed("✅ Акции куплены", message, "success")
-    else:
-        embed = Design.create_embed("❌ Ошибка", message, "danger")
-    
-    await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name="портфель", description="Мой инвестиционный портфель")
-async def портфель(interaction: discord.Interaction):
-    portfolio = await bot.stock_system.get_user_portfolio(interaction.user.id)
-    
-    if not portfolio["stocks"]:
-        await interaction.response.send_message("📊 У вас нет акций", ephemeral=True)
-        return
-    
-    embed = Design.create_embed("📊 Инвестиционный портфель", "", "stocks")
-    
-    for stock in portfolio["stocks"]:
-        profit_emoji = "📈" if stock["profit"] >= 0 else "📉"
-        embed.add_field(
-            name=f"{stock['symbol']}",
-            value=f"Количество: {stock['quantity']}\n"
-                  f"Средняя цена: {stock['avg_price']:.2f}\n"
-                  f"Текущая цена: {stock['current_price']:.2f}\n"
-                  f"Прибыль: {stock['profit']:.2f} ({stock['profit_percent']:.1f}%) {profit_emoji}",
-            inline=True
-        )
-    
-    embed.add_field(
-        name="💰 Общая статистика",
-        value=f"Общая стоимость: {portfolio['total_value']:.2f}\n"
-              f"Всего вложено: {portfolio['total_invested']:.2f}\n"
-              f"Общая прибыль: {portfolio['total_profit']:.2f} ({portfolio['total_profit_percent']:.1f}%)",
-        inline=False
-    )
-    
-    await interaction.response.send_message(embed=embed)
-
-# 🎄 НОВЫЕ КОМАНДЫ СОБЫТИЙ
-@bot.tree.command(name="событие", description="Текущее сезонное событие")
-async def событие(interaction: discord.Interaction):
-    event_id, event_data = bot.seasonal_system.get_current_event()
-    
-    if not event_id:
-        embed = Design.create_embed("🎪 Сезонные события", "Сейчас нет активных событий", "info")
-    else:
-        embed = Design.create_embed(f"🎪 {event_data['name']}", 
-                                  f"**Множитель доходов:** x{event_data['multiplier']}\n"
-                                  f"**Особые предметы:** {', '.join(event_data['special_items'])}",
-                                  "seasonal")
-    
-    await interaction.response.send_message(embed=embed)
-
-# 🔧 СУЩЕСТВУЮЩИЕ КОМАНДЫ (с улучшениями)
 @bot.tree.command(name="работа", description="Заработать деньги")
 @check_economic_ban()
 async def работа(interaction: discord.Interaction):
@@ -1020,75 +555,595 @@ async def работа(interaction: discord.Interaction):
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
         
-        # Учитываем репутацию
-        rep_data = await bot.reputation_system.get_user_reputation(interaction.user.id)
-        multiplier = bot.reputation_system.get_level_multiplier(rep_data["level"])
-        
-        base_earnings = random.randint(50, 200)
-        earnings = int(base_earnings * multiplier)
-        
+        earnings = random.randint(50, 200)
         new_balance = await bot.economy.update_balance(interaction.user.id, earnings)
         
         async with aiosqlite.connect(bot.db.db_path) as db:
             await db.execute('UPDATE users SET work_cooldown = ? WHERE user_id = ?', (datetime.now().isoformat(), interaction.user.id))
             await db.commit()
         
-        embed = Design.create_embed("💼 Работа", 
-                                  f"**Заработано:** +{earnings} монет\n"
-                                  f"**Бонус репутации:** x{multiplier}\n"
-                                  f"**Баланс:** {new_balance:,} монет", "success")
+        embed = Design.create_embed("💼 Работа", f"**Заработано:** +{earnings} монет\n**Баланс:** {new_balance:,} монет", "success")
         await interaction.response.send_message(embed=embed)
         
     except Exception as e:
-        print(f"Ошибка в работе: {e}")
         embed = Design.create_embed("❌ Ошибка", "Не удалось выполнить работу", "danger")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# 🌐 API ДЛЯ ВЕБ-ПАНЕЛИ
-def start_api_server():
-    """Запуск FastAPI сервера для веб-панели"""
-    app = FastAPI(title="Bot Economy API")
+@bot.tree.command(name="передать", description="Передать деньги")
+@check_economic_ban()
+async def передать(interaction: discord.Interaction, пользователь: discord.Member, сумма: int):
+    if сумма <= 0:
+        await interaction.response.send_message("❌ Сумма должна быть положительной!", ephemeral=True)
+        return
     
-    @app.get("/api/user/{user_id}")
-    async def get_user_stats(user_id: int):
-        try:
-            balance = await bot.economy.get_balance(user_id)
-            rep_data = await bot.reputation_system.get_user_reputation(user_id)
-            portfolio = await bot.stock_system.get_user_portfolio(user_id)
-            
-            return {
-                "user_id": user_id,
-                "balance": balance,
-                "reputation": rep_data["reputation"],
-                "reputation_level": rep_data["level"],
-                "portfolio_value": portfolio["total_value"],
-                "total_profit": portfolio["total_profit"]
-            }
-        except Exception as e:
-            return {"error": str(e)}
+    if пользователь.id == interaction.user.id:
+        await interaction.response.send_message("❌ Нельзя передать самому себе!", ephemeral=True)
+        return
     
-    @app.get("/api/economy/overview")
-    async def get_economy_overview():
-        # Статистика сервера
-        return {
-            "total_tax_pool": storage.server_tax_pool,
-            "active_credits": len(storage.user_credits),
-            "stock_prices": storage.stock_prices,
-            "active_events": len(storage.active_events)
-        }
+    from_balance = await bot.economy.get_balance(interaction.user.id)
+    if from_balance < сумма:
+        await interaction.response.send_message("❌ Недостаточно средств!", ephemeral=True)
+        return
     
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    tax = сумма * 0.05
+    net_amount = сумма - tax
+    global server_tax_pool
+    server_tax_pool += tax
+    
+    await bot.economy.update_balance(interaction.user.id, -сумма)
+    await bot.economy.update_balance(пользователь.id, net_amount)
+    
+    embed = Design.create_embed("✅ Перевод", 
+                              f"**От:** {interaction.user.mention}\n"
+                              f"**Кому:** {пользователь.mention}\n"
+                              f"**Сумма:** {сумма} монет\n"
+                              f"**Налог (5%):** {tax} монет\n"
+                              f"**Получено:** {net_amount} монет", "success")
+    await interaction.response.send_message(embed=embed)
 
-# 🚀 ЗАПУСК БОТА И API
+@bot.tree.command(name="ограбить", description="Ограбить пользователя (КД: 30 минут)")
+@check_economic_ban()
+async def ограбить(interaction: discord.Interaction, жертва: discord.Member):
+    user_id = interaction.user.id
+    current_time = datetime.now()
+    
+    if user_id in rob_cooldowns:
+        time_passed = current_time - rob_cooldowns[user_id]
+        if time_passed.total_seconds() < 1800:
+            minutes_left = 30 - int(time_passed.total_seconds() // 60)
+            embed = Design.create_embed("⏳ Кулдаун", 
+                                      f"Подожди еще {minutes_left} минут!", 
+                                      "warning")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+    
+    if жертва.id == interaction.user.id:
+        await interaction.response.send_message("❌ Нельзя ограбить самого себя!", ephemeral=True)
+        return
+    
+    victim_balance = await bot.economy.get_balance(жертва.id)
+    if victim_balance < 100:
+        await interaction.response.send_message("❌ У жертвы меньше 100 монет!", ephemeral=True)
+        return
+    
+    if random.random() < 0.4:
+        stolen = random.randint(100, min(500, victim_balance))
+        await bot.economy.update_balance(жертва.id, -stolen)
+        await bot.economy.update_balance(interaction.user.id, stolen)
+        
+        rob_cooldowns[user_id] = current_time
+        
+        embed = Design.create_embed("💰 Ограбление успешно!", 
+                                  f"**Украдено:** {stolen} монет\n"
+                                  f"**Следующее ограбление через:** 30 минут", 
+                                  "warning")
+    else:
+        fine = random.randint(50, 200)
+        await bot.economy.update_balance(interaction.user.id, -fine)
+        rob_cooldowns[user_id] = current_time
+        
+        embed = Design.create_embed("🚓 Пойманы!", 
+                                  f"**Штраф:** {fine} монет\n"
+                                  f"**Следующее ограбление через:** 30 минут", 
+                                  "danger")
+    
+    await interaction.response.send_message(embed=embed)
+
+# 🎰 КОМАНДЫ КАЗИНО
+@bot.tree.command(name="слоты", description="Играть в слоты")
+@check_economic_ban()
+async def слоты(interaction: discord.Interaction, ставка: int = 0):
+    if ставка < 0:
+        await interaction.response.send_message("❌ Ставка не может быть отрицательной!", ephemeral=True)
+        return
+    
+    result = await bot.casino.play_slots(interaction.user.id, ставка)
+    
+    if not result["success"]:
+        await interaction.response.send_message(f"❌ {result['error']}", ephemeral=True)
+        return
+    
+    symbols = " | ".join(result["result"])
+    
+    if result["multiplier"] > 0:
+        embed = Design.create_embed("🎰 Выигрыш!", 
+                                  f"**{symbols}**\n"
+                                  f"Ставка: {ставка} монет\n"
+                                  f"Множитель: x{result['multiplier']}\n"
+                                  f"Выигрыш: {result['win_amount']} монет", "success")
+    else:
+        embed = Design.create_embed("🎰 Проигрыш", 
+                                  f"**{symbols}**\n"
+                                  f"Потеряно: {ставка} монет", "danger")
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="монетка", description="Подбросить монетку")
+@check_economic_ban()
+async def монетка(interaction: discord.Interaction, ставка: int = 0, выбор: str = "орёл"):
+    if ставка < 0:
+        await interaction.response.send_message("❌ Ставка не может быть отрицательной!", ephemeral=True)
+        return
+    
+    if выбор not in ["орёл", "решка"]:
+        await interaction.response.send_message("❌ Выберите 'орёл' или 'решка'!", ephemeral=True)
+        return
+    
+    balance = await bot.economy.get_balance(interaction.user.id)
+    if balance < ставка:
+        await interaction.response.send_message("❌ Недостаточно средств!", ephemeral=True)
+        return
+    
+    outcome = random.choice(["орёл", "решка"])
+    won = outcome == выбор
+    
+    if won:
+        await bot.economy.update_balance(interaction.user.id, ставка)
+        embed = Design.create_embed("🪙 Победа!", 
+                                  f"Выпало: {outcome}\n"
+                                  f"Ваш выбор: {выбор}\n"
+                                  f"Выигрыш: {ставка} монет", "success")
+    else:
+        await bot.economy.update_balance(interaction.user.id, -ставка)
+        embed = Design.create_embed("🪙 Проигрыш", 
+                                  f"Выпало: {outcome}\n"
+                                  f"Ваш выбор: {выбор}\n"
+                                  f"Потеряно: {ставка} монет", "danger")
+    
+    await interaction.response.send_message(embed=embed)
+
+# 🛡️ КОМАНДЫ МОДЕРАЦИИ
+@bot.tree.command(name="пред", description="Выдать предупреждение")
+@is_moderator()
+async def пред(interaction: discord.Interaction, пользователь: discord.Member, причина: str = "Не указана"):
+    try:
+        target_roles = [role.id for role in пользователь.roles]
+        if any(role_id in MODERATION_ROLES for role_id in target_roles) or пользователь.id in ADMIN_IDS:
+            await interaction.response.send_message("❌ Нельзя выдать предупреждение модератору или администратору!", ephemeral=True)
+            return
+        
+        if пользователь.id not in user_warns:
+            user_warns[пользователь.id] = 0
+        
+        user_warns[пользователь.id] += 1
+        current_warns = user_warns[пользователь.id]
+        
+        embed = Design.create_embed("⚠️ Предупреждение", 
+                                  f"**Пользователь:** {пользователь.mention}\n"
+                                  f"**Причина:** {причина}\n"
+                                  f"**Текущие пред:** {current_warns}/3", "warning")
+        await interaction.response.send_message(embed=embed)
+            
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+
+@bot.tree.command(name="снять_пред", description="Снять предупреждение")
+@is_moderator()
+async def снять_пред(interaction: discord.Interaction, пользователь: discord.Member, количество: int = 1):
+    try:
+        target_roles = [role.id for role in пользователь.roles]
+        if any(role_id in MODERATION_ROLES for role_id in target_roles) or пользователь.id in ADMIN_IDS:
+            await interaction.response.send_message("❌ Нельзя снять предупреждение с модератора или администратора!", ephemeral=True)
+            return
+        
+        if пользователь.id not in user_warns or user_warns[пользователь.id] <= 0:
+            await interaction.response.send_message("❌ У пользователя нет предупреждений!", ephemeral=True)
+            return
+        
+        if количество <= 0:
+            await interaction.response.send_message("❌ Количество должно быть положительным!", ephemeral=True)
+            return
+        
+        current_warns = user_warns[пользователь.id]
+        new_warns = max(0, current_warns - количество)
+        user_warns[пользователь.id] = new_warns
+        
+        embed = Design.create_embed("✅ Предупреждение снято", 
+                                  f"**Пользователь:** {пользователь.mention}\n"
+                                  f"**Снято предупреждений:** {min(количество, current_warns)}\n"
+                                  f"**Текущие пред:** {new_warns}/3", "success")
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+
+# 🏦 КОМАНДЫ КРЕДИТОВ
+@bot.tree.command(name="кредит", description="Взять кредит")
+async def кредит(interaction: discord.Interaction):
+    embed = Design.create_embed("🏦 КРЕДИТЫ", "Используйте кнопки ниже для взятия кредита:", "credit")
+    
+    for company_id, company in bot.credit_system.companies.items():
+        embed.add_field(
+            name=f"{company['name']}",
+            value=f"Сумма: {company['min_amount']:,}-{company['max_amount']:,} монет\n"
+                  f"Процент: {company['interest_rate']}%\n"
+                  f"Срок: {company['term_days']} дней",
+            inline=False
+        )
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="вернуть_кредит", description="Вернуть кредит")
+async def вернуть_кредит(interaction: discord.Interaction):
+    try:
+        success, message = await bot.credit_system.repay_credit(interaction.user.id)
+        
+        if success:
+            embed = Design.create_embed("✅ Кредит погашен!", message, "success")
+        else:
+            embed = Design.create_embed("❌ Ошибка", message, "danger")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    except Exception as e:
+        embed = Design.create_embed("❌ Ошибка", "Произошла ошибка при возврате кредита", "danger")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="мой_кредит", description="Информация о кредите")
+async def мой_кредит(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    if user_id not in user_credits:
+        await interaction.response.send_message("❌ У вас нет активных кредитов", ephemeral=True)
+        return
+    
+    credit = user_credits[user_id]
+    company = bot.credit_system.companies[credit["company"]]
+    days_left = (credit["due_date"] - datetime.now()).days
+    
+    embed = Design.create_embed("🏦 Мой кредит", 
+                              f"**Компания:** {company['name']}\n"
+                              f"**Сумма:** {credit['original_amount']:,} монет\n"
+                              f"**Процент:** {credit['interest_rate']}%\n"
+                              f"**Вернуть до:** {credit['due_date'].strftime('%d.%m.%Y')}\n"
+                              f"**Осталось дней:** {max(0, days_left)}", "credit")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# 🎁 КОМАНДЫ ЛУТБОКСОВ
+@bot.tree.command(name="лутбоксы", description="Просмотреть лутбоксы")
+async def лутбоксы(interaction: discord.Interaction):
+    embed = Design.create_embed("🎁 ЛУТБОКСЫ", "Доступные лутбоксы:", "premium")
+    
+    for lootbox_id, lootbox in bot.lootbox_system.lootboxes.items():
+        rewards_text = ""
+        for reward in lootbox["rewards"]:
+            if reward["type"] == "money":
+                rewards_text += f"💰 Деньги: {reward['min']}-{reward['max']} монет ({reward['chance']}%)\n"
+            elif reward["type"] == "crypto":
+                rewards_text += f"₿ Криптовалюта ({reward['chance']}%)\n"
+            elif reward["type"] == "nothing":
+                rewards_text += f"💨 Пустота ({reward['chance']}%)\n"
+        
+        embed.add_field(
+            name=f"{lootbox['name']} - {lootbox['price']} монет",
+            value=rewards_text,
+            inline=False
+        )
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="открыть_лутбокс", description="Открыть лутбокс")
+async def открыть_лутбокс(interaction: discord.Interaction, тип: str):
+    lootbox_aliases = {
+        "обычный": "common", "common": "common",
+        "редкий": "rare", "rare": "rare"
+    }
+    
+    lootbox_type = lootbox_aliases.get(тип.lower())
+    
+    success, result = await bot.lootbox_system.open_lootbox(interaction.user.id, lootbox_type)
+    
+    if not success:
+        await interaction.response.send_message("❌ Лутбокс не найден или недостаточно средств!", ephemeral=True)
+        return
+    
+    lootbox = bot.lootbox_system.lootboxes[lootbox_type]
+    embed = Design.create_embed(f"🎁 Открыт {lootbox['name']}!", "", "success")
+    
+    for reward in result:
+        embed.add_field(name="🎉 Награда", value=reward, inline=False)
+    
+    await interaction.response.send_message(embed=embed)
+
+# ⛏️ КОМАНДЫ МАЙНИНГА
+@bot.tree.command(name="ферма", description="Информация о ферме")
+async def ферма(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    
+    if user_id not in user_mining_farms:
+        embed = Design.create_embed("⛏️ Майнинг ферма", 
+                                  "У вас еще нет фермы!\nИспользуйте `/создать_ферму` чтобы начать майнить", "info")
+    else:
+        farm = user_mining_farms[user_id]
+        level_data = bot.mining_system.farm_levels[farm["level"]]
+        
+        can_collect = True
+        time_left = "✅ Можно собрать"
+        
+        if "last_collected" in farm and farm["last_collected"]:
+            last_collect = datetime.fromisoformat(farm["last_collected"])
+            time_passed = datetime.now() - last_collect
+            if time_passed.total_seconds() < 21600:
+                can_collect = False
+                hours_left = 5 - int(time_passed.total_seconds() // 3600)
+                minutes_left = 59 - int((time_passed.total_seconds() % 3600) // 60)
+                time_left = f"⏳ Через {hours_left}ч {minutes_left}м"
+        
+        embed = Design.create_embed("⛏️ Ваша ферма", 
+                                  f"**Уровень:** {farm['level']}\n"
+                                  f"**Доход:** {level_data['income']} монет/6ч\n"
+                                  f"**Следующий уровень:** {level_data['upgrade_cost']} монет\n"
+                                  f"**Статус:** {time_left}", "info")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="создать_ферму", description="Создать ферму")
+async def создать_ферму(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    
+    if user_id in user_mining_farms:
+        await interaction.response.send_message("❌ У вас уже есть ферма!", ephemeral=True)
+        return
+    
+    creation_cost = 500
+    balance = await bot.economy.get_balance(user_id)
+    
+    if balance < creation_cost:
+        await interaction.response.send_message(f"❌ Недостаточно средств! Нужно {creation_cost} монет", ephemeral=True)
+        return
+    
+    await bot.economy.update_balance(user_id, -creation_cost)
+    user_mining_farms[user_id] = {
+        "level": 1, 
+        "last_collected": None,
+        "created_at": datetime.now().isoformat()
+    }
+    
+    embed = Design.create_embed("✅ Ферма создана!", 
+                              f"Ваша майнинг ферма уровня 1 готова к работе!\n"
+                              f"Стоимость создания: {creation_cost} монет", "success")
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="собрать_доход", description="Собрать доход с фермы")
+async def собрать_доход(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        success, message = await bot.mining_system.collect_income(interaction.user.id)
+        
+        if success:
+            embed = Design.create_embed("💰 Доход собран!", message, "success")
+        else:
+            embed = Design.create_embed("❌ Ошибка", message, "danger")
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        embed = Design.create_embed("❌ Ошибка", "Произошла ошибка при сборе дохода", "danger")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="улучшить_ферму", description="Улучшить ферму")
+async def улучшить_ферму(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    
+    if user_id not in user_mining_farms:
+        await interaction.response.send_message("❌ У вас нет фермы!", ephemeral=True)
+        return
+    
+    farm = user_mining_farms[user_id]
+    current_level = farm["level"]
+    
+    if current_level >= 3:
+        await interaction.response.send_message("❌ Ваша ферма уже максимального уровня!", ephemeral=True)
+        return
+    
+    upgrade_cost = bot.mining_system.farm_levels[current_level]["upgrade_cost"]
+    balance = await bot.economy.get_balance(user_id)
+    
+    if balance < upgrade_cost:
+        await interaction.response.send_message(f"❌ Недостаточно средств! Нужно {upgrade_cost} монет", ephemeral=True)
+        return
+    
+    await bot.economy.update_balance(user_id, -upgrade_cost)
+    user_mining_farms[user_id]["level"] = current_level + 1
+    
+    embed = Design.create_embed("⚡ Ферма улучшена!", 
+                              f"Уровень фермы повышен до {current_level + 1}!\n"
+                              f"Новый доход: {bot.mining_system.farm_levels[current_level + 1]['income']} монет/6ч", "success")
+    await interaction.response.send_message(embed=embed)
+
+# ₿ КОМАНДЫ КРИПТОВАЛЮТЫ
+@bot.tree.command(name="крипта", description="Курсы криптовалют")
+async def крипта(interaction: discord.Interaction):
+    embed = Design.create_embed("₿ КРИПТОВАЛЮТЫ", "Актуальные курсы:", "crypto")
+    
+    for crypto, price in crypto_prices.items():
+        embed.add_field(
+            name=crypto,
+            value=f"${price:,.2f}",
+            inline=True
+        )
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="мой_крипто", description="Мой крипто-портфель")
+async def мой_крипто(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    
+    if user_id not in user_crypto or not user_crypto[user_id]:
+        await interaction.response.send_message("❌ У вас нет криптовалюты", ephemeral=True)
+        return
+    
+    embed = Design.create_embed("₿ Мой крипто-портфель", "", "crypto")
+    total_value = 0
+    
+    for crypto, amount in user_crypto[user_id].items():
+        value = amount * crypto_prices[crypto]
+        total_value += value
+        embed.add_field(
+            name=crypto,
+            value=f"Количество: {amount:.4f}\nСтоимость: ${value:.2f}",
+            inline=True
+        )
+    
+    embed.add_field(
+        name="💰 Общая стоимость",
+        value=f"${total_value:.2f}",
+        inline=False
+    )
+    
+    await interaction.response.send_message(embed=embed)
+
+# 🎪 КОМАНДЫ ИВЕНТОВ
+@bot.tree.command(name="ивенты", description="Активные ивенты")
+async def ивенты(interaction: discord.Interaction):
+    if not active_events:
+        embed = Design.create_embed("🎪 Ивенты", "Сейчас нет активных ивентов", "info")
+    else:
+        embed = Design.create_embed("🎪 АКТИВНЫЕ ИВЕНТЫ", "", "event")
+        for event_type, event_data in active_events.items():
+            time_left = event_data["end_time"] - datetime.now()
+            minutes_left = max(0, int(time_left.total_seconds() // 60))
+            
+            embed.add_field(
+                name=bot.event_system.event_types[event_type]["name"],
+                value=f"Осталось: {minutes_left} минут\n{bot.event_system.event_types[event_type]['description']}",
+                inline=False
+            )
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="запустить_ивент", description="Запустить ивент")
+@is_admin()
+async def запустить_ивент(interaction: discord.Interaction, тип: str):
+    event_types = {
+        "дождь": "money_rain"
+    }
+    
+    event_type = event_types.get(тип.lower())
+    if not event_type:
+        await interaction.response.send_message("❌ Неверный тип ивента! Доступно: `дождь`", ephemeral=True)
+        return
+    
+    success = await bot.event_system.start_event(event_type, bot)
+    
+    if success:
+        embed = Design.create_embed("✅ Ивент запущен!", f"Ивент **{bot.event_system.event_types[event_type]['name']}** активирован!", "success")
+    else:
+        embed = Design.create_embed("❌ Ошибка", "Не удалось запустить ивент", "danger")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# 👑 АДМИН КОМАНДЫ
+@bot.tree.command(name="выдать", description="Выдать монеты")
+@is_admin()
+async def выдать(interaction: discord.Interaction, пользователь: discord.Member, количество: int):
+    if количество <= 0:
+        await interaction.response.send_message("❌ Количество должно быть положительным!", ephemeral=True)
+        return
+    
+    new_balance = await bot.economy.admin_add_money(пользователь.id, количество)
+    
+    embed = Design.create_embed("💰 Деньги выданы", 
+                              f"**Пользователь:** {пользователь.mention}\n"
+                              f"**Выдано:** {количество:,} монет\n"
+                              f"**Новый баланс:** {new_balance:,} монет", "success")
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="удалить_бд", description="Удалить базу данных")
+@is_admin()
+async def удалить_бд(interaction: discord.Interaction):
+    import os
+    try:
+        if os.path.exists("data/bot.db"):
+            os.remove("data/bot.db")
+            await bot.db.init_db()
+            embed = Design.create_embed("✅ База данных удалена", "Все данные сброшены!", "success")
+        else:
+            embed = Design.create_embed("ℹ️ База не найдена", "Файл data/bot.db не существует", "info")
+    except Exception as e:
+        embed = Design.create_embed("❌ Ошибка", f"Не удалось удалить БД: {e}", "danger")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="админ", description="Панель администратора")
+@is_admin()
+async def админ(interaction: discord.Interaction):
+    description = (
+        "**АДМИН КОМАНДЫ:**\n\n"
+        "**Экономика:**\n"
+        "`/выдать @user количество` - Выдать монеты\n\n"
+        "**Управление:**\n"
+        "`/удалить_бд` - Очистить базу данных\n"
+        "`/перезагрузить` - Перезагрузить бота\n"
+        "`/запустить_ивент тип` - Запустить ивент"
+    )
+    
+    embed = Design.create_embed("ПАНЕЛЬ АДМИНИСТРАТОРА", description, "premium")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="перезагрузить", description="Перезагрузить бота")
+@is_admin()
+async def перезагрузить(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
+    
+    embed = Design.create_embed("🔄 Перезагрузка бота", "Выполняется перезагрузка...", "warning")
+    await interaction.followup.send(embed=embed)
+    
+    success = await bot.reload_bot()
+    
+    if success:
+        embed = Design.create_embed("✅ Перезагрузка завершена", "Бот успешно перезагружен!", "success")
+    else:
+        embed = Design.create_embed("❌ Ошибка перезагрузки", "Произошла ошибка при перезагрузке", "danger")
+    
+    await interaction.followup.send(embed=embed, ephemeral=True)
+
+@bot.event
+async def on_ready():
+    print(f'✅ Бот {bot.user} запущен!')
+    print(f'🌐 Серверов: {len(bot.guilds)}')
+    
+    try:
+        synced = await bot.tree.sync()
+        print(f'✅ Синхронизировано {len(synced)} команд')
+    except Exception as e:
+        print(f'❌ Ошибка синхронизации: {e}')
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+    
+    if isinstance(message.channel, discord.TextChannel):
+        async with aiosqlite.connect(bot.db.db_path) as db:
+            await db.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (message.author.id,))
+            await db.commit()
+    
+    await bot.process_commands(message)
+
 if __name__ == "__main__":
     try:
         print("🚀 Запуск бота...")
-        
-        # Запуск API в отдельном потоке
-        api_thread = threading.Thread(target=start_api_server, daemon=True)
-        api_thread.start()
-        print("🌐 API сервер запущен на порту 8000")
-        
         bot.run(TOKEN)
     except KeyboardInterrupt:
         print("\n🛑 Бот остановлен")

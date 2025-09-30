@@ -11,6 +11,13 @@ from dotenv import load_dotenv
 # 🔧 АДМИНЫ (твои ID)
 ADMIN_IDS = [1195144951546265675, 766767256742526996, 1138140772097597472]
 
+# 🎵 ДЛЯ МУЗЫКИ
+import yt_dlp
+import asyncio
+
+# Словарь для хранения варнов пользователей
+user_warns = {}
+
 def is_admin():
     """Проверка прав администратора"""
     async def predicate(interaction: discord.Interaction):
@@ -367,16 +374,126 @@ class ModerationSystem:
         await channel.send(embed=embed)
         return channel
 
-# 🎵 МУЗЫКА
+# 🎵 МУЗЫКА - ИСПРАВЛЕННАЯ ВЕРСИЯ
 class MusicPlayer:
     def __init__(self):
         self.queues = {}
-    
+        self.voice_clients = {}
+        
+        # Настройки для yt-dlp
+        self.ytdl_format_options = {
+            'format': 'bestaudio/best',
+            'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+            'restrictfilenames': True,
+            'noplaylist': True,
+            'nocheckcertificate': True,
+            'ignoreerrors': False,
+            'logtostderr': False,
+            'quiet': True,
+            'no_warnings': True,
+            'default_search': 'auto',
+            'source_address': '0.0.0.0'
+        }
+        
+        self.ffmpeg_options = {
+            'options': '-vn'
+        }
+        
+        self.ytdl = yt_dlp.YoutubeDL(self.ytdl_format_options)
+
     def get_queue(self, guild_id: int):
         if guild_id not in self.queues:
             self.queues[guild_id] = []
         return self.queues[guild_id]
-    
+
+    async def connect_to_voice_channel(self, interaction: discord.Interaction):
+        """Подключение к голосовому каналу"""
+        if not interaction.user.voice:
+            await interaction.response.send_message("❌ Вы не в голосовом канале! Зайдите в голосовой канал.", ephemeral=True)
+            return None
+        
+        voice_channel = interaction.user.voice.channel
+        
+        if interaction.guild.id in self.voice_clients:
+            voice_client = self.voice_clients[interaction.guild.id]
+            if voice_client.is_connected():
+                await voice_client.move_to(voice_channel)
+                return voice_client
+        
+        try:
+            voice_client = await voice_channel.connect()
+            self.voice_clients[interaction.guild.id] = voice_client
+            return voice_client
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Ошибка подключения: {e}", ephemeral=True)
+            return None
+
+    async def play_music(self, interaction: discord.Interaction, query: str):
+        """Воспроизведение музыки"""
+        voice_client = await self.connect_to_voice_channel(interaction)
+        if not voice_client:
+            return
+        
+        try:
+            # Получаем информацию о треке
+            data = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self.ytdl.extract_info(query, download=False)
+            )
+            
+            if 'entries' in data:
+                data = data['entries'][0]
+            
+            url = data['url']
+            title = data.get('title', 'Неизвестный трек')
+            duration = data.get('duration', 0)
+            
+            # Добавляем в очередь
+            queue = self.get_queue(interaction.guild.id)
+            queue.append({
+                'url': url,
+                'title': title,
+                'duration': duration,
+                'requester': interaction.user
+            })
+            
+            # Если ничего не играет, начинаем воспроизведение
+            if not voice_client.is_playing():
+                await self.play_next(interaction.guild.id)
+            
+            embed = Design.create_embed("🎵 Музыка", f"Добавлено в очередь: **{title}**\nПозиция в очереди: {len(queue)}", "music")
+            await interaction.response.send_message(embed=embed)
+            
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Ошибка воспроизведения: {e}", ephemeral=True)
+
+    async def play_next(self, guild_id: int):
+        """Воспроизведение следующего трека"""
+        queue = self.get_queue(guild_id)
+        if not queue:
+            return
+        
+        if guild_id not in self.voice_clients:
+            return
+        
+        voice_client = self.voice_clients[guild_id]
+        
+        if voice_client.is_playing():
+            return
+        
+        if queue:
+            track = queue.pop(0)
+            
+            def after_playing(error):
+                if error:
+                    print(f'Ошибка воспроизведения: {error}')
+                asyncio.run_coroutine_threadsafe(self.play_next(guild_id), voice_client.loop)
+            
+            try:
+                voice_client.play(discord.FFmpegPCMAudio(track['url'], **self.ffmpeg_options), after=after_playing)
+            except Exception as e:
+                print(f'Ошибка: {e}')
+                asyncio.run_coroutine_threadsafe(self.play_next(guild_id), voice_client.loop)
+
     def get_queue_embed(self, guild_id: int):
         queue = self.get_queue(guild_id)
         if not queue:
@@ -384,8 +501,21 @@ class MusicPlayer:
         
         embed = Design.create_embed("🎵 Очередь воспроизведения", f"Треков в очереди: {len(queue)}", "music")
         for i, track in enumerate(queue[:5], 1):
-            embed.add_field(name=f"{i}. {track}", value="---", inline=False)
+            duration = f" ({track['duration']} сек.)" if track['duration'] else ""
+            embed.add_field(name=f"{i}. {track['title']}{duration}", value=f"Запросил: {track['requester'].display_name}", inline=False)
         return embed
+
+    async def stop_music(self, guild_id: int):
+        """Остановка музыки"""
+        if guild_id in self.voice_clients:
+            voice_client = self.voice_clients[guild_id]
+            if voice_client.is_playing():
+                voice_client.stop()
+            
+            self.queues[guild_id] = []
+            
+            await voice_client.disconnect()
+            del self.voice_clients[guild_id]
 
 # 🏗️ ГЛАВНЫЙ БОТ
 class MegaBot(commands.Bot):
@@ -761,11 +891,105 @@ async def топ(interaction: discord.Interaction, тип: str = "уровень
     
     await interaction.response.send_message(embed=embed)
 
-# 🛡️ МОДЕРАЦИЯ КОМАНДЫ
-@bot.tree.command(name="мут", description="Замутить пользователя")
+# 🛡️ МОДЕРАЦИЯ КОМАНДЫ - ИСПРАВЛЕННЫЕ
+def parse_time(time_str: str) -> int:
+    """Парсинг времени из строки (1с, 1м, 1ч, 1д, 1н)"""
+    time_units = {
+        'с': 1, 'сек': 1, 'секунд': 1,
+        'м': 60, 'мин': 60, 'минут': 60, 
+        'ч': 3600, 'час': 3600, 'часов': 3600,
+        'д': 86400, 'день': 86400, 'дней': 86400,
+        'н': 604800, 'неделя': 604800, 'недель': 604800
+    }
+    
+    # Убираем пробелы и приводим к нижнему регистру
+    time_str = time_str.lower().replace(' ', '')
+    
+    # Ищем число и единицу измерения
+    num_str = ''
+    unit_str = ''
+    
+    for char in time_str:
+        if char.isdigit():
+            num_str += char
+        else:
+            unit_str += char
+    
+    if not num_str:
+        return 0
+    
+    number = int(num_str)
+    unit = unit_str.lower()
+    
+    if unit in time_units:
+        return number * time_units[unit]
+    else:
+        return 0
+
+@bot.tree.command(name="варн", description="Выдать варн пользователю (3 варна = мут на 1 час)")
+@commands.has_permissions(manage_messages=True)
+async def варн(interaction: discord.Interaction, пользователь: discord.Member, причина: str = "Не указана"):
+    # Инициализируем счетчик варнов для пользователя
+    if пользователь.id not in user_warns:
+        user_warns[пользователь.id] = 0
+    
+    user_warns[пользователь.id] += 1
+    current_warns = user_warns[пользователь.id]
+    
+    if current_warns >= 3:
+        # 3 варна = мут на 1 час
+        try:
+            mute_role = discord.utils.get(interaction.guild.roles, name="Muted")
+            if not mute_role:
+                mute_role = await interaction.guild.create_role(name="Muted")
+                
+                for channel in interaction.guild.channels:
+                    await channel.set_permissions(mute_role, send_messages=False, speak=False)
+            
+            await пользователь.add_roles(mute_role)
+            
+            # Сбрасываем варны
+            user_warns[пользователь.id] = 0
+            
+            embed = Design.create_embed("⚠️ МУТ за 3 варна", 
+                                      f"**Пользователь:** {пользователь.mention}\n"
+                                      f"**Причина:** Получено 3 предупреждения\n"
+                                      f"**Длительность:** 1 час\n"
+                                      f"**Последнее нарушение:** {причина}", "danger")
+            await interaction.response.send_message(embed=embed)
+            
+            # Автоматическое снятие мута через 1 час
+            await asyncio.sleep(3600)
+            if mute_role in пользователь.roles:
+                await пользователь.remove_roles(mute_role)
+                embed = Design.create_embed("✅ Мут снят", f"Мут с пользователя {пользователь.mention} снят", "success")
+                await interaction.channel.send(embed=embed)
+            
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+    else:
+        embed = Design.create_embed("⚠️ Варн", 
+                                  f"**Пользователь:** {пользователь.mention}\n"
+                                  f"**Причина:** {причина}\n"
+                                  f"**Текущее количество варнов:** {current_warns}/3\n"
+                                  f"**Следующий варн:** мут на 1 час", "warning")
+        await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="мут", description="Замутить пользователя (с, м, ч, д, н)")
 @commands.has_permissions(manage_roles=True)
-async def мут(interaction: discord.Interaction, пользователь: discord.Member, время: int, причина: str = "Не указана"):
+async def мут(interaction: discord.Interaction, пользователь: discord.Member, время: str, причина: str = "Не указана"):
     try:
+        # Парсим время
+        seconds = parse_time(время)
+        
+        if seconds <= 0:
+            await interaction.response.send_message("❌ Неверный формат времени! Используйте: 1с, 5м, 1ч, 2д, 1н", ephemeral=True)
+            return
+        
+        if seconds > 604800:  # Максимум 1 неделя
+            await interaction.response.send_message("❌ Максимальное время мута - 1 неделя", ephemeral=True)
+            return
+        
         mute_role = discord.utils.get(interaction.guild.roles, name="Muted")
         if not mute_role:
             mute_role = await interaction.guild.create_role(name="Muted")
@@ -774,10 +998,28 @@ async def мут(interaction: discord.Interaction, пользователь: dis
                 await channel.set_permissions(mute_role, send_messages=False, speak=False)
         
         await пользователь.add_roles(mute_role)
-        embed = Design.create_embed("✅ Мут", f"Пользователь {пользователь.mention} замьючен на {время} минут", "success")
+        
+        # Форматируем время для вывода
+        time_display = ""
+        if seconds >= 604800:
+            time_display = f"{seconds // 604800} недель"
+        elif seconds >= 86400:
+            time_display = f"{seconds // 86400} дней"
+        elif seconds >= 3600:
+            time_display = f"{seconds // 3600} часов"
+        elif seconds >= 60:
+            time_display = f"{seconds // 60} минут"
+        else:
+            time_display = f"{seconds} секунд"
+        
+        embed = Design.create_embed("✅ Мут", 
+                                  f"**Пользователь:** {пользователь.mention}\n"
+                                  f"**Длительность:** {time_display}\n"
+                                  f"**Причина:** {причина}", "success")
         await interaction.response.send_message(embed=embed)
         
-        await asyncio.sleep(время * 60)
+        # Автоматическое снятие мута
+        await asyncio.sleep(seconds)
         if mute_role in пользователь.roles:
             await пользователь.remove_roles(mute_role)
         
@@ -818,12 +1060,6 @@ async def очистить(interaction: discord.Interaction, количеств�
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
 
-@bot.tree.command(name="варн", description="Выдать варн")
-@commands.has_permissions(manage_messages=True)
-async def варн(interaction: discord.Interaction, пользователь: discord.Member, причина: str = "Не указана"):
-    embed = Design.create_embed("⚠️ Варн", f"Пользователь {пользователь.mention} получил предупреждение\n**Причина:** {причина}", "warning")
-    await interaction.response.send_message(embed=embed)
-
 @bot.tree.command(name="тикет", description="Создать тикет")
 async def тикет(interaction: discord.Interaction, причина: str):
     try:
@@ -833,41 +1069,40 @@ async def тикет(interaction: discord.Interaction, причина: str):
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
 
-# 🎵 МУЗЫКА КОМАНДЫ
-@bot.tree.command(name="play", description="Включить музыку")
+# 🎵 МУЗЫКА КОМАНДЫ - ИСПРАВЛЕННЫЕ
+@bot.tree.command(name="play", description="Включить музыку (YouTube ссылка или название)")
 async def play(interaction: discord.Interaction, запрос: str):
-    if not interaction.user.voice:
-        await interaction.response.send_message("❌ Зайди в голосовой канал!", ephemeral=True)
-        return
-    
-    queue = bot.music.get_queue(interaction.guild_id)
-    queue.append(запрос)
-    
-    embed = Design.create_embed("🎵 Музыка", f"Добавлено в очередь: {запрос}\nПозиция в очереди: {len(queue)}", "music")
-    await interaction.response.send_message(embed=embed)
+    await bot.music.play_music(interaction, запрос)
 
 @bot.tree.command(name="стоп", description="Остановить музыку")
 async def стоп(interaction: discord.Interaction):
-    if interaction.guild_id in bot.music.queues:
-        bot.music.queues[interaction.guild_id] = []
-    
-    embed = Design.create_embed("⏹️ Музыка", "Остановлено", "music")
-    await interaction.response.send_message(embed=embed)
+    try:
+        await bot.music.stop_music(interaction.guild.id)
+        embed = Design.create_embed("⏹️ Музыка", "Воспроизведение остановлено", "music")
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
 
-@bot.tree.command(name="скип", description="Пропустить трек")
+@bot.tree.command(name="скип", description="Пропустить текущий трек")
 async def скип(interaction: discord.Interaction):
-    queue = bot.music.get_queue(interaction.guild_id)
-    if queue:
-        skipped = queue.pop(0)
-        embed = Design.create_embed("⏭️ Музыка", f"Пропущено: {skipped}", "music")
-    else:
-        embed = Design.create_embed("⏭️ Музыка", "Очередь пуста", "music")
-    
-    await interaction.response.send_message(embed=embed)
+    try:
+        guild_id = interaction.guild.id
+        if guild_id in bot.music.voice_clients:
+            voice_client = bot.music.voice_clients[guild_id]
+            if voice_client.is_playing():
+                voice_client.stop()
+                embed = Design.create_embed("⏭️ Музыка", "Трек пропущен", "music")
+                await interaction.response.send_message(embed=embed)
+            else:
+                await interaction.response.send_message("❌ Сейчас ничего не играет", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Бот не подключен к голосовому каналу", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
 
-@bot.tree.command(name="очередь", description="Показать очередь")
+@bot.tree.command(name="очередь", description="Показать очередь треков")
 async def очередь(interaction: discord.Interaction):
-    embed = bot.music.get_queue_embed(interaction.guild_id)
+    embed = bot.music.get_queue_embed(interaction.guild.id)
     await interaction.response.send_message(embed=embed)
 
 # 🔧 УТИЛИТЫ КОМАНДЫ

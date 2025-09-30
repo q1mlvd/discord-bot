@@ -1,27 +1,20 @@
 import discord
-import yt_dlp
-import asyncio
 
 class MusicService:
-    def __init__(self, bot):
-        self.bot = bot
+    def __init__(self):
         self.queues = {}
-        self.ytdl = yt_dlp.YoutubeDL({'format': 'bestaudio/best'})
+        self.now_playing = {}
     
-    async def play_youtube(self, ctx, url: str):
-        """🎵 Воспроизведение YouTube"""
-        # Подключение к голосовому каналу
-        # Очередь треков
-        pass
+    async def add_to_queue(self, guild_id: int, track: str):
+        if guild_id not in self.queues:
+            self.queues[guild_id] = []
+        self.queues[guild_id].append(track)
+        return len(self.queues[guild_id])
     
-    async def karaoke_mode(self, ctx):
-        """🎤 Караоке-режим с текстами"""
-        # Отображение текста песни
-        # Система голосования
-        pass
-    
-    async def radio_stations(self):
-        """📻 Радиостанции с диджеями"""
-        # 10+ радиостанций
-        # Живые диджеи-боты
-        pass
+    async def skip_track(self, guild_id: int):
+        if guild_id in self.queues and self.queues[guild_id]:
+            self.queues[guild_id].pop(0)
+            return True
+        return False
+
+music_service = MusicService()

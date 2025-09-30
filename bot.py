@@ -8,7 +8,7 @@ import random
 import json
 import logging
 from typing import Optional, Dict, List
-from dotenv import load_dotenv
+from dotenv import load_dotenvцувпаукпрцкерцкерекцр
 import yt_dlp
 import aiohttp
 import shutil
@@ -1496,5 +1496,6 @@ if __name__ == "__main__":
         logging.info("\n🛑 Бот остановлен")
     except Exception as e:
         logging.error(f"❌ Ошибка запуска: {e}")
+
 
 

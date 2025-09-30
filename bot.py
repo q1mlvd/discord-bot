@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime, timedelta
 import os
 import random
-from typing import Optional
+from typing import Optionalа
 from dotenv import load_dotenv
 import yt_dlp
 import os
@@ -2116,4 +2116,5 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+
 

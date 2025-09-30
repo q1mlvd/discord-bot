@@ -331,18 +331,42 @@ class ModerationSystem:
         await channel.send(embed=embed)
         return channel
 
-# 🎵 МУЗЫКА - УПРОЩЕННАЯ
+# 🎵 МУЗЫКА - РАБОЧАЯ ВЕРСИЯ
 class MusicPlayer:
     def __init__(self):
         self.queues = {}
         self.voice_clients = {}
-    
+        self.now_playing = {}
+        
+        # Настройки для yt-dlp
+        self.ytdl_format_options = {
+            'format': 'bestaudio/best',
+            'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
+            'restrictfilenames': True,
+            'noplaylist': True,
+            'nocheckcertificate': True,
+            'ignoreerrors': False,
+            'logtostderr': False,
+            'quiet': True,
+            'no_warnings': True,
+            'default_search': 'auto',
+            'source_address': '0.0.0.0'
+        }
+        
+        self.ffmpeg_options = {
+            'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
+            'options': '-vn'
+        }
+        
+        self.ytdl = yt_dlp.YoutubeDL(self.ytdl_format_options)
+
     def get_queue(self, guild_id: int):
         if guild_id not in self.queues:
             self.queues[guild_id] = []
         return self.queues[guild_id]
-    
+
     async def connect_to_voice_channel(self, interaction: discord.Interaction):
+        """Подключение к голосовому каналу"""
         if not interaction.user.voice:
             await interaction.response.send_message("❌ Вы не в голосовом канале! Зайдите в голосовой канал.", ephemeral=True)
             return None
@@ -364,42 +388,140 @@ class MusicPlayer:
             return None
 
     async def play_music(self, interaction: discord.Interaction, query: str):
+        """Воспроизведение музыки"""
         voice_client = await self.connect_to_voice_channel(interaction)
         if not voice_client:
             return
         
-        queue = self.get_queue(interaction.guild.id)
-        queue.append({
-            'title': query,
-            'requester': interaction.user
-        })
+        try:
+            # Получаем информацию о треке
+            data = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: self.ytdl.extract_info(query, download=False)
+            )
+            
+            if 'entries' in data:
+                data = data['entries'][0]
+            
+            url = data['url']
+            title = data.get('title', 'Неизвестный трек')
+            duration = data.get('duration', 0)
+            
+            # Форматируем длительность
+            if duration:
+                minutes = duration // 60
+                seconds = duration % 60
+                duration_str = f"{minutes}:{seconds:02d}"
+            else:
+                duration_str = "Неизвестно"
+            
+            # Добавляем в очередь
+            queue = self.get_queue(interaction.guild.id)
+            track_info = {
+                'url': url,
+                'title': title,
+                'duration': duration_str,
+                'requester': interaction.user
+            }
+            queue.append(track_info)
+            
+            # Если ничего не играет, начинаем воспроизведение
+            if not voice_client.is_playing():
+                await self.play_next(interaction.guild.id, interaction.channel)
+                embed = Design.create_embed("🎵 Сейчас играет", 
+                                          f"**{title}**\n"
+                                          f"⏱️ Длительность: {duration_str}\n"
+                                          f"👤 Запросил: {interaction.user.mention}", "music")
+            else:
+                embed = Design.create_embed("🎵 Добавлено в очередь", 
+                                          f"**{title}**\n"
+                                          f"⏱️ Длительность: {duration_str}\n"
+                                          f"👤 Запросил: {interaction.user.mention}\n"
+                                          f"📋 Позиция в очереди: {len(queue)}", "music")
+            
+            await interaction.response.send_message(embed=embed)
+            
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Ошибка: Не удалось найти или воспроизвести трек", ephemeral=True)
+            print(f"Ошибка музыки: {e}")
+
+    async def play_next(self, guild_id: int, channel=None):
+        """Воспроизведение следующего трека"""
+        queue = self.get_queue(guild_id)
+        if not queue:
+            return
         
-        embed = Design.create_embed("🎵 Музыка", 
-                                  f"Добавлено в очередь: **{query}**\n"
-                                  f"Позиция в очереди: {len(queue)}\n\n"
-                                  f"⚠️ *Для работы музыки нужны дополнительные настройки*", "music")
-        await interaction.response.send_message(embed=embed)
+        if guild_id not in self.voice_clients:
+            return
+        
+        voice_client = self.voice_clients[guild_id]
+        
+        if voice_client.is_playing():
+            return
+        
+        if queue:
+            track = queue.pop(0)
+            self.now_playing[guild_id] = track
+            
+            def after_playing(error):
+                if error:
+                    print(f'Ошибка воспроизведения: {error}')
+                asyncio.run_coroutine_threadsafe(self.play_next(guild_id, channel), voice_client.loop)
+            
+            try:
+                source = discord.FFmpegPCMAudio(track['url'], **self.ffmpeg_options)
+                voice_client.play(source, after=after_playing)
+                
+                if channel:
+                    embed = Design.create_embed("🎵 Сейчас играет", 
+                                              f"**{track['title']}**\n"
+                                              f"⏱️ Длительность: {track['duration']}\n"
+                                              f"👤 Запросил: {track['requester'].mention}", "music")
+                    asyncio.run_coroutine_threadsafe(channel.send(embed=embed), voice_client.loop)
+                    
+            except Exception as e:
+                print(f'Ошибка воспроизведения: {e}')
+                asyncio.run_coroutine_threadsafe(self.play_next(guild_id, channel), voice_client.loop)
+
+    def get_queue_embed(self, guild_id: int):
+        queue = self.get_queue(guild_id)
+        embed = Design.create_embed("🎵 Очередь воспроизведения", "", "music")
+        
+        # Текущий трек
+        if guild_id in self.now_playing:
+            current = self.now_playing[guild_id]
+            embed.add_field(
+                name="🎵 Сейчас играет",
+                value=f"**{current['title']}**\n⏱️ {current['duration']} | 👤 {current['requester'].display_name}",
+                inline=False
+            )
+        
+        # Очередь
+        if queue:
+            embed.add_field(name=f"📋 Очередь ({len(queue)} треков)", value="", inline=False)
+            for i, track in enumerate(queue[:5], 1):
+                embed.add_field(
+                    name=f"{i}. {track['title']}",
+                    value=f"⏱️ {track['duration']} | 👤 {track['requester'].display_name}",
+                    inline=False
+                )
+        else:
+            embed.add_field(name="📋 Очередь", value="Очередь пуста", inline=False)
+        
+        return embed
 
     async def stop_music(self, guild_id: int):
+        """Остановка музыки"""
         if guild_id in self.voice_clients:
             voice_client = self.voice_clients[guild_id]
             if voice_client.is_playing():
                 voice_client.stop()
             
             self.queues[guild_id] = []
+            if guild_id in self.now_playing:
+                del self.now_playing[guild_id]
             
             await voice_client.disconnect()
             del self.voice_clients[guild_id]
-
-    def get_queue_embed(self, guild_id: int):
-        queue = self.get_queue(guild_id)
-        if not queue:
-            return Design.create_embed("🎵 Очередь пуста", "Добавьте треки с помощью /play", "music")
-        
-        embed = Design.create_embed("🎵 Очередь воспроизведения", f"Треков в очереди: {len(queue)}", "music")
-        for i, track in enumerate(queue[:5], 1):
-            embed.add_field(name=f"{i}. {track['title']}", value=f"Запросил: {track['requester'].display_name}", inline=False)
-        return embed
 
 # 🏗️ ГЛАВНЫЙ БОТ
 class MegaBot(commands.Bot):
@@ -1270,3 +1392,4 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+

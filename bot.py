@@ -1,9 +1,8 @@
 import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
 import discord
 from discord.ext import commands, tasks
 from discord.ui import Button, View
+import sqlite3
 import json
 import random
 import asyncio
@@ -11,53 +10,16 @@ import datetime
 import aiohttp
 from typing import Dict, List, Optional
 
-# Получение переменных окружения Railway
+# Получение токена из переменных окружения Railway
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
-DATABASE_URL = os.environ.get('DATABASE_URL')
 
 if not BOT_TOKEN:
-    print("Ошибка: BOT_TOKEN не установлен!")
+    print("Ошибка: BOT_TOKEN не установлен в переменных окружения!")
     exit(1)
 
 # Настройки бота
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
-
-# База данных PostgreSQL для Railway
-class Database:
-    def __init__(self):
-        self.conn = None
-        self.connect()
-        self.create_tables()
-    
-    def connect(self):
-        try:
-            self.conn = psycopg2.connect(DATABASE_URL, sslmode='require')
-            print("Подключение к PostgreSQL установлено")
-        except Exception as e:
-            print(f"Ошибка подключения к PostgreSQL: {e}")
-    
-    def create_tables(self):
-        try:
-            cursor = self.conn.cursor()
-            
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id BIGINT PRIMARY KEY,
-                    balance INTEGER DEFAULT 100,
-                    daily_streak INTEGER DEFAULT 0,
-                    last_daily TEXT,
-                    inventory TEXT DEFAULT '{}',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Остальные таблицы аналогично...
-            
-            self.conn.commit()
-            cursor.close()
-        except Exception as e:
-            print(f"Ошибка создания таблиц: {e}")
 
 # Конфигурация
 DATABASE_FILE = 'economy.db'
@@ -76,10 +38,10 @@ EMOJIS = {
     'quest': '🗺️'
 }
 
-# База данных
+# База данных SQLite
 class Database:
     def __init__(self):
-        self.conn = sqlite3.connect(DATABASE_FILE)
+        self.conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
         self.create_tables()
     
     def create_tables(self):
@@ -561,5 +523,3 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
-
-

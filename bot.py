@@ -522,4 +522,5 @@ async def on_ready():
     await bot.change_presence(activity=discord.Game(name="Экономическую игру"))
 
 if __name__ == "__main__":
-    bot.run('YOUR_BOT_TOKEN_HERE')
+    bot.run(BOT_TOKEN)
+

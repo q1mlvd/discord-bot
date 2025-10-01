@@ -598,7 +598,6 @@ class DuelView(View):
         
         await interaction.edit_original_response(embed=embed)
 
-# Также обновим команду дуэли для лучшего отображения
 @bot.tree.command(name="duel", description="Вызвать пользователя на дуэль")
 @app_commands.describe(user="Пользователь для дуэли", bet="Ставка в монетах")
 async def duel(interaction: discord.Interaction, user: discord.Member, bet: int):
@@ -1552,3 +1551,4 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
+

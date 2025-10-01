@@ -528,6 +528,7 @@ class CaseView(View):
         
         await interaction.edit_original_response(embed=embed)
 
+# ОБНОВЛЕННЫЙ КЛАСС ДУЭЛИ С 50/50 ШАНСОМ
 class DuelView(View):
     def __init__(self, challenger_id, target_id, bet):
         super().__init__(timeout=30)
@@ -597,40 +598,6 @@ class DuelView(View):
         embed.add_field(name="Шанс победы", value="50/50")
         
         await interaction.edit_original_response(embed=embed)
-
-@bot.tree.command(name="duel", description="Вызвать пользователя на дуэль")
-@app_commands.describe(user="Пользователь для дуэли", bet="Ставка в монетах")
-async def duel(interaction: discord.Interaction, user: discord.Member, bet: int):
-    if user.id == interaction.user.id:
-        await interaction.response.send_message("Нельзя вызвать на дуэль самого себя!", ephemeral=True)
-        return
-    
-    if bet <= 0:
-        await interaction.response.send_message("Ставка должна быть положительной!", ephemeral=True)
-        return
-    
-    user_data = db.get_user(interaction.user.id)
-    if user_data[1] < bet:
-        await interaction.response.send_message("У вас недостаточно монет для дуэли!", ephemeral=True)
-        return
-    
-    target_data = db.get_user(user.id)
-    if target_data[1] < bet:
-        await interaction.response.send_message(f"У {user.mention} недостаточно монет для дуэли!", ephemeral=True)
-        return
-    
-    embed = discord.Embed(
-        title=f"{EMOJIS['duel']} Вызов на дуэль!",
-        description=f"{interaction.user.mention} вызывает {user.mention} на дуэль!",
-        color=0xff0000
-    )
-    embed.add_field(name="Ставка", value=f"{bet} {EMOJIS['coin']}", inline=True)
-    embed.add_field(name="Шанс победы", value="50/50", inline=True)
-    embed.add_field(name="Время на ответ", value="30 секунд", inline=True)
-    embed.set_footer(text="Победитель забирает всю ставку!")
-    
-    view = DuelView(interaction.user.id, user.id, bet)
-    await interaction.response.send_message(embed=embed, view=view)
 
 # Улучшенная функция проверки прав администратора
 def is_admin():
@@ -1049,6 +1016,7 @@ async def dice(interaction: discord.Interaction, bet: int):
     )
     await interaction.response.send_message(embed=embed)
 
+# ОБНОВЛЕННАЯ КОМАНДА ДУЭЛИ С 50/50 ШАНСОМ
 @bot.tree.command(name="duel", description="Вызвать пользователя на дуэль")
 @app_commands.describe(user="Пользователь для дуэли", bet="Ставка в монетах")
 async def duel(interaction: discord.Interaction, user: discord.Member, bet: int):
@@ -1056,9 +1024,18 @@ async def duel(interaction: discord.Interaction, user: discord.Member, bet: int)
         await interaction.response.send_message("Нельзя вызвать на дуэль самого себя!", ephemeral=True)
         return
     
+    if bet <= 0:
+        await interaction.response.send_message("Ставка должна быть положительной!", ephemeral=True)
+        return
+    
     user_data = db.get_user(interaction.user.id)
     if user_data[1] < bet:
         await interaction.response.send_message("У вас недостаточно монет для дуэли!", ephemeral=True)
+        return
+    
+    target_data = db.get_user(user.id)
+    if target_data[1] < bet:
+        await interaction.response.send_message(f"У {user.mention} недостаточно монет для дуэли!", ephemeral=True)
         return
     
     embed = discord.Embed(
@@ -1066,8 +1043,10 @@ async def duel(interaction: discord.Interaction, user: discord.Member, bet: int)
         description=f"{interaction.user.mention} вызывает {user.mention} на дуэль!",
         color=0xff0000
     )
-    embed.add_field(name="Ставка", value=f"{bet} {EMOJIS['coin']}")
-    embed.add_field(name="Время на ответ", value="30 секунд")
+    embed.add_field(name="Ставка", value=f"{bet} {EMOJIS['coin']}", inline=True)
+    embed.add_field(name="Шанс победы", value="50/50", inline=True)
+    embed.add_field(name="Время на ответ", value="30 секунд", inline=True)
+    embed.set_footer(text="Победитель забирает всю ставку!")
     
     view = DuelView(interaction.user.id, user.id, bet)
     await interaction.response.send_message(embed=embed, view=view)
@@ -1239,7 +1218,7 @@ async def achievements(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
-# Админ-команды (остаются без изменений)
+# Админ-команды
 @bot.tree.command(name="admin_addcoins", description="Добавить монеты пользователю (админ)")
 @app_commands.describe(user="Пользователь", amount="Количество монет")
 @is_admin()
@@ -1489,7 +1468,7 @@ async def help_command(interaction: discord.Interaction):
         name="🎮 Мини-игры",
         value="""**/roulette** ставка - Игра в рулетку
 **/dice** ставка - Игра в кости
-**/duel** @пользователь ставка - Дуэль с игроком
+**/duel** @пользователь ставка - Дуэль с игроком (50/50 шанс)
 **/quest** - Получить случайный квест (КД 3 часа)
 **/steal** @пользователь - Попытаться украсть монеты (случайная сумма)""",
         inline=False
@@ -1551,4 +1530,3 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
-

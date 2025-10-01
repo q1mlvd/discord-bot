@@ -1,3 +1,4 @@
+# ЗАМЕНИТЕ эти импорты в начале файла
 import discord
 from discord.ext import commands, tasks
 import aiosqlite
@@ -7,8 +8,7 @@ import os
 import random
 from typing import Optional
 from dotenv import load_dotenv
-import yt_dlp
-import json
+import json  # Добавьте этот импорт
 
 # 🔧 КОНСТАНТЫ
 ADMIN_IDS = [1195144951546265675, 766767256742526996, 1078693283695448064, 1138140772097597472, 691904643181314078]
@@ -401,11 +401,12 @@ class LootboxSystem:
 
 # 🎨 СИСТЕМА NFT
 class NFTSystem:
-    def __init__(self, economy: EconomySystem):
+    def __init__(self, economy: EconomySystem, db_path: str):  # Измените конструктор
         self.economy = economy
+        self.db_path = db_path  # Добавьте путь к БД
     
     async def create_collection(self, creator_id: int, name: str, description: str, supply: int, image_url: str = None):
-        async with aiosqlite.connect(bot.db.db_path) as db:
+        async with aiosqlite.connect(self.db_path) as db:  # Используйте self.db_path
             cursor = await db.execute('''
                 INSERT INTO nft_collections (name, description, creator_id, created_at, image_url, supply, available)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -718,7 +719,7 @@ class MegaBot(commands.Bot):
         
         self.credit_system = CreditSystem(self.economy)
         self.lootbox_system = LootboxSystem(self.economy)
-        self.nft_system = NFTSystem(self.economy)
+        self.nft_system = NFTSystem(self.economy, self.db.db_path)  # Передаем путь к БД
         self.case_system = CaseSystem(self.economy, self.nft_system)
         self.mining_system = MiningSystem(self.economy)
         self.event_system = EventSystem(self.economy)
@@ -1617,3 +1618,4 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+

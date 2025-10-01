@@ -1054,8 +1054,9 @@ async def duel(interaction: discord.Interaction, user: discord.Member, bet: int)
     await interaction.response.send_message(embed=embed, view=view)
 
 # Измененная команда /steal с рандомной суммой
-@bot.tree.command(name="steal", description="Попытаться украсть монеты у другого пользователя")
+@bot.tree.command(name="steal", description="Попытаться украсть монеты у другого пользователя (КД 30 мин)")
 @app_commands.describe(user="Пользователь, у которого крадем")
+@app_commands.checks.cooldown(1, 1800.0, key=lambda i: (i.guild_id, i.user.id))  # 30 минут кд
 async def steal(interaction: discord.Interaction, user: discord.Member):
     if user.id == interaction.user.id:
         await interaction.response.send_message("Нельзя красть у себя!", ephemeral=True)
@@ -1104,6 +1105,21 @@ async def steal(interaction: discord.Interaction, user: discord.Member):
         )
     
     await interaction.response.send_message(embed=embed)
+
+# Обработчик кд для /steal
+@steal.error
+async def steal_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CommandOnCooldown):
+        # Преобразуем время в читаемый формат
+        minutes = int(error.retry_after // 60)
+        seconds = int(error.retry_after % 60)
+        
+        await interaction.response.send_message(
+            f"❌ Следующую кражу можно совершить через {minutes} минут {seconds:02d} секунд",
+            ephemeral=True
+        )
+    else:
+        raise error
 
 # Команда /quest с кд 3 часа
 @bot.tree.command(name="quest", description="Получить случайный квест")
@@ -1472,7 +1488,7 @@ async def help_command(interaction: discord.Interaction):
 **/dice** ставка - Игра в кости
 **/duel** @пользователь ставка - Дуэль с игроком (50/50 шанс)
 **/quest** - Получить случайный квест (КД 3 часа)
-**/steal** @пользователь - Попытаться украсть монеты (случайная сумма)""",
+**/steal** @пользователь - Попытаться украсть монеты (случайная сумма, КД 30 мин)""",
         inline=False
     )
     
@@ -1532,6 +1548,7 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
+
 
 
 

@@ -25,7 +25,7 @@ bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 # Конфигурация
 DATABASE_FILE = 'economy.db'
 LOG_CHANNEL_ID = 1422557295811887175
-ADMIN_ROLES = ['Admin', 'Moderator']
+ADMIN_ROLES_ID = ['993042425809473596', '1188261847850299514', '1365798715930968244', '1269614293108789278', '1259892523053092874']
 
 # Эмодзи для оформления
 EMOJIS = {
@@ -1422,3 +1422,4 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
+

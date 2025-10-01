@@ -26,8 +26,11 @@ bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 DATABASE_FILE = 'economy.db'
 LOG_CHANNEL_ID = 1422557295811887175
 
-# ID администраторов (замените на реальные ID пользователей)
-ADMIN_IDS = [766767256742526996, 1195144951546265675, 691904643181314078, 1078693283695448064, 1138140772097597472]  # Пример ID
+# ID администраторов (используем целые числа)
+ADMIN_IDS = [766767256742526996, 1195144951546265675, 691904643181314078, 1078693283695448064, 1138140772097597472]
+
+# ID администратора для уведомлений
+ADMIN_USER_ID = 1188261847850299514
 
 # Эмодзи для оформления
 EMOJIS = {
@@ -156,36 +159,42 @@ class Database:
         # Проверяем, есть ли уже кейсы
         cursor.execute('SELECT COUNT(*) FROM cases')
         if cursor.fetchone()[0] == 0:
-            # Добавляем стандартные кейсы
+            # Добавляем стандартные кейсы с измененными шансами
             default_cases = [
                 ('📦 Малый кейс', 50, json.dumps([
-                    {'type': 'coins', 'amount': [20, 50], 'chance': 0.7},
-                    {'type': 'coins', 'amount': [51, 100], 'chance': 0.3}
+                    {'type': 'coins', 'amount': [10, 30], 'chance': 0.8},
+                    {'type': 'coins', 'amount': [31, 60], 'chance': 0.15},
+                    {'type': 'coins', 'amount': [61, 100], 'chance': 0.05}
                 ])),
                 ('📦 Средний кейс', 150, json.dumps([
-                    {'type': 'coins', 'amount': [80, 150], 'chance': 0.6},
-                    {'type': 'coins', 'amount': [151, 300], 'chance': 0.3},
-                    {'type': 'role', 'name': 'Временный VIP', 'duration': 24, 'chance': 0.1}
+                    {'type': 'coins', 'amount': [50, 100], 'chance': 0.7},
+                    {'type': 'coins', 'amount': [101, 200], 'chance': 0.2},
+                    {'type': 'role', 'name': 'Временный VIP', 'duration': 24, 'chance': 0.08},
+                    {'type': 'coins', 'amount': [201, 300], 'chance': 0.02}
                 ])),
                 ('💎 Большой кейс', 500, json.dumps([
-                    {'type': 'coins', 'amount': [300, 600], 'chance': 0.5},
-                    {'type': 'coins', 'amount': [601, 1000], 'chance': 0.3},
-                    {'type': 'custom_role', 'chance': 0.15},
-                    {'type': 'special_item', 'name': 'Золотой ключ', 'chance': 0.05}
+                    {'type': 'coins', 'amount': [150, 300], 'chance': 0.6},
+                    {'type': 'coins', 'amount': [301, 500], 'chance': 0.25},
+                    {'type': 'custom_role', 'chance': 0.08},
+                    {'type': 'special_item', 'name': 'Золотой ключ', 'chance': 0.05},
+                    {'type': 'coins', 'amount': [501, 800], 'chance': 0.02}
                 ])),
                 ('👑 Элитный кейс', 1000, json.dumps([
-                    {'type': 'coins', 'amount': [800, 1500], 'chance': 0.4},
-                    {'type': 'custom_role', 'chance': 0.3},
-                    {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.2},
-                    {'type': 'bonus', 'multiplier': 2.0, 'duration': 48, 'chance': 0.1}
+                    {'type': 'coins', 'amount': [400, 700], 'chance': 0.5},
+                    {'type': 'custom_role', 'chance': 0.15},
+                    {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.12},
+                    {'type': 'bonus', 'multiplier': 2.0, 'duration': 48, 'chance': 0.1},
+                    {'type': 'coins', 'amount': [701, 1200], 'chance': 0.08},
+                    {'type': 'coins', 'amount': [1201, 2000], 'chance': 0.05}
                 ])),
                 ('🔮 Секретный кейс', 2000, json.dumps([
-                    {'type': 'coins', 'amount': [1000, 5000], 'chance': 0.3},
-                    {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.1},
-                    {'type': 'custom_role', 'chance': 0.2},
-                    {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.15},
-                    {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.1},
-                    {'type': 'multiple', 'count': 3, 'chance': 0.15}
+                    {'type': 'coins', 'amount': [800, 1500], 'chance': 0.4},
+                    {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.15},
+                    {'type': 'custom_role', 'chance': 0.12},
+                    {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.1},
+                    {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.08},
+                    {'type': 'multiple', 'count': 3, 'chance': 0.08},
+                    {'type': 'coins', 'amount': [1501, 4000], 'chance': 0.07}
                 ]))
             ]
             
@@ -403,6 +412,32 @@ def get_reward(case):
             return reward
     return case['rewards'][-1]
 
+async def create_custom_role_webhook(user):
+    try:
+        # Получаем канал для логов
+        channel = bot.get_channel(LOG_CHANNEL_ID)
+        if channel:
+            # Создаем вебхук
+            webhook = await channel.create_webhook(name=f"Role-{user.name}")
+            
+            # Создаем сообщение с пингом
+            message = f"🎉 <@{user.id}> Поздравляю, вам выпала кастом роль на 2 дня, администратор <@{ADMIN_USER_ID}> скоро вам ответит и вы выберете свою роль"
+            
+            # Отправляем сообщение через вебхук
+            await webhook.send(
+                content=message,
+                username="Case System",
+                avatar_url=bot.user.avatar.url if bot.user.avatar else None
+            )
+            
+            # Удаляем вебхук после использования
+            await webhook.delete()
+            
+            return True
+    except Exception as e:
+        print(f"Ошибка создания вебхука для роли: {e}")
+    return False
+
 async def process_reward(user, reward, case):
     if reward['type'] == 'coins':
         amount = random.randint(reward['amount'][0], reward['amount'][1])
@@ -411,8 +446,8 @@ async def process_reward(user, reward, case):
         return f"Монеты: {amount} {EMOJIS['coin']}"
     
     elif reward['type'] == 'custom_role':
-        await create_custom_role(user)
-        return "🎭 Кастомная роль!"
+        await create_custom_role_webhook(user)
+        return "🎭 Кастомная роль! (Создан запрос в канале администрации)"
     
     elif reward['type'] == 'special_item':
         db.add_item_to_inventory(user.id, reward['name'])
@@ -432,27 +467,6 @@ async def process_reward(user, reward, case):
         return f"👑 Роль: {reward['name']} на {reward['duration']}ч"
     
     return "Неизвестная награда"
-
-async def create_custom_role(user):
-    try:
-        # Создание тикета через вебхук
-        channel = bot.get_channel(LOG_CHANNEL_ID)
-        if channel:
-            embed = discord.Embed(
-                title="🎭 Запрос на создание кастомной роли",
-                description=f"Пользователь {user.mention} выиграл кастомную роль!",
-                color=0xff69b4,
-                timestamp=datetime.datetime.now()
-            )
-            embed.add_field(name="Пользователь", value=f"{user.name}#{user.discriminator}")
-            embed.add_field(name="ID", value=user.id)
-            
-            webhook = await channel.create_webhook(name="Role Creator")
-            await webhook.send(embed=embed, username="Case System")
-            await webhook.delete()
-            
-    except Exception as e:
-        print(f"Ошибка создания роли: {e}")
 
 class CaseView(View):
     def __init__(self, case_id, user_id):
@@ -520,11 +534,16 @@ class DuelView(View):
         self.challenger_id = challenger_id
         self.target_id = target_id
         self.bet = bet
+        self.accepted = False
     
     @discord.ui.button(label='Принять дуэль', style=discord.ButtonStyle.success, emoji='⚔️')
     async def accept_duel(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.target_id:
             await interaction.response.send_message("Эта дуэль не для вас!", ephemeral=True)
+            return
+        
+        if self.accepted:
+            await interaction.response.send_message("Дуэль уже принята!", ephemeral=True)
             return
         
         # Проверяем баланс
@@ -533,11 +552,29 @@ class DuelView(View):
             await interaction.response.send_message("У вас недостаточно монет для принятия дуэли!", ephemeral=True)
             return
         
+        self.accepted = True
+        
         # Снимаем ставки
         db.update_balance(self.challenger_id, -self.bet)
         db.update_balance(self.target_id, -self.bet)
         
-        # Определяем победителя
+        # Анимация дуэли
+        embed = discord.Embed(
+            title=f"{EMOJIS['duel']} Дуэль начинается!",
+            description="⚔️ Противники готовятся к бою...",
+            color=0xff0000
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+        
+        # Анимация обратного отсчета
+        for i in range(3, 0, -1):
+            await asyncio.sleep(1)
+            embed.description = f"⚔️ Дуэль начнется через {i}..."
+            await interaction.edit_original_response(embed=embed)
+        
+        await asyncio.sleep(1)
+        
+        # Определяем победителя - настоящий 50/50 шанс
         winner_id = random.choice([self.challenger_id, self.target_id])
         loser_id = self.target_id if winner_id == self.challenger_id else self.challenger_id
         
@@ -553,18 +590,87 @@ class DuelView(View):
         
         embed = discord.Embed(
             title=f"{EMOJIS['duel']} Результат дуэли",
-            description=f"Победитель: {winner.mention}\nПроигравший: {loser.mention}",
+            description=f"**Победитель:** {winner.mention}\n**Проигравший:** {loser.mention}",
             color=0x00ff00
         )
         embed.add_field(name="Выигрыш", value=f"{self.bet * 2} {EMOJIS['coin']}")
+        embed.add_field(name="Шанс победы", value="50/50")
         
-        await interaction.response.edit_message(embed=embed, view=None)
+        await interaction.edit_original_response(embed=embed)
 
-# Функция проверки прав администратора
+# Также обновим команду дуэли для лучшего отображения
+@bot.tree.command(name="duel", description="Вызвать пользователя на дуэль")
+@app_commands.describe(user="Пользователь для дуэли", bet="Ставка в монетах")
+async def duel(interaction: discord.Interaction, user: discord.Member, bet: int):
+    if user.id == interaction.user.id:
+        await interaction.response.send_message("Нельзя вызвать на дуэль самого себя!", ephemeral=True)
+        return
+    
+    if bet <= 0:
+        await interaction.response.send_message("Ставка должна быть положительной!", ephemeral=True)
+        return
+    
+    user_data = db.get_user(interaction.user.id)
+    if user_data[1] < bet:
+        await interaction.response.send_message("У вас недостаточно монет для дуэли!", ephemeral=True)
+        return
+    
+    target_data = db.get_user(user.id)
+    if target_data[1] < bet:
+        await interaction.response.send_message(f"У {user.mention} недостаточно монет для дуэли!", ephemeral=True)
+        return
+    
+    embed = discord.Embed(
+        title=f"{EMOJIS['duel']} Вызов на дуэль!",
+        description=f"{interaction.user.mention} вызывает {user.mention} на дуэль!",
+        color=0xff0000
+    )
+    embed.add_field(name="Ставка", value=f"{bet} {EMOJIS['coin']}", inline=True)
+    embed.add_field(name="Шанс победы", value="50/50", inline=True)
+    embed.add_field(name="Время на ответ", value="30 секунд", inline=True)
+    embed.set_footer(text="Победитель забирает всю ставку!")
+    
+    view = DuelView(interaction.user.id, user.id, bet)
+    await interaction.response.send_message(embed=embed, view=view)
+
+# Улучшенная функция проверки прав администратора
 def is_admin():
-    def predicate(interaction: discord.Interaction) -> bool:
-        return interaction.user.id in ADMIN_IDS
+    async def predicate(interaction: discord.Interaction) -> bool:
+        # Проверяем ID пользователя
+        is_admin = interaction.user.id in ADMIN_IDS
+        
+        # Если пользователь не админ, отправляем сообщение
+        if not is_admin:
+            await interaction.response.send_message(
+                "❌ У вас нет прав для использования этой команды!",
+                ephemeral=True
+            )
+        return is_admin
     return app_commands.check(predicate)
+
+# Обработчик ошибок для команд
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CheckFailure):
+        # Эта ошибка уже обработана в проверке is_admin
+        return
+    elif isinstance(error, app_commands.CommandNotFound):
+        await interaction.response.send_message("❌ Команда не найдена!", ephemeral=True)
+    elif isinstance(error, app_commands.MissingPermissions):
+        await interaction.response.send_message("❌ Недостаточно прав!", ephemeral=True)
+    else:
+        print(f"Произошла ошибка: {error}")
+        try:
+            await interaction.response.send_message(
+                "❌ Произошла неизвестная ошибка при выполнении команды!",
+                ephemeral=True
+            )
+        except:
+            # Если уже был ответ, используем followup
+            await interaction.followup.send(
+                "❌ Произошла неизвестная ошибка при выполнении команды!",
+                ephemeral=True
+            )
 
 # Команды бота
 
@@ -581,7 +687,11 @@ async def balance(interaction: discord.Interaction, user: discord.Member = None)
     )
     embed.add_field(name="Баланс", value=f"{user_data[1]} {EMOJIS['coin']}", inline=True)
     embed.add_field(name="Ежедневная серия", value=f"{user_data[2]} дней", inline=True)
-    embed.set_thumbnail(url=user.avatar.url if user.avatar else user.default_avatar.url)
+    
+    if user.avatar:
+        embed.set_thumbnail(url=user.avatar.url)
+    elif user.default_avatar:
+        embed.set_thumbnail(url=user.default_avatar.url)
     
     await interaction.response.send_message(embed=embed)
 
@@ -963,23 +1073,10 @@ async def duel(interaction: discord.Interaction, user: discord.Member, bet: int)
     view = DuelView(interaction.user.id, user.id, bet)
     await interaction.response.send_message(embed=embed, view=view)
 
-@bot.tree.command(name="quest", description="Получить случайный квест")
-async def quest(interaction: discord.Interaction):
-    quest_id, quest_data = random.choice(list(QUESTS.items()))
-    
-    embed = discord.Embed(
-        title=f"{EMOJIS['quest']} Новый квест!",
-        description=quest_data['description'],
-        color=0x00ff00
-    )
-    embed.add_field(name="Награда", value=f"{quest_data['reward']} {EMOJIS['coin']}")
-    
-    await interaction.response.send_message(embed=embed)
-
-# Команды краж
+# Измененная команда /steal с рандомной суммой
 @bot.tree.command(name="steal", description="Попытаться украсть монеты у другого пользователя")
-@app_commands.describe(user="Пользователь, у которого крадем", amount="Сумма для кражи")
-async def steal(interaction: discord.Interaction, user: discord.Member, amount: int):
+@app_commands.describe(user="Пользователь, у которого крадем")
+async def steal(interaction: discord.Interaction, user: discord.Member):
     if user.id == interaction.user.id:
         await interaction.response.send_message("Нельзя красть у себя!", ephemeral=True)
         return
@@ -991,9 +1088,18 @@ async def steal(interaction: discord.Interaction, user: discord.Member, amount: 
         await interaction.response.send_message("Нужно минимум 10 монет для кражи!", ephemeral=True)
         return
     
-    if target_data[1] < amount:
-        await interaction.response.send_message("У цели недостаточно монет!", ephemeral=True)
+    if target_data[1] < 10:
+        await interaction.response.send_message("У цели недостаточно монет для кражи!", ephemeral=True)
         return
+    
+    # Вычисляем случайную сумму для кражи (от 5% до 20% от баланса цели, но не более 1000)
+    max_steal = min(int(target_data[1] * 0.2), 1000)
+    min_steal = max(int(target_data[1] * 0.05), 10)
+    
+    if max_steal < min_steal:
+        amount = min_steal
+    else:
+        amount = random.randint(min_steal, max_steal)
     
     success_chance = 0.3
     if random.random() <= success_chance:
@@ -1018,6 +1124,37 @@ async def steal(interaction: discord.Interaction, user: discord.Member, amount: 
         )
     
     await interaction.response.send_message(embed=embed)
+
+# Команда /quest с кд 3 часа
+@bot.tree.command(name="quest", description="Получить случайный квест")
+@app_commands.checks.cooldown(1, 10800.0)  # 3 часа в секундах
+async def quest(interaction: discord.Interaction):
+    quest_id, quest_data = random.choice(list(QUESTS.items()))
+    
+    embed = discord.Embed(
+        title=f"{EMOJIS['quest']} Новый квест!",
+        description=quest_data['description'],
+        color=0x00ff00
+    )
+    embed.add_field(name="Награда", value=f"{quest_data['reward']} {EMOJIS['coin']}")
+    
+    await interaction.response.send_message(embed=embed)
+
+# Обработчик кд для /quest
+@quest.error
+async def quest_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CommandOnCooldown):
+        # Преобразуем время в читаемый формат
+        hours = int(error.retry_after // 3600)
+        minutes = int((error.retry_after % 3600) // 60)
+        seconds = int(error.retry_after % 60)
+        
+        await interaction.response.send_message(
+            f"❌ Следующий квест можно будет получить через {hours:02d}:{minutes:02d}:{seconds:02d}",
+            ephemeral=True
+        )
+    else:
+        raise error
 
 # Достижения и лидерборды
 @bot.tree.command(name="leaderboard", description="Показать таблицу лидеров")
@@ -1103,68 +1240,80 @@ async def achievements(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
-# Админ-команды
+# Админ-команды (остаются без изменений)
 @bot.tree.command(name="admin_addcoins", description="Добавить монеты пользователю (админ)")
 @app_commands.describe(user="Пользователь", amount="Количество монет")
 @is_admin()
 async def admin_addcoins(interaction: discord.Interaction, user: discord.Member, amount: int):
-    db.update_balance(user.id, amount)
-    db.log_transaction(interaction.user.id, 'admin_add', amount, user.id, f"Админ {interaction.user.name}")
-    
-    embed = discord.Embed(
-        title="⚙️ Админ действие",
-        description=f"Выдано {amount} {EMOJIS['coin']} пользователю {user.mention}",
-        color=0x00ff00
-    )
-    await interaction.response.send_message(embed=embed)
+    try:
+        db.update_balance(user.id, amount)
+        db.log_transaction(interaction.user.id, 'admin_add', amount, user.id, f"Админ {interaction.user.name}")
+        
+        embed = discord.Embed(
+            title="⚙️ Админ действие",
+            description=f"Выдано {amount} {EMOJIS['coin']} пользователю {user.mention}",
+            color=0x00ff00
+        )
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
 
 @bot.tree.command(name="admin_removecoins", description="Забрать монеты у пользователя (админ)")
 @app_commands.describe(user="Пользователь", amount="Количество монет")
 @is_admin()
 async def admin_removecoins(interaction: discord.Interaction, user: discord.Member, amount: int):
-    db.update_balance(user.id, -amount)
-    db.log_transaction(interaction.user.id, 'admin_remove', -amount, user.id, f"Админ {interaction.user.name}")
-    
-    embed = discord.Embed(
-        title="⚙️ Админ действие",
-        description=f"Забрано {amount} {EMOJIS['coin']} у пользователя {user.mention}",
-        color=0xff0000
-    )
-    await interaction.response.send_message(embed=embed)
+    try:
+        db.update_balance(user.id, -amount)
+        db.log_transaction(interaction.user.id, 'admin_remove', -amount, user.id, f"Админ {interaction.user.name}")
+        
+        embed = discord.Embed(
+            title="⚙️ Админ действие",
+            description=f"Забрано {amount} {EMOJIS['coin']} у пользователя {user.mention}",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
 
 @bot.tree.command(name="admin_giveitem", description="Выдать предмет пользователю (админ)")
 @app_commands.describe(user="Пользователь", item_name="Название предмета")
 @is_admin()
 async def admin_giveitem(interaction: discord.Interaction, user: discord.Member, item_name: str):
-    db.add_item_to_inventory(user.id, item_name)
-    
-    embed = discord.Embed(
-        title="⚙️ Админ действие",
-        description=f"Предмет '{item_name}' выдан пользователю {user.mention}",
-        color=0x00ff00
-    )
-    await interaction.response.send_message(embed=embed)
+    try:
+        db.add_item_to_inventory(user.id, item_name)
+        
+        embed = discord.Embed(
+            title="⚙️ Админ действие",
+            description=f"Предмет '{item_name}' выдан пользователю {user.mention}",
+            color=0x00ff00
+        )
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
 
 @bot.tree.command(name="admin_removeitem", description="Забрать предмет у пользователя (админ)")
 @app_commands.describe(user="Пользователь", item_name="Название предмета")
 @is_admin()
 async def admin_removeitem(interaction: discord.Interaction, user: discord.Member, item_name: str):
-    success = db.remove_item_from_inventory(user.id, item_name)
-    
-    if success:
-        embed = discord.Embed(
-            title="⚙️ Админ действие",
-            description=f"Предмет '{item_name}' забран у пользователя {user.mention}",
-            color=0xff0000
-        )
-    else:
-        embed = discord.Embed(
-            title="⚙️ Админ действие",
-            description=f"У пользователя {user.mention} нет предмета '{item_name}'",
-            color=0xff0000
-        )
-    
-    await interaction.response.send_message(embed=embed)
+    try:
+        success = db.remove_item_from_inventory(user.id, item_name)
+        
+        if success:
+            embed = discord.Embed(
+                title="⚙️ Админ действие",
+                description=f"Предмет '{item_name}' забран у пользователя {user.mention}",
+                color=0xff0000
+            )
+        else:
+            embed = discord.Embed(
+                title="⚙️ Админ действие",
+                description=f"У пользователя {user.mention} нет предмета '{item_name}'",
+                color=0xff0000
+            )
+        
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
 
 @bot.tree.command(name="admin_createcase", description="Создать новый кейс (админ)")
 @app_commands.describe(name="Название кейса", price="Цена кейса", rewards_json="Награды в формате JSON")
@@ -1179,32 +1328,29 @@ async def admin_createcase(interaction: discord.Interaction, name: str, price: i
             description=f"Создан новый кейс: {name}\nЦена: {price} {EMOJIS['coin']}\nID: {case_id}",
             color=0x00ff00
         )
+        await interaction.response.send_message(embed=embed)
     except json.JSONDecodeError:
-        embed = discord.Embed(
-            title="❌ Ошибка",
-            description="Неверный формат JSON для наград",
-            color=0xff0000
-        )
-    
-    await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message("❌ Неверный формат JSON для наград", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
 
 @bot.tree.command(name="admin_editcase", description="Редактировать кейс (админ)")
 @app_commands.describe(case_id="ID кейса", name="Новое название", price="Новая цена", rewards_json="Новые награды в формате JSON")
 @is_admin()
 async def admin_editcase(interaction: discord.Interaction, case_id: int, name: str = None, price: int = None, rewards_json: str = None):
-    case_data = db.get_case(case_id)
-    if not case_data:
-        await interaction.response.send_message("Кейс не найден!", ephemeral=True)
-        return
-    
-    current_name = case_data[1]
-    current_price = case_data[2]
-    current_rewards = case_data[3]
-    
-    new_name = name if name else current_name
-    new_price = price if price else current_price
-    
     try:
+        case_data = db.get_case(case_id)
+        if not case_data:
+            await interaction.response.send_message("❌ Кейс не найден!", ephemeral=True)
+            return
+        
+        current_name = case_data[1]
+        current_price = case_data[2]
+        current_rewards = case_data[3]
+        
+        new_name = name if name else current_name
+        new_price = price if price else current_price
+        
         new_rewards = json.loads(rewards_json) if rewards_json else json.loads(current_rewards)
         db.update_case(case_id, new_name, new_price, new_rewards)
         
@@ -1213,61 +1359,64 @@ async def admin_editcase(interaction: discord.Interaction, case_id: int, name: s
             description=f"Кейс ID {case_id} обновлен:\nНазвание: {new_name}\nЦена: {new_price} {EMOJIS['coin']}",
             color=0x00ff00
         )
+        await interaction.response.send_message(embed=embed)
     except json.JSONDecodeError:
-        embed = discord.Embed(
-            title="❌ Ошибка",
-            description="Неверный формат JSON для наград",
-            color=0xff0000
-        )
-    
-    await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message("❌ Неверный формат JSON для наград", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
 
 @bot.tree.command(name="admin_deletecase", description="Удалить кейс (админ)")
 @app_commands.describe(case_id="ID кейса")
 @is_admin()
 async def admin_deletecase(interaction: discord.Interaction, case_id: int):
-    case_data = db.get_case(case_id)
-    if not case_data:
-        await interaction.response.send_message("Кейс не найден!", ephemeral=True)
-        return
-    
-    db.delete_case(case_id)
-    
-    embed = discord.Embed(
-        title="⚙️ Админ действие",
-        description=f"Кейс '{case_data[1]}' (ID: {case_id}) удален",
-        color=0xff0000
-    )
-    await interaction.response.send_message(embed=embed)
+    try:
+        case_data = db.get_case(case_id)
+        if not case_data:
+            await interaction.response.send_message("❌ Кейс не найден!", ephemeral=True)
+            return
+        
+        db.delete_case(case_id)
+        
+        embed = discord.Embed(
+            title="⚙️ Админ действие",
+            description=f"Кейс '{case_data[1]}' (ID: {case_id}) удален",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
 
 @bot.tree.command(name="admin_viewtransactions", description="Просмотр транзакций (админ)")
 @app_commands.describe(user="Пользователь (опционально)")
 @is_admin()
 async def admin_viewtransactions(interaction: discord.Interaction, user: discord.Member = None):
-    cursor = db.conn.cursor()
-    
-    if user:
-        cursor.execute('SELECT * FROM transactions WHERE user_id = ? OR target_user_id = ? ORDER BY timestamp DESC LIMIT 10', (user.id, user.id))
-        title = f"📊 Транзакции пользователя {user.name}"
-    else:
-        cursor.execute('SELECT * FROM transactions ORDER BY timestamp DESC LIMIT 10')
-        title = "📊 Последние транзакции"
-    
-    transactions = cursor.fetchall()
-    
-    embed = discord.Embed(title=title, color=0x3498db)
-    
-    for trans in transactions:
-        trans_user = bot.get_user(trans[1])
-        target_user = bot.get_user(trans[4]) if trans[4] else None
+    try:
+        cursor = db.conn.cursor()
         
-        embed.add_field(
-            name=f"#{trans[0]} {trans[2]}",
-            value=f"Сумма: {trans[3]} {EMOJIS['coin']}\nОт: {trans_user.name if trans_user else 'Система'}\nКому: {target_user.name if target_user else 'Нет'}\nОписание: {trans[5]}",
-            inline=False
-        )
-    
-    await interaction.response.send_message(embed=embed)
+        if user:
+            cursor.execute('SELECT * FROM transactions WHERE user_id = ? OR target_user_id = ? ORDER BY timestamp DESC LIMIT 10', (user.id, user.id))
+            title = f"📊 Транзакции пользователя {user.name}"
+        else:
+            cursor.execute('SELECT * FROM transactions ORDER BY timestamp DESC LIMIT 10')
+            title = "📊 Последние транзакции"
+        
+        transactions = cursor.fetchall()
+        
+        embed = discord.Embed(title=title, color=0x3498db)
+        
+        for trans in transactions:
+            trans_user = bot.get_user(trans[1])
+            target_user = bot.get_user(trans[4]) if trans[4] else None
+            
+            embed.add_field(
+                name=f"#{trans[0]} {trans[2]}",
+                value=f"Сумма: {trans[3]} {EMOJIS['coin']}\nОт: {trans_user.name if trans_user else 'Система'}\nКому: {target_user.name if target_user else 'Нет'}\nОписание: {trans[5]}",
+                inline=False
+            )
+        
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
 
 @bot.tree.command(name="admin_broadcast", description="Отправить объявление всем (админ)")
 @app_commands.describe(message="Текст объявления")
@@ -1342,8 +1491,8 @@ async def help_command(interaction: discord.Interaction):
         value="""**/roulette** ставка - Игра в рулетку
 **/dice** ставка - Игра в кости
 **/duel** @пользователь ставка - Дуэль с игроком
-**/quest** - Получить случайный квест
-**/steal** @пользователь сумма - Попытаться украсть монеты""",
+**/quest** - Получить случайный квест (КД 3 часа)
+**/steal** @пользователь - Попытаться украсть монеты (случайная сумма)""",
         inline=False
     )
     
@@ -1403,4 +1552,3 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
-

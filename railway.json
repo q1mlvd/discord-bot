@@ -1,0 +1,24 @@
+{
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deployments": [
+    {
+      "name": "Discord Bot",
+      "rootDir": ".",
+      "services": [
+        {
+          "name": "bot",
+          "type": "worker",
+          "startCommand": "python bot.py"
+        },
+        {
+          "name": "website", 
+          "type": "web",
+          "rootDir": "website",
+          "startCommand": "python app.py"
+        }
+      ]
+    }
+  ]
+}

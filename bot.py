@@ -482,17 +482,16 @@ class NFTSystem:
             ''', (user_id,)) as cursor:
                 return await cursor.fetchall()
     
-    async def get_marketplace_nfts(self):
-        async with aiosqlite.connect(bot.db.db_path) as db:
-            async with db.execute('''
-                SELECT ni.id, nc.name, ni.token_id, ni.metadata, ni.price, u.username
-                FROM nft_items ni
-                JOIN nft_collections nc ON ni.collection_id = nc.id
-                JOIN users u ON ni.owner_id = u.user_id
-                WHERE ni.for_sale = TRUE
-                LIMIT 20
-            ''') as cursor:
-                return await cursor.fetchall()
+async def get_marketplace_nfts(self):
+    async with aiosqlite.connect(self.db_path) as db:
+        async with db.execute('''
+            SELECT ni.id, nc.name, ni.token_id, ni.metadata, ni.price, ni.owner_id
+            FROM nft_items ni
+            JOIN nft_collections nc ON ni.collection_id = nc.id
+            WHERE ni.for_sale = TRUE
+            LIMIT 20
+        ''') as cursor:
+            return await cursor.fetchall()
 
 # 🎁 СИСТЕМА КЕЙСОВ
 class CaseSystem:
@@ -1228,9 +1227,16 @@ async def маркетплейс(interaction: discord.Interaction):
             nft_id, col_name, token_id, metadata, price, owner_id = nft
             metadata_obj = json.loads(metadata)
             
+            # Пытаемся получить имя пользователя из Discord
+            try:
+                user = await bot.fetch_user(owner_id)
+                username = user.display_name if user else f"ID {owner_id}"
+            except:
+                username = f"ID {owner_id}"
+            
             embed.add_field(
                 name=f"{metadata_obj.get('name', 'NFT')} #{token_id}",
-                value=f"Коллекция: {col_name}\nЦена: {price} монет\nID: {nft_id}",
+                value=f"Коллекция: {col_name}\nЦена: {price} монет\nПродавец: {username}\nNFT ID: {nft_id}",
                 inline=True
             )
         
@@ -1238,7 +1244,7 @@ async def маркетплейс(interaction: discord.Interaction):
         await interaction.response.send_message(embed=embed)
         
     except Exception as e:
-        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+        await interaction.response.send_message(f"❌ Ошибка загрузки маркетплейса: {e}", ephemeral=True)
 
 @bot.tree.command(name="создать_коллекцию", description="Создать NFT коллекцию (Админ)")
 @is_admin()
@@ -1257,6 +1263,31 @@ async def создать_коллекцию(interaction: discord.Interaction, н
                               f"**Количество:** {количество} NFT\n"
                               f"**ID коллекции:** {collection_id}", "success")
     await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="тест_нфт", description="Создать тестовые NFT (Админ)")
+@is_admin()
+async def тест_нфт(interaction: discord.Interaction):
+    try:
+        # Создаем тестовую коллекцию
+        collection_id = await bot.nft_system.create_collection(
+            interaction.user.id, 
+            "Тестовая коллекция", 
+            "Для тестирования маркетплейса", 
+            3  # Создаем 3 NFT
+        )
+        
+        # Выставляем одну NFT на продажу
+        async with aiosqlite.connect(bot.db.db_path) as db:
+            await db.execute('UPDATE nft_items SET for_sale = TRUE, price = 500 WHERE id = 1')
+            await db.commit()
+        
+        embed = Design.create_embed("✅ Тестовые NFT созданы!", 
+                                  "Создана коллекция из 3 NFT\nОдна NFT выставлена на продажу за 500 монет\n\nИспользуйте /маркетплейс для просмотра", 
+                                  "success")
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка: {e}")
 
 # 🎁 КОМАНДЫ КЕЙСОВ
 @bot.tree.command(name="кейсы", description="Просмотреть доступные кейсы")
@@ -1622,5 +1653,6 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+
 
 

@@ -1264,6 +1264,9 @@ async def создать_коллекцию(interaction: discord.Interaction, н
 @is_admin()
 async def тест_нфт(interaction: discord.Interaction):
     try:
+        # Сразу отвечаем, чтобы Discord знал что бот живой
+        await interaction.response.defer(ephemeral=True)
+        
         # Создаем тестовую коллекцию
         collection_id = await bot.nft_system.create_collection(
             interaction.user.id, 
@@ -1280,10 +1283,10 @@ async def тест_нфт(interaction: discord.Interaction):
         embed = Design.create_embed("✅ Тестовые NFT созданы!", 
                                   "Создана коллекция из 3 NFT\nОдна NFT выставлена на продажу за 500 монет\n\nИспользуйте /маркетплейс для просмотра", 
                                   "success")
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
         
     except Exception as e:
-        await interaction.response.send_message(f"❌ Ошибка: {e}")
+        await interaction.followup.send(f"❌ Ошибка: {e}")
 
 # 🎁 КОМАНДЫ КЕЙСОВ
 @bot.tree.command(name="кейсы", description="Просмотреть доступные кейсы")
@@ -1649,6 +1652,7 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+
 
 
 

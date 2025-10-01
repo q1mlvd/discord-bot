@@ -212,7 +212,9 @@ class Database:
         cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
         user = cursor.fetchone()
         if not user:
-            cursor.execute('INSERT INTO users (user_id, balance) VALUES (?, ?)', (user_id, 100))
+            # Создаем пользователя с правильным JSON для инвентаря
+            cursor.execute('INSERT INTO users (user_id, balance, inventory) VALUES (?, ?, ?)', 
+                         (user_id, 100, json.dumps({"cases": {}, "items": {}})))
             self.conn.commit()
             return self.get_user(user_id)
         return user
@@ -271,8 +273,12 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
-        inventory = json.loads(result[0]) if result[0] else {"cases": {}, "items": {}}
         
+        if result and result[0]:
+            inventory = json.loads(result[0])
+        else:
+            inventory = {"cases": {}, "items": {}}
+            
         if "items" not in inventory:
             inventory["items"] = {}
             
@@ -288,7 +294,11 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
-        inventory = json.loads(result[0]) if result[0] else {"cases": {}, "items": {}}
+        
+        if not result or not result[0]:
+            return False
+            
+        inventory = json.loads(result[0])
         
         if item_name in inventory.get("items", {}):
             if inventory["items"][item_name] > 1:
@@ -305,7 +315,11 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
-        inventory = json.loads(result[0]) if result[0] else {"cases": {}, "items": {}}
+        
+        if result and result[0]:
+            inventory = json.loads(result[0])
+        else:
+            inventory = {"cases": {}, "items": {}}
         
         # Добавляем кейс в инвентарь
         if "cases" not in inventory:
@@ -328,13 +342,23 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
-        return json.loads(result[0]) if result[0] else {"cases": {}, "items": {}}
+        
+        if result and result[0]:
+            try:
+                return json.loads(result[0])
+            except json.JSONDecodeError:
+                return {"cases": {}, "items": {}}
+        return {"cases": {}, "items": {}}
     
     def remove_case_from_inventory(self, user_id, case_id):
         cursor = self.conn.cursor()
         cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
-        inventory = json.loads(result[0]) if result[0] else {"cases": {}, "items": {}}
+        
+        if not result or not result[0]:
+            return False
+            
+        inventory = json.loads(result[0])
         
         case_key = f"case_{case_id}"
         if case_key in inventory.get("cases", {}):
@@ -663,6 +687,9 @@ async def giftcase(interaction: discord.Interaction, user: discord.Member, case_
         await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
         return
     
+    # Убедимся, что получатель существует в базе
+    db.get_user(user.id)
+    
     # Списание средств и добавление кейса в инвентарь получателя
     db.update_balance(interaction.user.id, -case_data[2])
     db.add_case_to_inventory(user.id, case_id, case_data[1], "gifted")
@@ -681,6 +708,9 @@ async def giftcase(interaction: discord.Interaction, user: discord.Member, case_
 
 @bot.tree.command(name="inventory", description="Показать ваш инвентарь")
 async def inventory(interaction: discord.Interaction):
+    # Убедимся, что пользователь существует
+    db.get_user(interaction.user.id)
+    
     inventory_data = db.get_user_inventory(interaction.user.id)
     
     embed = discord.Embed(
@@ -714,6 +744,9 @@ async def inventory(interaction: discord.Interaction):
 @bot.tree.command(name="openmycase", description="Открыть кейс из вашего инвентаря")
 @app_commands.describe(case_id="ID кейса из инвентаря")
 async def openmycase(interaction: discord.Interaction, case_id: int):
+    # Убедимся, что пользователь существует
+    db.get_user(interaction.user.id)
+    
     # Проверяем, есть ли кейс в инвентаре
     inventory_data = db.get_user_inventory(interaction.user.id)
     case_key = f"case_{case_id}"

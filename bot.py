@@ -11,7 +11,7 @@ import aiohttp
 from typing import Dict, List, Optional
 
 # Получение токена из переменных окружения Railway
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
+BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
 
 if not BOT_TOKEN:
     print("Ошибка: BOT_TOKEN не установлен в переменных окружения!")
@@ -523,3 +523,4 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
+

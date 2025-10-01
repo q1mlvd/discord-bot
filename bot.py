@@ -25,7 +25,9 @@ bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 # Конфигурация
 DATABASE_FILE = 'economy.db'
 LOG_CHANNEL_ID = 1422557295811887175
-ADMIN_ROLES_ID = ['993042425809473596', '1188261847850299514', '1365798715930968244', '1269614293108789278', '1259892523053092874']
+
+# ID администраторов (замените на реальные ID пользователей)
+ADMIN_IDS = ['766767256742526996', '1195144951546265675', '691904643181314078', '1078693283695448064', '1138140772097597472']  # Пример ID
 
 # Эмодзи для оформления
 EMOJIS = {
@@ -557,6 +559,12 @@ class DuelView(View):
         embed.add_field(name="Выигрыш", value=f"{self.bet * 2} {EMOJIS['coin']}")
         
         await interaction.response.edit_message(embed=embed, view=None)
+
+# Функция проверки прав администратора
+def is_admin():
+    def predicate(interaction: discord.Interaction) -> bool:
+        return interaction.user.id in ADMIN_IDS
+    return app_commands.check(predicate)
 
 # Команды бота
 
@@ -1098,11 +1106,8 @@ async def achievements(interaction: discord.Interaction):
 # Админ-команды
 @bot.tree.command(name="admin_addcoins", description="Добавить монеты пользователю (админ)")
 @app_commands.describe(user="Пользователь", amount="Количество монет")
+@is_admin()
 async def admin_addcoins(interaction: discord.Interaction, user: discord.Member, amount: int):
-    if not any(role.name in ADMIN_ROLES for role in interaction.user.roles):
-        await interaction.response.send_message("У вас нет прав для использования этой команды!", ephemeral=True)
-        return
-    
     db.update_balance(user.id, amount)
     db.log_transaction(interaction.user.id, 'admin_add', amount, user.id, f"Админ {interaction.user.name}")
     
@@ -1115,11 +1120,8 @@ async def admin_addcoins(interaction: discord.Interaction, user: discord.Member,
 
 @bot.tree.command(name="admin_removecoins", description="Забрать монеты у пользователя (админ)")
 @app_commands.describe(user="Пользователь", amount="Количество монет")
+@is_admin()
 async def admin_removecoins(interaction: discord.Interaction, user: discord.Member, amount: int):
-    if not any(role.name in ADMIN_ROLES for role in interaction.user.roles):
-        await interaction.response.send_message("У вас нет прав для использования этой команды!", ephemeral=True)
-        return
-    
     db.update_balance(user.id, -amount)
     db.log_transaction(interaction.user.id, 'admin_remove', -amount, user.id, f"Админ {interaction.user.name}")
     
@@ -1132,11 +1134,8 @@ async def admin_removecoins(interaction: discord.Interaction, user: discord.Memb
 
 @bot.tree.command(name="admin_giveitem", description="Выдать предмет пользователю (админ)")
 @app_commands.describe(user="Пользователь", item_name="Название предмета")
+@is_admin()
 async def admin_giveitem(interaction: discord.Interaction, user: discord.Member, item_name: str):
-    if not any(role.name in ADMIN_ROLES for role in interaction.user.roles):
-        await interaction.response.send_message("У вас нет прав для использования этой команды!", ephemeral=True)
-        return
-    
     db.add_item_to_inventory(user.id, item_name)
     
     embed = discord.Embed(
@@ -1148,11 +1147,8 @@ async def admin_giveitem(interaction: discord.Interaction, user: discord.Member,
 
 @bot.tree.command(name="admin_removeitem", description="Забрать предмет у пользователя (админ)")
 @app_commands.describe(user="Пользователь", item_name="Название предмета")
+@is_admin()
 async def admin_removeitem(interaction: discord.Interaction, user: discord.Member, item_name: str):
-    if not any(role.name in ADMIN_ROLES for role in interaction.user.roles):
-        await interaction.response.send_message("У вас нет прав для использования этой команды!", ephemeral=True)
-        return
-    
     success = db.remove_item_from_inventory(user.id, item_name)
     
     if success:
@@ -1172,11 +1168,8 @@ async def admin_removeitem(interaction: discord.Interaction, user: discord.Membe
 
 @bot.tree.command(name="admin_createcase", description="Создать новый кейс (админ)")
 @app_commands.describe(name="Название кейса", price="Цена кейса", rewards_json="Награды в формате JSON")
+@is_admin()
 async def admin_createcase(interaction: discord.Interaction, name: str, price: int, rewards_json: str):
-    if not any(role.name in ADMIN_ROLES for role in interaction.user.roles):
-        await interaction.response.send_message("У вас нет прав для использования этой команды!", ephemeral=True)
-        return
-    
     try:
         rewards = json.loads(rewards_json)
         case_id = db.create_case(name, price, rewards)
@@ -1197,11 +1190,8 @@ async def admin_createcase(interaction: discord.Interaction, name: str, price: i
 
 @bot.tree.command(name="admin_editcase", description="Редактировать кейс (админ)")
 @app_commands.describe(case_id="ID кейса", name="Новое название", price="Новая цена", rewards_json="Новые награды в формате JSON")
+@is_admin()
 async def admin_editcase(interaction: discord.Interaction, case_id: int, name: str = None, price: int = None, rewards_json: str = None):
-    if not any(role.name in ADMIN_ROLES for role in interaction.user.roles):
-        await interaction.response.send_message("У вас нет прав для использования этой команды!", ephemeral=True)
-        return
-    
     case_data = db.get_case(case_id)
     if not case_data:
         await interaction.response.send_message("Кейс не найден!", ephemeral=True)
@@ -1234,11 +1224,8 @@ async def admin_editcase(interaction: discord.Interaction, case_id: int, name: s
 
 @bot.tree.command(name="admin_deletecase", description="Удалить кейс (админ)")
 @app_commands.describe(case_id="ID кейса")
+@is_admin()
 async def admin_deletecase(interaction: discord.Interaction, case_id: int):
-    if not any(role.name in ADMIN_ROLES for role in interaction.user.roles):
-        await interaction.response.send_message("У вас нет прав для использования этой команды!", ephemeral=True)
-        return
-    
     case_data = db.get_case(case_id)
     if not case_data:
         await interaction.response.send_message("Кейс не найден!", ephemeral=True)
@@ -1255,11 +1242,8 @@ async def admin_deletecase(interaction: discord.Interaction, case_id: int):
 
 @bot.tree.command(name="admin_viewtransactions", description="Просмотр транзакций (админ)")
 @app_commands.describe(user="Пользователь (опционально)")
+@is_admin()
 async def admin_viewtransactions(interaction: discord.Interaction, user: discord.Member = None):
-    if not any(role.name in ADMIN_ROLES for role in interaction.user.roles):
-        await interaction.response.send_message("У вас нет прав для использования этой команды!", ephemeral=True)
-        return
-    
     cursor = db.conn.cursor()
     
     if user:
@@ -1287,11 +1271,8 @@ async def admin_viewtransactions(interaction: discord.Interaction, user: discord
 
 @bot.tree.command(name="admin_broadcast", description="Отправить объявление всем (админ)")
 @app_commands.describe(message="Текст объявления")
+@is_admin()
 async def admin_broadcast(interaction: discord.Interaction, message: str):
-    if not any(role.name in ADMIN_ROLES for role in interaction.user.roles):
-        await interaction.response.send_message("У вас нет прав для использования этой команды!", ephemeral=True)
-        return
-    
     embed = discord.Embed(
         title="📢 Объявление от администрации",
         description=message,
@@ -1377,7 +1358,7 @@ async def help_command(interaction: discord.Interaction):
     )
     
     # Админ-команды (только для админов)
-    if any(role.name in ADMIN_ROLES for role in interaction.user.roles):
+    if interaction.user.id in ADMIN_IDS:
         embed.add_field(
             name="⚙️ Админ-команды",
             value="""**/admin_addcoins** @пользователь сумма - Добавить монеты
@@ -1422,4 +1403,3 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
-

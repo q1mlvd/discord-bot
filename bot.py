@@ -1215,26 +1215,30 @@ async def купить_нфт(interaction: discord.Interaction, нфт_id: int):
 
 @bot.tree.command(name="маркетплейс", description="NFT маркетплейс")
 async def маркетплейс(interaction: discord.Interaction):
-    nfts = await bot.nft_system.get_marketplace_nfts()
-    
-    if not nfts:
-        await interaction.response.send_message("❌ На маркетплейсе пока нет NFT", ephemeral=True)
-        return
-    
-    embed = Design.create_embed("🛒 NFT МАРКЕТПЛЕЙС", "Доступные для покупки NFT:", "nft")
-    
-    for nft in nfts[:6]:  # Показываем первые 6
-        nft_id, col_name, token_id, metadata, price, username = nft
-        metadata_obj = json.loads(metadata)
+    try:
+        nfts = await bot.nft_system.get_marketplace_nfts()
         
-        embed.add_field(
-            name=f"{metadata_obj.get('name', 'NFT')}",
-            value=f"Коллекция: {col_name}\nЦена: {price} монет\nПродавец: {username}\nID: {nft_id}",
-            inline=True
-        )
-    
-    embed.set_footer(text="Используйте /купить_нфт [ID] для покупки")
-    await interaction.response.send_message(embed=embed)
+        if not nfts:
+            await interaction.response.send_message("❌ На маркетплейсе пока нет NFT", ephemeral=True)
+            return
+        
+        embed = Design.create_embed("🛒 NFT МАРКЕТПЛЕЙС", "Доступные для покупки NFT:", "nft")
+        
+        for nft in nfts[:6]:  # Показываем первые 6
+            nft_id, col_name, token_id, metadata, price, owner_id = nft
+            metadata_obj = json.loads(metadata)
+            
+            embed.add_field(
+                name=f"{metadata_obj.get('name', 'NFT')} #{token_id}",
+                value=f"Коллекция: {col_name}\nЦена: {price} монет\nID: {nft_id}",
+                inline=True
+            )
+        
+        embed.set_footer(text="Используйте /купить_нфт [ID] для покупки")
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
 
 @bot.tree.command(name="создать_коллекцию", description="Создать NFT коллекцию (Админ)")
 @is_admin()
@@ -1618,4 +1622,5 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+
 

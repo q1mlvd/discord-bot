@@ -401,9 +401,32 @@ class LootboxSystem:
 
 # 🎨 СИСТЕМА NFT
 class NFTSystem:
-    def __init__(self, economy: EconomySystem, db_path: str):  # Измените конструктор
+    def __init__(self, economy: EconomySystem, db_path: str):
         self.economy = economy
-        self.db_path = db_path  # Добавьте путь к БД
+        self.db_path = db_path
+
+     async def get_marketplace_nfts(self):
+        """Получить NFT с маркетплейса"""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute('''
+                SELECT ni.id, nc.name, ni.token_id, ni.metadata, ni.price, ni.owner_id
+                FROM nft_items ni
+                JOIN nft_collections nc ON ni.collection_id = nc.id
+                WHERE ni.for_sale = TRUE
+                LIMIT 20
+            ''') as cursor:
+                return await cursor.fetchall()
+    
+    async def get_user_nfts(self, user_id: int):
+        """Получить NFT пользователя"""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute('''
+                SELECT ni.id, nc.name, ni.token_id, ni.metadata, ni.for_sale, ni.price
+                FROM nft_items ni
+                JOIN nft_collections nc ON ni.collection_id = nc.id
+                WHERE ni.owner_id = ?
+            ''', (user_id,)) as cursor:
+                return await cursor.fetchall()
     
     async def create_collection(self, creator_id: int, name: str, description: str, supply: int, image_url: str = None):
         async with aiosqlite.connect(self.db_path) as db:  # Используйте self.db_path
@@ -1653,6 +1676,7 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+
 
 
 

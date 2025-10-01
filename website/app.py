@@ -1,72 +1,46 @@
-from flask import Flask, render_template, jsonify
-import aiosqlite
-import asyncio
+from flask import Flask
 import os
 
 app = Flask(__name__)
 
-# Путь к базе данных бота
-DB_PATH = "../data/bot.db"
-
-async def get_user_data(user_id):
-    """Получить данные пользователя из базы бота"""
-    try:
-        async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute('SELECT balance, level FROM users WHERE user_id = ?', (user_id,)) as cursor:
-                result = await cursor.fetchone()
-                if result:
-                    return {"balance": result[0], "level": result[1]}
-                return None
-    except Exception as e:
-        print(f"Ошибка базы: {e}")
-        return None
-
-async def get_marketplace_nfts():
-    """Получить NFT с маркетплейса"""
-    try:
-        async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute('''
-                SELECT ni.id, nc.name, ni.token_id, ni.metadata, ni.price
-                FROM nft_items ni
-                JOIN nft_collections nc ON ni.collection_id = nc.id
-                WHERE ni.for_sale = TRUE LIMIT 20
-            ''') as cursor:
-                nfts = await cursor.fetchall()
-                result = []
-                for nft in nfts:
-                    nft_id, col_name, token_id, metadata, price = nft
-                    result.append({
-                        "id": nft_id,
-                        "name": f"{col_name} #{token_id}",
-                        "price": price,
-                        "collection": col_name
-                    })
-                return result
-    except Exception as e:
-        print(f"Ошибка NFT: {e}")
-        return []
-
 @app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/api/user/<int:user_id>')
-def user_data(user_id):
-    data = asyncio.run(get_user_data(user_id))
-    return jsonify(data or {"error": "User not found"})
-
-@app.route('/api/marketplace')
-def marketplace():
-    nfts = asyncio.run(get_marketplace_nfts())
-    return jsonify(nfts)
-
-@app.route('/api/stats')
-def stats():
-    return jsonify({
-        "total_users": 150,
-        "total_nfts": 45,
-        "total_volume": 12500
-    })
+def home():
+    return """
+    <html>
+    <head>
+        <title>NFT Маркетплейс</title>
+        <style>
+            body { 
+                font-family: Arial; 
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                color: white; 
+                text-align: center; 
+                padding: 50px;
+                margin: 0;
+            }
+            .container {
+                background: rgba(255,255,255,0.1);
+                padding: 40px;
+                border-radius: 15px;
+                backdrop-filter: blur(10px);
+                max-width: 800px;
+                margin: 0 auto;
+            }
+            h1 { color: #ffd700; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🎮 NFT Маркетплейс</h1>
+            <p><strong>Добро пожаловать на торговую площадку Discord бота!</strong></p>
+            <p>🤖 Бот "Пехота Зенита" работает и готов к работе!</p>
+            <p>📊 Статистика скоро будет доступна</p>
+            <p>🛒 NFT маркетплейс в разработке</p>
+        </div>
+    </body>
+    </html>
+    """
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)

@@ -1,6 +1,7 @@
 import os
 import discord
-from discord.ext import commands, tasks
+from discord import app_commands
+from discord.ext import commands
 from discord.ui import Button, View
 import sqlite3
 import json
@@ -14,7 +15,7 @@ from typing import Dict, List, Optional
 BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
 
 if not BOT_TOKEN:
-    print("Ошибка: BOT_TOKEN не установлен в переменных окружения!")
+    print("Ошибка: DISCORD_BOT_TOKEN не установлен в переменных окружения!")
     exit(1)
 
 # Настройки бота
@@ -210,7 +211,7 @@ class CaseView(View):
         
         # Спин анимация
         embed = discord.Embed(title="🎰 Открытие кейса...", color=0xffd700)
-        message = await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed)
         
         for i in range(3):
             await asyncio.sleep(1)
@@ -293,75 +294,81 @@ class CaseView(View):
         except Exception as e:
             print(f"Ошибка создания роли: {e}")
 
-# Команды бота
-@bot.command(name='balance')
-async def balance(ctx, member: discord.Member = None):
-    member = member or ctx.author
-    user_data = db.get_user(member.id)
+# Слеш-команды
+@bot.tree.command(name="balance", description="Показать ваш баланс")
+@app_commands.describe(user="Пользователь, чей баланс показать (опционально)")
+async def balance(interaction: discord.Interaction, user: discord.Member = None):
+    user = user or interaction.user
+    user_data = db.get_user(user.id)
     
     embed = discord.Embed(
-        title=f"{EMOJIS['coin']} Баланс {member.display_name}",
+        title=f"{EMOJIS['coin']} Баланс {user.display_name}",
         color=0xffd700
     )
     embed.add_field(name="Баланс", value=f"{user_data[1]} {EMOJIS['coin']}", inline=True)
     embed.add_field(name="Ежедневная серия", value=f"{user_data[2]} дней", inline=True)
-    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+    embed.set_thumbnail(url=user.avatar.url if user.avatar else user.default_avatar.url)
     
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command(name='daily')
-async def daily(ctx):
-    user_data = db.get_user(ctx.author.id)
+@bot.tree.command(name="daily", description="Получить ежедневную награду")
+async def daily(interaction: discord.Interaction):
+    user_data = db.get_user(interaction.user.id)
     last_daily = datetime.datetime.fromisoformat(user_data[3]) if user_data[3] else None
     now = datetime.datetime.now()
     
     if last_daily and (now - last_daily).days < 1:
-        await ctx.send("Вы уже получали ежедневную награду сегодня!")
+        await interaction.response.send_message("Вы уже получали ежедневную награду сегодня!", ephemeral=True)
         return
     
     streak = user_data[2] + 1 if last_daily and (now - last_daily).days == 1 else 1
     reward = 100 + (streak * 10)
     
-    db.update_balance(ctx.author.id, reward)
+    db.update_balance(interaction.user.id, reward)
     cursor = db.conn.cursor()
     cursor.execute('UPDATE users SET daily_streak = ?, last_daily = ? WHERE user_id = ?', 
-                   (streak, now.isoformat(), ctx.author.id))
+                   (streak, now.isoformat(), interaction.user.id))
     db.conn.commit()
-    db.log_transaction(ctx.author.id, 'daily', reward)
+    db.log_transaction(interaction.user.id, 'daily', reward)
     
     embed = discord.Embed(
         title=f"{EMOJIS['daily']} Ежедневная награда",
         description=f"Награда: {reward} {EMOJIS['coin']}\nСерия: {streak} дней",
         color=0x00ff00
     )
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command(name='pay')
-async def pay(ctx, member: discord.Member, amount: int):
+@bot.tree.command(name="pay", description="Перевести монеты другому пользователю")
+@app_commands.describe(user="Пользователь, которому переводим", amount="Сумма перевода")
+async def pay(interaction: discord.Interaction, user: discord.Member, amount: int):
     if amount <= 0:
-        await ctx.send("Сумма должна быть положительной!")
+        await interaction.response.send_message("Сумма должна быть положительной!", ephemeral=True)
         return
     
-    sender_data = db.get_user(ctx.author.id)
+    if user.id == interaction.user.id:
+        await interaction.response.send_message("Нельзя переводить самому себе!", ephemeral=True)
+        return
+    
+    sender_data = db.get_user(interaction.user.id)
     if sender_data[1] < amount:
-        await ctx.send("Недостаточно монет!")
+        await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
         return
     
-    db.update_balance(ctx.author.id, -amount)
-    db.update_balance(member.id, amount)
-    db.log_transaction(ctx.author.id, 'transfer', -amount, member.id, f"Перевод {member.name}")
-    db.log_transaction(member.id, 'transfer', amount, ctx.author.id, f"Получено от {ctx.author.name}")
+    db.update_balance(interaction.user.id, -amount)
+    db.update_balance(user.id, amount)
+    db.log_transaction(interaction.user.id, 'transfer', -amount, user.id, f"Перевод {user.name}")
+    db.log_transaction(user.id, 'transfer', amount, interaction.user.id, f"Получено от {interaction.user.name}")
     
     embed = discord.Embed(
         title=f"{EMOJIS['coin']} Перевод средств",
-        description=f"{ctx.author.mention} → {member.mention}",
+        description=f"{interaction.user.mention} → {user.mention}",
         color=0x00ff00
     )
     embed.add_field(name="Сумма", value=f"{amount} {EMOJIS['coin']}")
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command(name='cases')
-async def cases_list(ctx):
+@bot.tree.command(name="cases", description="Показать список доступных кейсов")
+async def cases_list(interaction: discord.Interaction):
     embed = discord.Embed(title="🎁 Доступные кейсы", color=0xff69b4)
     
     for case_id, case in CASES.items():
@@ -372,16 +379,20 @@ async def cases_list(ctx):
             inline=False
         )
     
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command(name='opencase')
-async def open_case(ctx, case_id: str):
-    if case_id not in CASES:
-        await ctx.send("Кейс не найден! Используйте `/cases` для списка.")
-        return
-    
-    case = CASES[case_id]
-    view = CaseView(case_id, ctx.author.id)
+@bot.tree.command(name="opencase", description="Открыть кейс")
+@app_commands.describe(case_type="Тип кейса для открытия")
+@app_commands.choices(case_type=[
+    app_commands.Choice(name="📦 Малый кейс", value="small"),
+    app_commands.Choice(name="📦 Средний кейс", value="medium"),
+    app_commands.Choice(name="💎 Большой кейс", value="large"),
+    app_commands.Choice(name="👑 Элитный кейс", value="elite"),
+    app_commands.Choice(name="🔮 Секретный кейс", value="secret")
+])
+async def open_case(interaction: discord.Interaction, case_type: app_commands.Choice[str]):
+    case = CASES[case_type.value]
+    view = CaseView(case_type.value, interaction.user.id)
     
     embed = discord.Embed(
         title=f"🎁 {case['name']}",
@@ -389,55 +400,57 @@ async def open_case(ctx, case_id: str):
         color=0xff69b4
     )
     
-    await ctx.send(embed=embed, view=view)
+    await interaction.response.send_message(embed=embed, view=view)
 
-@bot.command(name='steal')
-async def steal(ctx, member: discord.Member, amount: int):
-    if member.id == ctx.author.id:
-        await ctx.send("Нельзя красть у себя!")
+@bot.tree.command(name="steal", description="Попытаться украсть монеты у другого пользователя")
+@app_commands.describe(user="Пользователь, у которого крадем", amount="Сумма для кражи")
+async def steal(interaction: discord.Interaction, user: discord.Member, amount: int):
+    if user.id == interaction.user.id:
+        await interaction.response.send_message("Нельзя красть у себя!", ephemeral=True)
         return
     
-    thief_data = db.get_user(ctx.author.id)
-    target_data = db.get_user(member.id)
+    thief_data = db.get_user(interaction.user.id)
+    target_data = db.get_user(user.id)
     
     if thief_data[1] < 10:
-        await ctx.send("Нужно минимум 10 монет для кражи!")
+        await interaction.response.send_message("Нужно минимум 10 монет для кражи!", ephemeral=True)
         return
     
     if target_data[1] < amount:
-        await ctx.send("У цели недостаточно монет!")
+        await interaction.response.send_message("У цели недостаточно монет!", ephemeral=True)
         return
     
     success_chance = 0.3
     if random.random() <= success_chance:
-        db.update_balance(ctx.author.id, amount)
-        db.update_balance(member.id, -amount)
-        db.log_transaction(ctx.author.id, 'steal', amount, member.id, "Успешная кража")
+        db.update_balance(interaction.user.id, amount)
+        db.update_balance(user.id, -amount)
+        db.log_transaction(interaction.user.id, 'steal', amount, user.id, "Успешная кража")
         
         embed = discord.Embed(
             title=f"{EMOJIS['steal']} Успешная кража!",
-            description=f"{ctx.author.mention} украл {amount} {EMOJIS['coin']} у {member.mention}!",
+            description=f"{interaction.user.mention} украл {amount} {EMOJIS['coin']} у {user.mention}!",
             color=0x00ff00
         )
     else:
         penalty = min(amount // 2, 100)
-        db.update_balance(ctx.author.id, -penalty)
-        db.log_transaction(ctx.author.id, 'steal_fail', -penalty, member.id, "Неудачная кража")
+        db.update_balance(interaction.user.id, -penalty)
+        db.log_transaction(interaction.user.id, 'steal_fail', -penalty, user.id, "Неудачная кража")
         
         embed = discord.Embed(
             title=f"{EMOJIS['lose']} Кража провалилась!",
-            description=f"{ctx.author.mention} оштрафован на {penalty} {EMOJIS['coin']}!",
+            description=f"{interaction.user.mention} оштрафован на {penalty} {EMOJIS['coin']}!",
             color=0xff0000
         )
     
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command(name='roulette')
-async def roulette(ctx, bet: int):
-    user_data = db.get_user(ctx.author.id)
+@bot.tree.command(name="roulette", description="Сыграть в рулетку")
+@app_commands.describe(bet="Ставка в монетах")
+async def roulette(interaction: discord.Interaction, bet: int):
+    user_data = db.get_user(interaction.user.id)
     
     if user_data[1] < bet:
-        await ctx.send("Недостаточно монет!")
+        await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
         return
     
     winning_number = random.randint(0, 36)
@@ -446,11 +459,11 @@ async def roulette(ctx, bet: int):
     if user_number == winning_number:
         multiplier = 35
         winnings = bet * multiplier
-        db.update_balance(ctx.author.id, winnings)
+        db.update_balance(interaction.user.id, winnings)
         result = f"ПОБЕДА! x{multiplier}\nВыигрыш: {winnings} {EMOJIS['coin']}"
         color = 0x00ff00
     else:
-        db.update_balance(ctx.author.id, -bet)
+        db.update_balance(interaction.user.id, -bet)
         result = f"ПРОИГРЫШ!\nВыпало: {winning_number}, Ваше: {user_number}"
         color = 0xff0000
     
@@ -459,17 +472,23 @@ async def roulette(ctx, bet: int):
         description=result,
         color=color
     )
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command(name='leaderboard')
-async def leaderboard(ctx, type: str = 'balance'):
+@bot.tree.command(name="leaderboard", description="Показать таблицу лидеров")
+@app_commands.describe(type="Тип лидерборда")
+@app_commands.choices(type=[
+    app_commands.Choice(name="Баланс", value="balance"),
+    app_commands.Choice(name="Победы", value="wins"),
+    app_commands.Choice(name="Кражи", value="steals")
+])
+async def leaderboard(interaction: discord.Interaction, type: app_commands.Choice[str]):
     cursor = db.conn.cursor()
     
-    if type == 'balance':
+    if type.value == 'balance':
         cursor.execute('SELECT user_id, balance FROM users ORDER BY balance DESC LIMIT 10')
         title = "🏆 Лидеры по балансу"
     else:
-        await ctx.send("Доступные типы: balance")
+        await interaction.response.send_message("Доступные типы: balance", ephemeral=True)
         return
     
     embed = discord.Embed(title=title, color=0xffd700)
@@ -483,25 +502,35 @@ async def leaderboard(ctx, type: str = 'balance'):
             inline=False
         )
     
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
 # Админ команды
-@bot.command(name='admin_addcoins')
-@commands.has_any_role(*ADMIN_ROLES)
-async def admin_addcoins(ctx, member: discord.Member, amount: int):
-    db.update_balance(member.id, amount)
-    db.log_transaction(ctx.author.id, 'admin_add', amount, member.id, f"Админ {ctx.author.name}")
+@bot.tree.command(name="admin_addcoins", description="Добавить монеты пользователю (админ)")
+@app_commands.describe(user="Пользователь", amount="Количество монет")
+async def admin_addcoins(interaction: discord.Interaction, user: discord.Member, amount: int):
+    # Проверка прав
+    if not any(role.name in ADMIN_ROLES for role in interaction.user.roles):
+        await interaction.response.send_message("У вас нет прав для использования этой команды!", ephemeral=True)
+        return
+    
+    db.update_balance(user.id, amount)
+    db.log_transaction(interaction.user.id, 'admin_add', amount, user.id, f"Админ {interaction.user.name}")
     
     embed = discord.Embed(
         title="⚙️ Админ действие",
-        description=f"Выдано {amount} {EMOJIS['coin']} пользователю {member.mention}",
+        description=f"Выдано {amount} {EMOJIS['coin']} пользователю {user.mention}",
         color=0x00ff00
     )
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command(name='admin_broadcast')
-@commands.has_any_role(*ADMIN_ROLES)
-async def admin_broadcast(ctx, *, message: str):
+@bot.tree.command(name="admin_broadcast", description="Отправить объявление всем (админ)")
+@app_commands.describe(message="Текст объявления")
+async def admin_broadcast(interaction: discord.Interaction, message: str):
+    # Проверка прав
+    if not any(role.name in ADMIN_ROLES for role in interaction.user.roles):
+        await interaction.response.send_message("У вас нет прав для использования этой команды!", ephemeral=True)
+        return
+    
     embed = discord.Embed(
         title="📢 Объявление от администрации",
         description=message,
@@ -509,18 +538,30 @@ async def admin_broadcast(ctx, *, message: str):
         timestamp=datetime.datetime.now()
     )
     
+    await interaction.response.send_message("Объявление отправляется...", ephemeral=True)
+    
     for guild in bot.guilds:
         for channel in guild.text_channels:
             if channel.permissions_for(guild.me).send_messages:
-                await channel.send(embed=embed)
-                break
+                try:
+                    await channel.send(embed=embed)
+                    break
+                except:
+                    continue
 
-# Запуск бота
+# Синхронизация команд при запуске
 @bot.event
 async def on_ready():
     print(f'Бот {bot.user.name} запущен!')
+    
+    # Синхронизация слеш-команд
+    try:
+        synced = await bot.tree.sync()
+        print(f"Синхронизировано {len(synced)} команд")
+    except Exception as e:
+        print(f"Ошибка синхронизации команд: {e}")
+    
     await bot.change_presence(activity=discord.Game(name="Экономическую игру"))
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
-

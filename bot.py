@@ -404,32 +404,9 @@ class NFTSystem:
     def __init__(self, economy: EconomySystem, db_path: str):
         self.economy = economy
         self.db_path = db_path
-
-     async def get_marketplace_nfts(self):
-        """Получить NFT с маркетплейса"""
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute('''
-                SELECT ni.id, nc.name, ni.token_id, ni.metadata, ni.price, ni.owner_id
-                FROM nft_items ni
-                JOIN nft_collections nc ON ni.collection_id = nc.id
-                WHERE ni.for_sale = TRUE
-                LIMIT 20
-            ''') as cursor:
-                return await cursor.fetchall()
-    
-    async def get_user_nfts(self, user_id: int):
-        """Получить NFT пользователя"""
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute('''
-                SELECT ni.id, nc.name, ni.token_id, ni.metadata, ni.for_sale, ni.price
-                FROM nft_items ni
-                JOIN nft_collections nc ON ni.collection_id = nc.id
-                WHERE ni.owner_id = ?
-            ''', (user_id,)) as cursor:
-                return await cursor.fetchall()
     
     async def create_collection(self, creator_id: int, name: str, description: str, supply: int, image_url: str = None):
-        async with aiosqlite.connect(self.db_path) as db:  # Используйте self.db_path
+        async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute('''
                 INSERT INTO nft_collections (name, description, creator_id, created_at, image_url, supply, available)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -456,14 +433,13 @@ class NFTSystem:
             return collection_id
     
     async def list_nft(self, nft_id: int, price: int):
-        async with aiosqlite.connect(bot.db.db_path) as db:
+        async with aiosqlite.connect(self.db_path) as db:
             await db.execute('UPDATE nft_items SET for_sale = TRUE, price = ? WHERE id = ?', (price, nft_id))
             await db.commit()
             return True
     
     async def buy_nft(self, buyer_id: int, nft_id: int):
-        async with aiosqlite.connect(bot.db.db_path) as db:
-            # Получаем информацию о NFT
+        async with aiosqlite.connect(self.db_path) as db:
             async with db.execute('SELECT owner_id, price FROM nft_items WHERE id = ? AND for_sale = TRUE', (nft_id,)) as cursor:
                 nft = await cursor.fetchone()
                 if not nft:
@@ -474,19 +450,15 @@ class NFTSystem:
                 if seller_id == buyer_id:
                     return False, "Нельзя купить свою же NFT"
                 
-                # Проверяем баланс покупателя
                 balance = await self.economy.get_balance(buyer_id)
                 if balance < price:
                     return False, "Недостаточно средств"
                 
-                # Переводим деньги
                 await self.economy.update_balance(seller_id, price)
                 await self.economy.update_balance(buyer_id, -price)
                 
-                # Меняем владельца
                 await db.execute('UPDATE nft_items SET owner_id = ?, for_sale = FALSE WHERE id = ?', (buyer_id, nft_id))
                 
-                # Записываем продажу
                 await db.execute('''
                     INSERT INTO nft_sales (nft_id, seller_id, buyer_id, price, sold_at)
                     VALUES (?, ?, ?, ?, ?)
@@ -496,7 +468,7 @@ class NFTSystem:
                 return True, f"NFT успешно куплена за {price} монет"
     
     async def get_user_nfts(self, user_id: int):
-        async with aiosqlite.connect(bot.db.db_path) as db:
+        async with aiosqlite.connect(self.db_path) as db:
             async with db.execute('''
                 SELECT ni.id, nc.name, ni.token_id, ni.metadata, ni.for_sale, ni.price
                 FROM nft_items ni
@@ -505,16 +477,16 @@ class NFTSystem:
             ''', (user_id,)) as cursor:
                 return await cursor.fetchall()
     
-async def get_marketplace_nfts(self):
-    async with aiosqlite.connect(self.db_path) as db:
-        async with db.execute('''
-            SELECT ni.id, nc.name, ni.token_id, ni.metadata, ni.price, ni.owner_id
-            FROM nft_items ni
-            JOIN nft_collections nc ON ni.collection_id = nc.id
-            WHERE ni.for_sale = TRUE
-            LIMIT 20
-        ''') as cursor:
-            return await cursor.fetchall()
+    async def get_marketplace_nfts(self):
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute('''
+                SELECT ni.id, nc.name, ni.token_id, ni.metadata, ni.price, ni.owner_id
+                FROM nft_items ni
+                JOIN nft_collections nc ON ni.collection_id = nc.id
+                WHERE ni.for_sale = TRUE
+                LIMIT 20
+            ''') as cursor:
+                return await cursor.fetchall()
 
 # 🎁 СИСТЕМА КЕЙСОВ
 class CaseSystem:
@@ -747,6 +719,7 @@ class MegaBot(commands.Bot):
         self.event_system = EventSystem(self.economy)
         
         self.start_time = datetime.now()
+        self.nft_system = NFTSystem(self.economy, self.db.db_path)  # Убедись что передается db_path
     
     async def setup_hook(self):
         await self.db.init_db()
@@ -1676,6 +1649,7 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+
 
 
 

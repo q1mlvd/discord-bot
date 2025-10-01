@@ -153,72 +153,72 @@ class Database:
         self.conn.commit()
         self.initialize_default_data()
     
-def initialize_default_data(self):
-    cursor = self.conn.cursor()
-    
-    # Проверяем, есть ли уже кейсы
-    cursor.execute('SELECT COUNT(*) FROM cases')
-    if cursor.fetchone()[0] == 0:
-        # Добавляем стандартные кейсы с исправленными шансами
-        default_cases = [
-            ('📦 Малый кейс', 50, json.dumps([
-                {'type': 'coins', 'amount': [10, 40], 'chance': 0.7},
-                {'type': 'coins', 'amount': [41, 100], 'chance': 0.25},
-                {'type': 'coins', 'amount': [101, 300], 'chance': 0.05}
-            ])),
-            ('📦 Средний кейс', 150, json.dumps([
-                {'type': 'coins', 'amount': [50, 120], 'chance': 0.6},
-                {'type': 'coins', 'amount': [121, 300], 'chance': 0.3},
-                {'type': 'role', 'name': 'Временный VIP', 'duration': 24, 'chance': 0.05},
-                {'type': 'coins', 'amount': [301, 800], 'chance': 0.05}
-            ])),
-            ('💎 Большой кейс', 500, json.dumps([
-                {'type': 'coins', 'amount': [200, 400], 'chance': 0.5},
-                {'type': 'coins', 'amount': [401, 1000], 'chance': 0.3},
-                {'type': 'custom_role', 'chance': 0.08},
-                {'type': 'special_item', 'name': 'Золотой ключ', 'chance': 0.07},
-                {'type': 'coins', 'amount': [1001, 2500], 'chance': 0.05}
-            ])),
-            ('👑 Элитный кейс', 1000, json.dumps([
-                {'type': 'coins', 'amount': [500, 1000], 'chance': 0.3},
-                {'type': 'coins', 'amount': [-300, -100], 'chance': 0.2},
-                {'type': 'custom_role', 'chance': 0.05},
-                {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.1},
-                {'type': 'bonus', 'multiplier': 2.0, 'duration': 48, 'chance': 0.1},
-                {'type': 'coins', 'amount': [1001, 3000], 'chance': 0.15},
-                {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.1}
-            ])),
-            ('🔮 Секретный кейс', 2000, json.dumps([
-                {'type': 'coins', 'amount': [800, 1500], 'chance': 0.3},
-                {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.15},
-                {'type': 'custom_role', 'chance': 0.05},
-                {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.1},
-                {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.07},
-                {'type': 'multiple', 'count': 3, 'chance': 0.05},
-                {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.15},
-                {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.13}
-            ]))
-        ]
+    def initialize_default_data(self):
+        cursor = self.conn.cursor()
         
-        for case in default_cases:
-            cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (?, ?, ?)', case)
-    
-    # Проверяем, есть ли уже предметы
-    cursor.execute('SELECT COUNT(*) FROM items')
-    if cursor.fetchone()[0] == 0:
-        # Добавляем стандартные предметы
-        default_items = [
-            ('Золотой ключ', 'Открывает особые кейсы', 500, 'rare'),
-            ('Древний артефакт', 'Мощный магический предмет', 1000, 'epic'),
-            ('Мифический предмет', 'Легендарный артефакт', 2000, 'legendary'),
-            ('Билет VIP', 'Дает доступ к VIP зоне', 300, 'uncommon'),
-            ('Магический свиток', 'Увеличивает удачу', 150, 'common')
-        ]
+        # Проверяем, есть ли уже кейсы
+        cursor.execute('SELECT COUNT(*) FROM cases')
+        if cursor.fetchone()[0] == 0:
+            # Добавляем стандартные кейсы с исправленными шансами
+            default_cases = [
+                ('📦 Малый кейс', 50, json.dumps([
+                    {'type': 'coins', 'amount': [10, 40], 'chance': 0.7},
+                    {'type': 'coins', 'amount': [41, 100], 'chance': 0.25},
+                    {'type': 'coins', 'amount': [101, 300], 'chance': 0.05}
+                ])),
+                ('📦 Средний кейс', 150, json.dumps([
+                    {'type': 'coins', 'amount': [50, 120], 'chance': 0.6},
+                    {'type': 'coins', 'amount': [121, 300], 'chance': 0.3},
+                    {'type': 'role', 'name': 'Временный VIP', 'duration': 24, 'chance': 0.05},
+                    {'type': 'coins', 'amount': [301, 800], 'chance': 0.05}
+                ])),
+                ('💎 Большой кейс', 500, json.dumps([
+                    {'type': 'coins', 'amount': [200, 400], 'chance': 0.5},
+                    {'type': 'coins', 'amount': [401, 1000], 'chance': 0.3},
+                    {'type': 'custom_role', 'chance': 0.08},
+                    {'type': 'special_item', 'name': 'Золотой ключ', 'chance': 0.07},
+                    {'type': 'coins', 'amount': [1001, 2500], 'chance': 0.05}
+                ])),
+                ('👑 Элитный кейс', 1000, json.dumps([
+                    {'type': 'coins', 'amount': [500, 1000], 'chance': 0.3},
+                    {'type': 'coins', 'amount': [-300, -100], 'chance': 0.2},
+                    {'type': 'custom_role', 'chance': 0.05},
+                    {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.1},
+                    {'type': 'bonus', 'multiplier': 2.0, 'duration': 48, 'chance': 0.1},
+                    {'type': 'coins', 'amount': [1001, 3000], 'chance': 0.15},
+                    {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.1}
+                ])),
+                ('🔮 Секретный кейс', 2000, json.dumps([
+                    {'type': 'coins', 'amount': [800, 1500], 'chance': 0.3},
+                    {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.15},
+                    {'type': 'custom_role', 'chance': 0.05},
+                    {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.1},
+                    {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.07},
+                    {'type': 'multiple', 'count': 3, 'chance': 0.05},
+                    {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.15},
+                    {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.13}
+                ]))
+            ]
+            
+            for case in default_cases:
+                cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (?, ?, ?)', case)
         
-        for item in default_items:
-            cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (?, ?, ?, ?)', item)
-    
-    self.conn.commit()
+        # Проверяем, есть ли уже предметы
+        cursor.execute('SELECT COUNT(*) FROM items')
+        if cursor.fetchone()[0] == 0:
+            # Добавляем стандартные предметы
+            default_items = [
+                ('Золотой ключ', 'Открывает особые кейсы', 500, 'rare'),
+                ('Древний артефакт', 'Мощный магический предмет', 1000, 'epic'),
+                ('Мифический предмет', 'Легендарный артефакт', 2000, 'legendary'),
+                ('Билет VIP', 'Дает доступ к VIP зоне', 300, 'uncommon'),
+                ('Магический свиток', 'Увеличивает удачу', 150, 'common')
+            ]
+            
+            for item in default_items:
+                cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (?, ?, ?, ?)', item)
+        
+        self.conn.commit()
     
     def get_user(self, user_id):
         cursor = self.conn.cursor()
@@ -1532,4 +1532,5 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
+
 

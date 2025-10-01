@@ -405,32 +405,30 @@ class NFTSystem:
         self.economy = economy
         self.db_path = db_path
     
-    async def create_collection(self, creator_id: int, name: str, description: str, supply: int, image_url: str = None):
-        async with aiosqlite.connect(self.db_path) as db:
-            cursor = await db.execute('''
-                INSERT INTO nft_collections (name, description, creator_id, created_at, image_url, supply, available)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (name, description, creator_id, datetime.now().isoformat(), image_url, supply, supply))
-            collection_id = cursor.lastrowid
-            
-            # Создаем NFT предметы для коллекции
-            for token_id in range(1, supply + 1):
-                metadata = {
-                    "name": f"{name} #{token_id}",
-                    "description": description,
-                    "attributes": [],
-                    "collection": name,
-                    "token_id": token_id,
-                    "image": image_url,
-                    "created_at": datetime.now().isoformat()
-                }
-                await db.execute('''
-                    INSERT INTO nft_items (collection_id, owner_id, token_id, metadata, created_at)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (collection_id, creator_id, token_id, json.dumps(metadata), datetime.now().isoformat()))
-            
-            await db.commit()
-            return collection_id
+async def create_collection(self, creator_id: int, name: str, description: str, supply: int, image_url: str = None):
+    async with aiosqlite.connect(self.db_path) as db:
+        cursor = await db.execute('''
+            INSERT INTO nft_collections (name, description, creator_id, created_at, image_url, supply, available)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (name, description, creator_id, datetime.now().isoformat(), image_url, supply, supply))
+        collection_id = cursor.lastrowid
+        
+        # Создаем NFT предметы для коллекции
+        for token_id in range(1, supply + 1):
+            metadata = {
+                "name": f"{name} #{token_id}",
+                "description": description,
+                "attributes": [],
+                "collection": name,
+                "token_id": token_id
+            }
+            await db.execute('''
+                INSERT INTO nft_items (collection_id, owner_id, token_id, metadata, created_at)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (collection_id, creator_id, token_id, json.dumps(metadata), datetime.now().isoformat()))
+        
+        await db.commit()
+        return collection_id
     
     async def list_nft(self, nft_id: int, price: int):
         async with aiosqlite.connect(self.db_path) as db:
@@ -1652,6 +1650,7 @@ if __name__ == "__main__":
         print("\n🛑 Бот остановлен")
     except Exception as e:
         print(f"❌ Ошибка запуска: {e}")
+
 
 
 

@@ -170,7 +170,7 @@ class Database:
                     raise
 
     def get_user(self, user_id):
-        """Безопасное получение пользователя (восстановленный метод)"""
+        """Безопасное получение пользователя"""
         try:
             cursor = self.conn.cursor()
             cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
@@ -195,7 +195,379 @@ class Database:
             # Возвращаем кортеж с безопасными значениями по умолчанию
             return (user_id, 100, 0, None, json.dumps({"cases": {}, "items": {}}), datetime.datetime.now())
 
+    def get_user_safe(self, user_id):
+        """Алиас для get_user для совместимости"""
+        return self.get_user(user_id)
     
+    def update_balance(self, user_id, amount):
+        cursor = self.conn.cursor()
+        cursor.execute('UPDATE users SET balance = balance + %s WHERE user_id = %s', (amount, user_id))
+        self.conn.commit()
+    
+    def log_transaction(self, user_id, transaction_type, amount, target_user_id=None, description=""):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            INSERT INTO transactions (user_id, type, amount, target_user_id, description)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (user_id, transaction_type, amount, target_user_id, description))
+        self.conn.commit()
+    
+    def get_cases(self):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM cases')
+        return cursor.fetchall()
+    
+    def get_case(self, case_id):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM cases WHERE id = %s', (case_id,))
+        return cursor.fetchone()
+    
+    def create_case(self, name, price, rewards):
+        cursor = self.conn.cursor()
+        cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s) RETURNING id', 
+                      (name, price, json.dumps(rewards)))
+        case_id = cursor.fetchone()[0]
+        self.conn.commit()
+        return case_id
+    
+    def update_case(self, case_id, name, price, rewards):
+        cursor = self.conn.cursor()
+        cursor.execute('UPDATE cases SET name = %s, price = %s, rewards = %s WHERE id = %s', 
+                      (name, price, json.dumps(rewards), case_id))
+        self.conn.commit()
+    
+    def delete_case(self, case_id):
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM cases WHERE id = %s', (case_id,))
+        self.conn.commit()
+    
+    def get_items(self):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM items')
+        return cursor.fetchall()
+    
+    def get_item(self, item_id):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM items WHERE id = %s', (item_id,))
+        return cursor.fetchone()
+    
+    def get_item_by_name(self, item_name):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM items WHERE name = %s', (item_name,))
+        return cursor.fetchone()
+    
+    def add_item_to_inventory(self, user_id, item_name):
+        cursor = self.conn.cursor()
+        
+        cursor.execute('SELECT id FROM items WHERE name = %s', (item_name,))
+        item_result = cursor.fetchone()
+        
+        if not item_result:
+            # Если предмет не найден, создаем его без бафа
+            cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (%s, %s, %s, %s) RETURNING id', 
+                          (item_name, 'Автоматически созданный предмет', 100, 'common'))
+            item_id = cursor.fetchone()[0]
+        else:
+            item_id = item_result[0]
+        
+        cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
+        result = cursor.fetchone()
+        
+        if result and result[0]:
+            inventory_data = json.loads(result[0])
+        else:
+            inventory_data = {"cases": {}, "items": {}}
+            
+        if "items" not in inventory_data:
+            inventory_data["items"] = {}
+            
+        item_key = str(item_id)
+        if item_key in inventory_data["items"]:
+            inventory_data["items"][item_key] += 1
+        else:
+            inventory_data["items"][item_key] = 1
+        
+        cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', 
+                      (json.dumps(inventory_data), user_id))
+        self.conn.commit()
+        
+        # Обновляем статистику собранных предметов
+        self.update_user_stat(user_id, 'items_collected')
+    
+    def remove_item_from_inventory(self, user_id, item_name):
+        cursor = self.conn.cursor()
+        
+        cursor.execute('SELECT id FROM items WHERE name = %s', (item_name,))
+        item_result = cursor.fetchone()
+        
+        if not item_result:
+            return False
+            
+        item_id = str(item_result[0])
+        
+        cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
+        result = cursor.fetchone()
+        
+        if not result or not result[0]:
+            return False
+            
+        inventory_data = json.loads(result[0])
+        
+        if item_id in inventory_data.get("items", {}):
+            if inventory_data["items"][item_id] > 1:
+                inventory_data["items"][item_id] -= 1
+            else:
+                del inventory_data["items"][item_id]
+            
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', 
+                          (json.dumps(inventory_data), user_id))
+            self.conn.commit()
+            return True
+        return False
+
+    def add_case_to_inventory(self, user_id, case_id, case_name, source="gifted"):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
+        result = cursor.fetchone()
+        
+        if result and result[0]:
+            inventory = json.loads(result[0])
+        else:
+            inventory = {"cases": {}, "items": {}}
+        
+        if "cases" not in inventory:
+            inventory["cases"] = {}
+        
+        case_key = f"case_{case_id}"
+        if case_key in inventory["cases"]:
+            inventory["cases"][case_key]["count"] += 1
+        else:
+            inventory["cases"][case_key] = {
+                "name": case_name,
+                "count": 1,
+                "source": source
+            }
+        
+        cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', (json.dumps(inventory), user_id))
+        self.conn.commit()
+    
+    def get_user_inventory(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
+        result = cursor.fetchone()
+        
+        if result and result[0]:
+            try:
+                return json.loads(result[0])
+            except json.JSONDecodeError:
+                return {"cases": {}, "items": {}}
+        return {"cases": {}, "items": {}}
+    
+    def remove_case_from_inventory(self, user_id, case_id):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
+        result = cursor.fetchone()
+        
+        if not result or not result[0]:
+            return False
+            
+        inventory = json.loads(result[0])
+        
+        case_key = f"case_{case_id}"
+        if case_key in inventory.get("cases", {}):
+            if inventory["cases"][case_key]["count"] > 1:
+                inventory["cases"][case_key]["count"] -= 1
+            else:
+                del inventory["cases"][case_key]
+            
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', (json.dumps(inventory), user_id))
+            self.conn.commit()
+            return True
+        return False
+
+    # СИСТЕМА СТАТИСТИКИ И ДОСТИЖЕНИЙ
+    def update_user_stat(self, user_id, stat_name, increment=1):
+        """Обновляет статистику пользователя и проверяет достижения"""
+        cursor = self.conn.cursor()
+        
+        # Проверяем существование записи статистики
+        cursor.execute('SELECT 1 FROM user_stats WHERE user_id = %s', (user_id,))
+        if not cursor.fetchone():
+            cursor.execute('INSERT INTO user_stats (user_id) VALUES (%s)', (user_id,))
+        
+        # Обновляем статистику
+        cursor.execute(f'''
+            UPDATE user_stats SET {stat_name} = {stat_name} + %s 
+            WHERE user_id = %s
+        ''', (increment, user_id))
+        
+        self.conn.commit()
+        
+        # Проверяем достижения
+        return self.check_achievements(user_id)
+    
+    def check_achievements(self, user_id):
+        """Проверяет и выдает достижения пользователю"""
+        cursor = self.conn.cursor()
+        
+        # Получаем статистику пользователя
+        cursor.execute('SELECT * FROM user_stats WHERE user_id = %s', (user_id,))
+        stats = cursor.fetchone()
+        
+        if not stats:
+            return []
+        
+        # Получаем баланс пользователя
+        user_data = self.get_user(user_id)
+        balance = user_data[1]
+        
+        # Получаем инвентарь для проверки уникальных предметов
+        inventory = self.get_user_inventory(user_id)
+        unique_items = len(inventory.get("items", {}))
+        
+        # Получаем уже полученные достижения
+        cursor.execute('SELECT achievement_id FROM achievements WHERE user_id = %s', (user_id,))
+        user_achievements = [row[0] for row in cursor.fetchall()]
+        
+        # Проверяем каждое достижение
+        achievements_to_add = []
+        
+        # Достижения по балансу
+        if 'rich' not in user_achievements and balance >= 10000:
+            achievements_to_add.append('rich')
+        if 'millionaire' not in user_achievements and balance >= 100000:
+            achievements_to_add.append('millionaire')
+        
+        # Достижения по кейсам
+        if 'case_opener' not in user_achievements and stats[1] >= 50:  # cases_opened
+            achievements_to_add.append('case_opener')
+        if 'case_master' not in user_achievements and stats[1] >= 200:
+            achievements_to_add.append('case_master')
+        
+        # Достижения по играм
+        if 'gambler' not in user_achievements and stats[5] >= 25:  # roulette_wins
+            achievements_to_add.append('gambler')
+        if 'thief' not in user_achievements and stats[3] >= 20:  # steals_successful
+            achievements_to_add.append('thief')
+        if 'duel_master' not in user_achievements and stats[2] >= 25:  # duels_won
+            achievements_to_add.append('duel_master')
+        if 'slot_king' not in user_achievements and stats[6] >= 1:  # slot_wins (джекпот)
+            achievements_to_add.append('slot_king')
+        if 'blackjack_pro' not in user_achievements and stats[7] >= 10:  # blackjack_wins
+            achievements_to_add.append('blackjack_pro')
+        if 'coinflip_champ' not in user_achievements and stats[8] >= 30:  # coinflip_wins
+            achievements_to_add.append('coinflip_champ')
+        
+        # Другие достижения
+        if 'trader' not in user_achievements and stats[11] >= 15:  # market_sales
+            achievements_to_add.append('trader')
+        if 'gifter' not in user_achievements and stats[12] >= 10:  # gifts_sent
+            achievements_to_add.append('gifter')
+        if 'veteran' not in user_achievements and stats[9] >= 30:  # daily_claimed
+            achievements_to_add.append('veteran')
+        if 'lucky' not in user_achievements and stats[13] >= 3:  # consecutive_wins
+            achievements_to_add.append('lucky')
+        if 'item_collector' not in user_achievements and unique_items >= 10:
+            achievements_to_add.append('item_collector')
+        if 'buff_master' not in user_achievements and self.get_active_buffs_count(user_id) >= 5:
+            achievements_to_add.append('buff_master')
+        
+        # Добавляем новые достижения и выдаем награды
+        for achievement_id in achievements_to_add:
+            cursor.execute('INSERT INTO achievements (user_id, achievement_id) VALUES (%s, %s)', 
+                          (user_id, achievement_id))
+            
+            # Выдаем награду за достижение
+            reward = ACHIEVEMENTS[achievement_id]['reward']
+            self.update_balance(user_id, reward)
+            self.log_transaction(user_id, 'achievement_reward', reward, description=f"Достижение: {ACHIEVEMENTS[achievement_id]['name']}")
+        
+        self.conn.commit()
+        
+        return achievements_to_add
+    
+    def update_consecutive_wins(self, user_id, win=True):
+        """Обновляет счетчик последовательных побед"""
+        cursor = self.conn.cursor()
+        
+        if win:
+            cursor.execute('''
+                UPDATE user_stats 
+                SET consecutive_wins = consecutive_wins + 1, last_win_time = CURRENT_TIMESTAMP
+                WHERE user_id = %s
+            ''', (user_id,))
+        else:
+            cursor.execute('''
+                UPDATE user_stats 
+                SET consecutive_wins = 0
+                WHERE user_id = %s
+            ''', (user_id,))
+        
+        self.conn.commit()
+    
+    def get_user_buffs(self, user_id):
+        """Безопасное получение бафов пользователя"""
+        try:
+            inventory = self.get_user_inventory(user_id)
+            buffs = {}
+            
+            for item_id, count in inventory.get("items", {}).items():
+                try:
+                    item_data = self.get_item(int(item_id))
+                    if item_data and len(item_data) > 6 and item_data[5]:  # buff_type
+                        buff_type = item_data[5]
+                        buff_value = item_data[6] if len(item_data) > 6 else 1.0
+                        
+                        # Берем самый сильный баф каждого типа
+                        if buff_type not in buffs or buff_value > buffs[buff_type]['value']:
+                            buffs[buff_type] = {
+                                'value': buff_value,
+                                'description': item_data[7] if len(item_data) > 7 else "Бонус",
+                                'item_name': item_data[1] if len(item_data) > 1 else "Предмет"
+                            }
+                except (ValueError, IndexError) as e:
+                    print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
+                    continue
+            
+            return buffs
+        except Exception as e:
+            print(f"❌ Ошибка в get_user_buffs для {user_id}: {e}")
+            return {}
+    
+    def get_active_buffs_count(self, user_id):
+        """Возвращает количество активных уникальных бафов"""
+        buffs = self.get_user_buffs(user_id)
+        return len(buffs)
+    
+    def apply_buff_to_amount(self, user_id, base_amount, buff_type):
+        """Применяет баф к сумме, если он есть у пользователя"""
+        buffs = self.get_user_buffs(user_id)
+        if buff_type in buffs:
+            return int(base_amount * buffs[buff_type]['value'])
+        return base_amount
+    
+    def apply_buff_to_chance(self, user_id, base_chance, buff_type):
+        """Применяет баф к шансу, если он есть у пользователя"""
+        buffs = self.get_user_buffs(user_id)
+        if buff_type in buffs:
+            return base_chance * buffs[buff_type]['value']
+        return base_chance
+    
+    def get_all_users(self):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM users ORDER BY balance DESC')
+        return cursor.fetchall()
+    
+    def get_all_transactions(self, limit=50):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM transactions ORDER BY timestamp DESC LIMIT %s', (limit,))
+        return cursor.fetchall()
+    
+    def get_all_items(self):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM items')
+        return cursor.fetchall()
+
     def create_tables(self):
         """Создание таблиц с улучшенной обработкой ошибок"""
         try:
@@ -332,7 +704,7 @@ class Database:
             print(f"❌ Ошибка при создании таблиц: {e}")
             self.conn.rollback()
             raise
-    
+
     def initialize_default_data(self):
         """Инициализация начальных данных"""
         try:
@@ -342,13 +714,6 @@ class Database:
             cursor.execute('SELECT COUNT(*) FROM cases')
             if cursor.fetchone()[0] == 0:
                 print("🔄 Добавление стандартных кейсов...")
-                
-                # ... (добавление кейсов остается без изменений)
-            
-            # Проверяем, есть ли уже предметы
-            cursor.execute('SELECT COUNT(*) FROM items')
-            if cursor.fetchone()[0] == 0:
-                print("🔄 Добавление стандартных предметов...")
                 
                 default_cases = [
                     ('📦 Начинающий кейс', 25, json.dumps([
@@ -3313,6 +3678,7 @@ if __name__ == "__main__":
         import time
         time.sleep(5)
         bot.run(BOT_TOKEN)
+
 
 
 

@@ -21,20 +21,64 @@ except ImportError:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 
-# Получение DATABASE_URL из переменных окружения Railway
-DATABASE_URL = os.environ.get('DATABASE_URL')
+# ПОЛУЧЕНИЕ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ С АЛЬТЕРНАТИВНЫМИ ВАРИАНТАМИ
+def get_database_url():
+    """Получаем DATABASE_URL разными способами"""
+    # Способ 1: Стандартная переменная
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url:
+        print("✅ DATABASE_URL найден в переменных окружения")
+        return database_url
+    
+    # Способ 2: Альтернативные имена переменных
+    alternative_names = ['POSTGRES_URL', 'POSTGRESQL_URL', 'RAILWAY_DATABASE_URL']
+    for name in alternative_names:
+        database_url = os.environ.get(name)
+        if database_url:
+            print(f"✅ DATABASE_URL найден как {name}")
+            return database_url
+    
+    # Способ 3: Собираем вручную из отдельных переменных
+    db_user = os.environ.get('PGUSER')
+    db_password = os.environ.get('PGPASSWORD')
+    db_host = os.environ.get('PGHOST')
+    db_port = os.environ.get('PGPORT')
+    db_name = os.environ.get('PGDATABASE')
+    
+    if all([db_user, db_password, db_host, db_port, db_name]):
+        database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        print("✅ DATABASE_URL собран из отдельных переменных")
+        return database_url
+    
+    print("❌ DATABASE_URL не найден ни в одной переменной окружения")
+    return None
+
+# Получаем переменные
+DATABASE_URL = get_database_url()
 BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
 
+# Выводим отладочную информацию
+print("=== ДЕБАГ ИНФОРМАЦИЯ ===")
+print(f"BOT_TOKEN: {'✅ Установлен' if BOT_TOKEN else '❌ Отсутствует'}")
+print(f"DATABASE_URL: {'✅ Установлен' if DATABASE_URL else '❌ Отсутствует'}")
+if DATABASE_URL:
+    print(f"DATABASE_URL (первые 50 символов): {DATABASE_URL[:50]}...")
+print("Все переменные окружения:", list(os.environ.keys()))
+print("========================")
+
 if not BOT_TOKEN:
-    print("❌ Ошибка: DISCORD_BOT_TOKEN не установлен!")
+    print("❌ КРИТИЧЕСКАЯ ОШИБКА: DISCORD_BOT_TOKEN не установлен!")
+    print("💡 Добавь DISCORD_BOT_TOKEN в Variables в Railway")
     exit(1)
 
 if not DATABASE_URL:
-    print("❌ Ошибка: DATABASE_URL не установлен!")
-    print("💡 Убедись, что PostgreSQL плагин добавлен в Railway")
+    print("❌ КРИТИЧЕСКАЯ ОШИБКА: DATABASE_URL не установлен!")
+    print("💡 Убедись, что:")
+    print("   1. PostgreSQL плагин добавлен в Railway")
+    print("   2. DATABASE_URL присутствует в Variables")
+    print("   3. Или добавь вручную DATABASE_URL со значением:")
+    print("      postgresql://postgres:cULeSFiMpXjKhOVANPZqkeKjmDptXWTp@postgres.railway.internal:5432/railway")
     exit(1)
-
-print(f"✅ DATABASE_URL найден")
 
 # Настройки бота
 intents = discord.Intents.all()
@@ -1730,3 +1774,4 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
+

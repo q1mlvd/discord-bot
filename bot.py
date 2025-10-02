@@ -159,25 +159,24 @@ class Database:
         # Проверяем, есть ли уже кейсы
         cursor.execute('SELECT COUNT(*) FROM cases')
         if cursor.fetchone()[0] == 0:
-            # Добавляем стандартные кейсы без кастомных ролей
+            # Добавляем стандартные кейсы без кастомных ролей и с одним предметом за раз
             default_cases = [
                 ('📦 Малый кейс', 50, json.dumps([
-                    {'type': 'coins', 'amount': [10, 40], 'chance': 0.7},
-                    {'type': 'coins', 'amount': [41, 100], 'chance': 0.25},
+                    {'type': 'coins', 'amount': [10, 40], 'chance': 0.8},
+                    {'type': 'coins', 'amount': [41, 100], 'chance': 0.15},
                     {'type': 'coins', 'amount': [101, 300], 'chance': 0.05}
                 ])),
                 ('📦 Средний кейс', 150, json.dumps([
-                    {'type': 'coins', 'amount': [50, 120], 'chance': 0.6},
-                    {'type': 'coins', 'amount': [121, 300], 'chance': 0.3},
+                    {'type': 'coins', 'amount': [50, 120], 'chance': 0.7},
+                    {'type': 'coins', 'amount': [121, 300], 'chance': 0.2},
                     {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.05},
                     {'type': 'coins', 'amount': [301, 800], 'chance': 0.05}
                 ])),
                 ('💎 Большой кейс', 500, json.dumps([
-                    {'type': 'coins', 'amount': [200, 400], 'chance': 0.5},
-                    {'type': 'coins', 'amount': [401, 1000], 'chance': 0.3},
+                    {'type': 'coins', 'amount': [200, 400], 'chance': 0.6},
+                    {'type': 'coins', 'amount': [401, 1000], 'chance': 0.25},
                     {'type': 'special_item', 'name': 'Золотой ключ', 'chance': 0.08},
-                    {'type': 'bonus', 'multiplier': 1.5, 'duration': 24, 'chance': 0.07},
-                    {'type': 'coins', 'amount': [1001, 2500], 'chance': 0.05}
+                    {'type': 'bonus', 'multiplier': 1.5, 'duration': 24, 'chance': 0.07}
                 ])),
                 ('👑 Элитный кейс', 1000, json.dumps([
                     {'type': 'coins', 'amount': [500, 1000], 'chance': 0.3},
@@ -191,10 +190,9 @@ class Database:
                     {'type': 'coins', 'amount': [800, 1500], 'chance': 0.3},
                     {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.15},
                     {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.15},
-                    {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.07},
-                    {'type': 'multiple', 'count': 3, 'chance': 0.05},
+                    {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.1},
                     {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.15},
-                    {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.13}
+                    {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.15}
                 ]))
             ]
             
@@ -219,7 +217,7 @@ class Database:
                 cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (?, ?, ?, ?)', item)
         
         self.conn.commit()
-
+    
     def get_user(self, user_id):
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
@@ -284,42 +282,70 @@ class Database:
     
     def add_item_to_inventory(self, user_id, item_name):
         cursor = self.conn.cursor()
+        
+        # Находим ID предмета по имени
+        cursor.execute('SELECT id FROM items WHERE name = ?', (item_name,))
+        item_result = cursor.fetchone()
+        
+        if not item_result:
+            # Если предмет не найден, создаем его
+            cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (?, ?, ?, ?)', 
+                          (item_name, 'Автоматически созданный предмет', 100, 'common'))
+            item_id = cursor.lastrowid
+        else:
+            item_id = item_result[0]
+        
+        # Получаем инвентарь пользователя
         cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
         
         if result and result[0]:
-            inventory = json.loads(result[0])
+            inventory_data = json.loads(result[0])
         else:
-            inventory = {"cases": {}, "items": {}}
+            inventory_data = {"cases": {}, "items": {}}
             
-        if "items" not in inventory:
-            inventory["items"] = {}
+        if "items" not in inventory_data:
+            inventory_data["items"] = {}
             
-        if item_name in inventory["items"]:
-            inventory["items"][item_name] += 1
+        # Сохраняем ID предмета вместо названия
+        item_key = str(item_id)
+        if item_key in inventory_data["items"]:
+            inventory_data["items"][item_key] += 1
         else:
-            inventory["items"][item_name] = 1
+            inventory_data["items"][item_key] = 1
         
-        cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), user_id))
+        cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', 
+                      (json.dumps(inventory_data), user_id))
         self.conn.commit()
     
     def remove_item_from_inventory(self, user_id, item_name):
         cursor = self.conn.cursor()
+        
+        # Находим ID предмета по имени
+        cursor.execute('SELECT id FROM items WHERE name = ?', (item_name,))
+        item_result = cursor.fetchone()
+        
+        if not item_result:
+            return False
+            
+        item_id = str(item_result[0])
+        
         cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
         
         if not result or not result[0]:
             return False
             
-        inventory = json.loads(result[0])
+        inventory_data = json.loads(result[0])
         
-        if item_name in inventory.get("items", {}):
-            if inventory["items"][item_name] > 1:
-                inventory["items"][item_name] -= 1
+        if item_id in inventory_data.get("items", {}):
+            if inventory_data["items"][item_id] > 1:
+                inventory_data["items"][item_id] -= 1
             else:
-                del inventory["items"][item_name]
+                del inventory_data["items"][item_id]
             
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), user_id))
+            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', 
+                          (json.dumps(inventory_data), user_id))
             self.conn.commit()
             return True
         return False
@@ -384,6 +410,22 @@ class Database:
             self.conn.commit()
             return True
         return False
+
+    # Методы для просмотра базы данных
+    def get_all_users(self):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM users')
+        return cursor.fetchall()
+    
+    def get_all_transactions(self, limit=50):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ?', (limit,))
+        return cursor.fetchall()
+    
+    def get_all_items(self):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM items')
+        return cursor.fetchall()
 
 db = Database()
 
@@ -457,13 +499,6 @@ async def process_reward(user, reward, case):
     
     elif reward['type'] == 'bonus':
         return f"🚀 Бонус x{reward['multiplier']} на {reward['duration']}ч"
-    
-    elif reward['type'] == 'multiple':
-        rewards = []
-        for _ in range(reward['count']):
-            sub_reward = get_reward(case)
-            rewards.append(await process_reward(user, sub_reward, case))
-        return " + ".join(rewards)
     
     elif reward['type'] == 'role':
         return f"👑 Роль: {reward['name']} на {reward['duration']}ч"
@@ -815,12 +850,19 @@ async def inventory(interaction: discord.Interaction):
     else:
         embed.add_field(name="🎁 Кейсы", value="Пусто", inline=False)
     
-    # Показываем предметы
+    # Показываем предметы - ИСПРАВЛЕННАЯ ЧАСТЬ
     items = inventory_data.get("items", {})
     if items:
         items_text = ""
-        for item_name, count in items.items():
-            items_text += f"• {item_name} ×{count}\n"
+        for item_id, count in items.items():
+            # Получаем информацию о предмете из базы данных
+            item_data = db.get_item(int(item_id)) if item_id.isdigit() else None
+            if item_data:
+                item_name = item_data[1]  # Название предмета
+                items_text += f"• {item_name} ×{count}\n"
+            else:
+                # Если предмет не найден в базе, показываем ID
+                items_text += f"• Предмет ID:{item_id} ×{count}\n"
         embed.add_field(name="📦 Предметы", value=items_text, inline=False)
     else:
         embed.add_field(name="📦 Предметы", value="Пусто", inline=False)
@@ -1053,7 +1095,7 @@ async def duel(interaction: discord.Interaction, user: discord.Member, bet: int)
     view = DuelView(interaction.user.id, user.id, bet)
     await interaction.response.send_message(embed=embed, view=view)
 
-# Измененная команда /steal с рандомной суммой
+# Измененная команда /steal с рандомной суммой и КД 30 минут
 @bot.tree.command(name="steal", description="Попытаться украсть монеты у другого пользователя (КД 30 мин)")
 @app_commands.describe(user="Пользователь, у которого крадем")
 @app_commands.checks.cooldown(1, 1800.0, key=lambda i: (i.guild_id, i.user.id))  # 30 минут кд
@@ -1414,6 +1456,84 @@ async def admin_viewtransactions(interaction: discord.Interaction, user: discord
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
 
+# НОВАЯ КОМАНДА: Просмотр базы данных
+@bot.tree.command(name="admin_database", description="Просмотр содержимого базы данных (админ)")
+@app_commands.describe(table="Таблица для просмотра")
+@app_commands.choices(table=[
+    app_commands.Choice(name="👥 Пользователи", value="users"),
+    app_commands.Choice(name="💰 Транзакции", value="transactions"),
+    app_commands.Choice(name="🎁 Кейсы", value="cases"),
+    app_commands.Choice(name="📦 Предметы", value="items"),
+    app_commands.Choice(name="🏪 Маркет", value="market")
+])
+@is_admin()
+async def admin_database(interaction: discord.Interaction, table: app_commands.Choice[str]):
+    try:
+        if table.value == "users":
+            users = db.get_all_users()
+            embed = discord.Embed(title="👥 База данных: Пользователи", color=0x3498db)
+            
+            for user in users[:10]:  # Показываем только первых 10
+                embed.add_field(
+                    name=f"ID: {user[0]}",
+                    value=f"Баланс: {user[1]} {EMOJIS['coin']}\nСерия: {user[2]} дней",
+                    inline=False
+                )
+            
+            if len(users) > 10:
+                embed.set_footer(text=f"Показано 10 из {len(users)} пользователей")
+                
+        elif table.value == "transactions":
+            transactions = db.get_all_transactions(10)
+            embed = discord.Embed(title="💰 База данных: Транзакции", color=0x3498db)
+            
+            for trans in transactions:
+                embed.add_field(
+                    name=f"#{trans[0]} {trans[2]}",
+                    value=f"Сумма: {trans[3]} {EMOJIS['coin']}\nID пользователя: {trans[1]}\nОписание: {trans[5]}",
+                    inline=False
+                )
+                
+        elif table.value == "cases":
+            cases = db.get_cases()
+            embed = discord.Embed(title="🎁 База данных: Кейсы", color=0x3498db)
+            
+            for case in cases:
+                embed.add_field(
+                    name=f"#{case[0]} {case[1]}",
+                    value=f"Цена: {case[2]} {EMOJIS['coin']}",
+                    inline=False
+                )
+                
+        elif table.value == "items":
+            items = db.get_all_items()
+            embed = discord.Embed(title="📦 База данных: Предметы", color=0x3498db)
+            
+            for item in items:
+                embed.add_field(
+                    name=f"#{item[0]} {item[1]}",
+                    value=f"Цена: {item[3]} {EMOJIS['coin']}\nРедкость: {item[4]}",
+                    inline=False
+                )
+                
+        elif table.value == "market":
+            cursor = db.conn.cursor()
+            cursor.execute('SELECT * FROM market LIMIT 10')
+            market_items = cursor.fetchall()
+            
+            embed = discord.Embed(title="🏪 База данных: Маркет", color=0x3498db)
+            
+            for item in market_items:
+                embed.add_field(
+                    name=f"#{item[0]} {item[2]}",
+                    value=f"Цена: {item[3]} {EMOJIS['coin']}\nПродавец ID: {item[1]}",
+                    inline=False
+                )
+        
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
+
 @bot.tree.command(name="admin_broadcast", description="Отправить объявление всем (админ)")
 @app_commands.describe(message="Текст объявления")
 @is_admin()
@@ -1514,6 +1634,7 @@ async def help_command(interaction: discord.Interaction):
 **/admin_editcase** ID_кейса [название] [цена] [JSON_наград] - Редактировать кейс
 **/admin_deletecase** ID_кейса - Удалить кейс
 **/admin_viewtransactions** [@пользователь] - Просмотр транзакций
+**/admin_database** таблица - Просмотр базы данных
 **/admin_broadcast** сообщение - Отправить объявление""",
             inline=False
         )
@@ -1548,8 +1669,3 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
-
-
-
-
-

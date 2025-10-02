@@ -67,7 +67,7 @@ intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 # Конфигурация
-LOG_CHANNEL_ID = 1422557295811887175
+LOG_CHANNEL_ID = 1423377881047896207
 ADMIN_IDS = [766767256742526996, 1195144951546265675, 691904643181314078, 1078693283695448064, 1138140772097597472]
 ADMIN_USER_ID = 1188261847850299514
 
@@ -168,6 +168,33 @@ class Database:
                 else:
                     print("💥 Не удалось подключиться к базе данных после нескольких попыток")
                     raise
+
+        def get_user(self, user_id):
+        """Безопасное получение пользователя (восстановленный метод)"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
+            user = cursor.fetchone()
+            
+            if not user:
+                # Создаем нового пользователя
+                cursor.execute('''
+                    INSERT INTO users (user_id, balance, inventory) 
+                    VALUES (%s, %s, %s)
+                ''', (user_id, 100, json.dumps({"cases": {}, "items": {}})))
+                self.conn.commit()
+                
+                # Получаем созданного пользователя
+                cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
+                user = cursor.fetchone()
+            
+            return user
+            
+        except Exception as e:
+            print(f"❌ Ошибка в get_user для {user_id}: {e}")
+            # Возвращаем кортеж с безопасными значениями по умолчанию
+            return (user_id, 100, 0, None, json.dumps({"cases": {}, "items": {}}), datetime.datetime.now())
+
     
     def create_tables(self):
         """Создание таблиц с улучшенной обработкой ошибок"""
@@ -1860,11 +1887,14 @@ async def blackjack(interaction: discord.Interaction, bet: int):
 @bot.tree.command(name="slots", description="Играть в игровые автоматы")
 @app_commands.describe(bet="Ставка в монетах")
 async def slots(interaction: discord.Interaction, bet: int):
-    user_data = db.get_user(interaction.user.id)
-    
-    if user_data[1] < bet:
-        await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
-        return
+    try:
+        # ИСПОЛЬЗУЕМ БЕЗОПАСНЫЙ МЕТОД ПОЛУЧЕНИЯ ПОЛЬЗОВАТЕЛЯ
+        user_data = db.get_user(interaction.user.id)
+        balance = user_data[1] if len(user_data) > 1 else 100
+        
+        if balance < bet:
+            await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
+            return
     
     # Символы для слотов
     symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '💎', '7️⃣']
@@ -1940,7 +1970,14 @@ async def slots(interaction: discord.Interaction, bet: int):
     embed.add_field(name="Ставка", value=f"{bet} {EMOJIS['coin']}", inline=True)
     embed.color = color
     
-    await interaction.edit_original_response(embed=embed)
+    except Exception as e:
+        print(f"❌ Ошибка в команде slots: {e}")
+        error_embed = discord.Embed(
+            title="🎰 Ошибка слотов",
+            description="Произошла ошибка при запуске игры. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 # ДУЭЛЬ С УЧЕТОМ БАФОВ
 @bot.tree.command(name="duel", description="Вызвать пользователя на дуэль")
@@ -3242,6 +3279,17 @@ async def admin_fix_user(interaction: discord.Interaction, user: discord.Member)
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
+async def send_to_log_channel(embed):
+    """Безопасная отправка в лог-канал"""
+    try:
+        channel = bot.get_channel(LOG_CHANNEL_ID)
+        if channel and isinstance(channel, discord.TextChannel):
+            await channel.send(embed=embed)
+        else:
+            print(f"⚠️ Лог-канал {LOG_CHANNEL_ID} недоступен. Тип: {type(channel)}")
+    except Exception as e:
+        print(f"❌ Ошибка отправки в лог-канал: {e}")
+
 # ЗАПУСК БОТА
 if __name__ == "__main__":
     print("🚀 Запуск экономического бота...")
@@ -3258,3 +3306,4 @@ if __name__ == "__main__":
         import time
         time.sleep(5)
         bot.run(BOT_TOKEN)
+

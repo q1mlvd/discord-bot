@@ -1192,6 +1192,7 @@ class BlackjackView(View):
         self.user_cards = []
         self.dealer_cards = []
         self.game_over = False
+        self.message = None  # Добавляем ссылку на сообщение
         
         # Начальная раздача
         self.user_cards = [self.draw_card(), self.draw_card()]
@@ -1203,13 +1204,14 @@ class BlackjackView(View):
     def calculate_score(self, cards):
         score = sum(cards)
         # Обработка тузов
-        if score > 21 and 11 in cards:
-            cards[cards.index(11)] = 1
-            score = sum(cards)
+        aces = cards.count(11)
+        while score > 21 and aces > 0:
+            score -= 10
+            aces -= 1
         return score
     
     async def update_game(self, interaction: discord.Interaction):
-        """ИСПРАВЛЕННЫЙ МЕТОД - используем response.send_message для первого вызова"""
+        """Исправленный метод обновления игры"""
         user_score = self.calculate_score(self.user_cards)
         dealer_score = self.calculate_score([self.dealer_cards[0]])  # Показываем только одну карту дилера
         
@@ -1226,24 +1228,32 @@ class BlackjackView(View):
         )
         embed.add_field(name="Ставка", value=f"{self.bet} {EMOJIS['coin']}", inline=True)
         
-        # ИСПРАВЛЕНИЕ: используем response.send_message для первого взаимодействия
-        if not interaction.response.is_done():
-            await interaction.response.send_message(embed=embed, view=self)
+        # Если это первое сообщение
+        if not self.message:
+            self.message = await interaction.response.send_message(embed=embed, view=self)
         else:
-            await interaction.edit_original_response(embed=embed, view=self)
+            # Если сообщение уже существует, редактируем его
+            try:
+                await interaction.response.defer()  # Откладываем ответ
+                await self.message.edit(embed=embed, view=self)
+            except Exception as e:
+                print(f"Ошибка при обновлении блэкджека: {e}")
     
     @discord.ui.button(label='Взять карту', style=discord.ButtonStyle.primary)
     async def hit(self, interaction: discord.Interaction, button: Button):
         if self.game_over:
+            await interaction.response.send_message("Игра уже завершена!", ephemeral=True)
             return
         
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Эта игра не для вас!", ephemeral=True)
             return
         
+        # Добавляем карту
         self.user_cards.append(self.draw_card())
         user_score = self.calculate_score(self.user_cards)
         
+        # Проверяем перебор
         if user_score > 21:
             await self.end_game(interaction, "перебор")
         else:
@@ -1252,15 +1262,20 @@ class BlackjackView(View):
     @discord.ui.button(label='Остановиться', style=discord.ButtonStyle.secondary)
     async def stand(self, interaction: discord.Interaction, button: Button):
         if self.game_over:
+            await interaction.response.send_message("Игра уже завершена!", ephemeral=True)
             return
         
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Эта игра не для вас!", ephemeral=True)
             return
         
+        # Откладываем ответ перед длительной операцией
+        await interaction.response.defer()
+        
         # Дилер берет карты пока не наберет 17 или больше
         while self.calculate_score(self.dealer_cards) < 17:
             self.dealer_cards.append(self.draw_card())
+            await asyncio.sleep(0.5)  # Небольшая задержка для драматизма
         
         await self.end_game(interaction, "stand")
     
@@ -1298,7 +1313,8 @@ class BlackjackView(View):
             db.update_consecutive_wins(self.user_id, True)
             color = 0x00ff00
         elif result == "push":
-            db.update_balance(self.user_id, 0)  # Возвращаем ставку
+            # Возвращаем ставку при ничье
+            db.update_balance(self.user_id, self.bet)
             color = 0xffff00
         else:
             # Применяем баф защиты от проигрышей
@@ -1308,23 +1324,40 @@ class BlackjackView(View):
             db.update_consecutive_wins(self.user_id, False)
             color = 0xff0000
         
+        # Создаем финальное embed
         embed = discord.Embed(title="🃏 Результат блэкджека", color=color)
         embed.add_field(
             name="Ваши карты",
-            value=f"{' '.join([f'{card}️' for card in self.user_cards])} (Очки: {user_score})",
+            value=f"{' '.join([f'`{card}`' for card in self.user_cards])} (Очки: {user_score})",
             inline=False
         )
         embed.add_field(
             name="Карты дилера",
-            value=f"{' '.join([f'{card}️' for card in self.dealer_cards])} (Очки: {dealer_score})",
+            value=f"{' '.join([f'`{card}`' for card in self.dealer_cards])} (Очки: {dealer_score})",
             inline=False
         )
         embed.add_field(name="Результат", value=result_text, inline=False)
         
         if result == "win":
             embed.add_field(name="Выигрыш", value=f"{winnings} {EMOJIS['coin']}", inline=True)
+        elif result == "push":
+            embed.add_field(name="Результат", value="Ставка возвращена", inline=True)
+        else:
+            embed.add_field(name="Потеряно", value=f"{loss} {EMOJIS['coin']}", inline=True)
         
-        await interaction.edit_original_response(embed=embed, view=None)
+        # Обновляем сообщение
+        try:
+            if self.message:
+                await self.message.edit(embed=embed, view=None)
+            else:
+                # Если сообщение не сохранилось, отправляем новое
+                await interaction.followup.send(embed=embed)
+        except Exception as e:
+            print(f"Ошибка при завершении блэкджека: {e}")
+            try:
+                await interaction.followup.send(embed=embed)
+            except:
+                pass
 
 # Улучшенная функция проверки прав администратора
 def is_admin():
@@ -2074,6 +2107,10 @@ async def blackjack(interaction: discord.Interaction, bet: int):
     
     if user_data[1] < bet:
         await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
+        return
+    
+    if bet <= 0:
+        await interaction.response.send_message("Ставка должна быть положительной!", ephemeral=True)
         return
     
     view = BlackjackView(interaction.user.id, bet)
@@ -3365,3 +3402,4 @@ if __name__ == "__main__":
         except Exception as e2:
             print(f"💥 Повторная критическая ошибка: {e2}")
             traceback.print_exc()
+

@@ -1,184 +1,279 @@
 import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import discord
+from discord import app_commands
+from discord.ext import commands, tasks
+from discord.ui import Button, View, Select
 import json
 import random
-from urllib.parse import urlparse
+import asyncio
+import datetime
+import aiohttp
+from typing import Dict, List, Optional
+
+# Попробуем разные варианты импорта PostgreSQL
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    print("✅ psycopg2 импортирован успешно")
+except ImportError:
+    print("❌ psycopg2 не установлен, устанавливаем...")
+    os.system("pip install psycopg2-binary")
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
 
 # Получение DATABASE_URL из переменных окружения Railway
 DATABASE_URL = os.environ.get('DATABASE_URL')
+BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
 
-if not DATABASE_URL:
-    print("Ошибка: DATABASE_URL не установлен!")
+if not BOT_TOKEN:
+    print("❌ Ошибка: DISCORD_BOT_TOKEN не установлен!")
     exit(1)
 
+if not DATABASE_URL:
+    print("❌ Ошибка: DATABASE_URL не установлен!")
+    print("💡 Убедись, что PostgreSQL плагин добавлен в Railway")
+    exit(1)
+
+print(f"✅ DATABASE_URL найден")
+
+# Настройки бота
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+
+# Конфигурация
+LOG_CHANNEL_ID = 1422557295811887175
+ADMIN_IDS = [766767256742526996, 1195144951546265675, 691904643181314078, 1078693283695448064, 1138140772097597472]
+ADMIN_USER_ID = 1188261847850299514
+
+# Эмодзи для оформления
+EMOJIS = {
+    'coin': '🪙',
+    'daily': '📅',
+    'case': '🎁',
+    'win': '🎉',
+    'lose': '💀',
+    'steal': '🦹',
+    'market': '🏪',
+    'quest': '🗺️',
+    'dice': '🎲',
+    'duel': '⚔️',
+    'admin': '⚙️'
+}
+
+# Исправленный класс Database для PostgreSQL
 class Database:
     def __init__(self):
-        self.conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+        self.conn = None
+        self.connect()
         self.create_tables()
     
+    def connect(self):
+        """Подключение к базе данных с повторными попытками"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.conn = psycopg2.connect(DATABASE_URL, sslmode='require')
+                print("✅ Успешное подключение к PostgreSQL!")
+                return
+            except Exception as e:
+                print(f"❌ Попытка {attempt + 1}/{max_retries} не удалась: {e}")
+                if attempt < max_retries - 1:
+                    print("🔄 Повторная попытка через 5 секунд...")
+                    import time
+                    time.sleep(5)
+                else:
+                    print("💥 Не удалось подключиться к базе данных после нескольких попыток")
+                    raise
+    
     def create_tables(self):
-        cursor = self.conn.cursor()
-        
-        # Таблица пользователей
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                user_id BIGINT PRIMARY KEY,
-                balance INTEGER DEFAULT 100,
-                daily_streak INTEGER DEFAULT 0,
-                last_daily TEXT,
-                inventory TEXT DEFAULT '{}',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Таблица транзакций
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS transactions (
-                id SERIAL PRIMARY KEY,
-                user_id BIGINT,
-                type TEXT,
-                amount INTEGER,
-                target_user_id BIGINT,
-                description TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Таблица кейсов
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS cases (
-                id SERIAL PRIMARY KEY,
-                name TEXT,
-                price INTEGER,
-                rewards TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Таблица маркета
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS market (
-                id SERIAL PRIMARY KEY,
-                seller_id BIGINT,
-                item_name TEXT,
-                price INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Таблица достижений
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS achievements (
-                user_id BIGINT,
-                achievement_id TEXT,
-                unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (user_id, achievement_id)
-            )
-        ''')
-        
-        # Таблица квестов
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS quests (
-                user_id BIGINT,
-                quest_id TEXT,
-                progress INTEGER DEFAULT 0,
-                completed INTEGER DEFAULT 0,
-                last_quest TEXT,
-                PRIMARY KEY (user_id, quest_id)
-            )
-        ''')
-        
-        # Таблица дуэлей
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS duels (
-                id SERIAL PRIMARY KEY,
-                challenger_id BIGINT,
-                target_id BIGINT,
-                bet INTEGER,
-                status TEXT DEFAULT 'pending',
-                winner_id BIGINT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Таблица предметов
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS items (
-                id SERIAL PRIMARY KEY,
-                name TEXT,
-                description TEXT,
-                value INTEGER,
-                rarity TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        self.conn.commit()
-        self.initialize_default_data()
+        """Создание таблиц с улучшенной обработкой ошибок"""
+        try:
+            cursor = self.conn.cursor()
+            
+            print("🔄 Создание таблиц...")
+            
+            # Таблица пользователей
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id BIGINT PRIMARY KEY,
+                    balance INTEGER DEFAULT 100,
+                    daily_streak INTEGER DEFAULT 0,
+                    last_daily TEXT,
+                    inventory TEXT DEFAULT '{}',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Таблица транзакций
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT,
+                    type TEXT,
+                    amount INTEGER,
+                    target_user_id BIGINT,
+                    description TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Таблица кейсов
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS cases (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT,
+                    price INTEGER,
+                    rewards TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Таблица маркета
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS market (
+                    id SERIAL PRIMARY KEY,
+                    seller_id BIGINT,
+                    item_name TEXT,
+                    price INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Таблица достижений
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS achievements (
+                    user_id BIGINT,
+                    achievement_id TEXT,
+                    unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (user_id, achievement_id)
+                )
+            ''')
+            
+            # Таблица квестов
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS quests (
+                    user_id BIGINT,
+                    quest_id TEXT,
+                    progress INTEGER DEFAULT 0,
+                    completed INTEGER DEFAULT 0,
+                    last_quest TEXT,
+                    PRIMARY KEY (user_id, quest_id)
+                )
+            ''')
+            
+            # Таблица дуэлей
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS duels (
+                    id SERIAL PRIMARY KEY,
+                    challenger_id BIGINT,
+                    target_id BIGINT,
+                    bet INTEGER,
+                    status TEXT DEFAULT 'pending',
+                    winner_id BIGINT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Таблица предметов
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS items (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT,
+                    description TEXT,
+                    value INTEGER,
+                    rarity TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            self.conn.commit()
+            print("✅ Все таблицы успешно созданы!")
+            
+            # Инициализация начальных данных
+            self.initialize_default_data()
+            
+        except Exception as e:
+            print(f"❌ Ошибка при создании таблиц: {e}")
+            self.conn.rollback()
+            raise
     
     def initialize_default_data(self):
-        cursor = self.conn.cursor()
-        
-        # Проверяем, есть ли уже кейсы
-        cursor.execute('SELECT COUNT(*) FROM cases')
-        if cursor.fetchone()[0] == 0:
-            default_cases = [
-                ('📦 Малый кейс', 50, json.dumps([
-                    {'type': 'coins', 'amount': [10, 40], 'chance': 0.8},
-                    {'type': 'coins', 'amount': [41, 100], 'chance': 0.15},
-                    {'type': 'coins', 'amount': [101, 300], 'chance': 0.05}
-                ])),
-                ('📦 Средний кейс', 150, json.dumps([
-                    {'type': 'coins', 'amount': [50, 120], 'chance': 0.7},
-                    {'type': 'coins', 'amount': [121, 300], 'chance': 0.2},
-                    {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.05},
-                    {'type': 'coins', 'amount': [301, 800], 'chance': 0.05}
-                ])),
-                ('💎 Большой кейс', 500, json.dumps([
-                    {'type': 'coins', 'amount': [200, 400], 'chance': 0.6},
-                    {'type': 'coins', 'amount': [401, 1000], 'chance': 0.25},
-                    {'type': 'special_item', 'name': 'Золотой ключ', 'chance': 0.08},
-                    {'type': 'bonus', 'multiplier': 1.5, 'duration': 24, 'chance': 0.07}
-                ])),
-                ('👑 Элитный кейс', 1000, json.dumps([
-                    {'type': 'coins', 'amount': [500, 1000], 'chance': 0.3},
-                    {'type': 'coins', 'amount': [-300, -100], 'chance': 0.2},
-                    {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.15},
-                    {'type': 'bonus', 'multiplier': 2.0, 'duration': 48, 'chance': 0.1},
-                    {'type': 'coins', 'amount': [1001, 3000], 'chance': 0.15},
-                    {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.1}
-                ])),
-                ('🔮 Секретный кейс', 2000, json.dumps([
-                    {'type': 'coins', 'amount': [800, 1500], 'chance': 0.3},
-                    {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.15},
-                    {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.15},
-                    {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.1},
-                    {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.15},
-                    {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.15}
-                ]))
-            ]
+        """Инициализация начальных данных"""
+        try:
+            cursor = self.conn.cursor()
             
-            for case in default_cases:
-                cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', case)
-        
-        # Проверяем, есть ли уже предметы
-        cursor.execute('SELECT COUNT(*) FROM items')
-        if cursor.fetchone()[0] == 0:
-            default_items = [
-                ('Золотой ключ', 'Открывает особые кейсы', 500, 'rare'),
-                ('Древний артефакт', 'Мощный магический предмет', 1000, 'epic'),
-                ('Мифический предмет', 'Легендарный артефакт', 2000, 'legendary'),
-                ('Билет VIP', 'Дает доступ к VIP зоне', 300, 'uncommon'),
-                ('Магический свиток', 'Увеличивает удачу', 150, 'common'),
-                ('Сундук с сокровищами', 'Содержит случайные награды', 800, 'rare'),
-                ('Зачарованный амулет', 'Дает защиту от проигрышей', 600, 'uncommon')
-            ]
+            # Проверяем, есть ли уже кейсы
+            cursor.execute('SELECT COUNT(*) FROM cases')
+            if cursor.fetchone()[0] == 0:
+                print("🔄 Добавление стандартных кейсов...")
+                
+                default_cases = [
+                    ('📦 Малый кейс', 50, json.dumps([
+                        {'type': 'coins', 'amount': [10, 40], 'chance': 0.8},
+                        {'type': 'coins', 'amount': [41, 100], 'chance': 0.15},
+                        {'type': 'coins', 'amount': [101, 300], 'chance': 0.05}
+                    ])),
+                    ('📦 Средний кейс', 150, json.dumps([
+                        {'type': 'coins', 'amount': [50, 120], 'chance': 0.7},
+                        {'type': 'coins', 'amount': [121, 300], 'chance': 0.2},
+                        {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.05},
+                        {'type': 'coins', 'amount': [301, 800], 'chance': 0.05}
+                    ])),
+                    ('💎 Большой кейс', 500, json.dumps([
+                        {'type': 'coins', 'amount': [200, 400], 'chance': 0.6},
+                        {'type': 'coins', 'amount': [401, 1000], 'chance': 0.25},
+                        {'type': 'special_item', 'name': 'Золотой ключ', 'chance': 0.08},
+                        {'type': 'bonus', 'multiplier': 1.5, 'duration': 24, 'chance': 0.07}
+                    ])),
+                    ('👑 Элитный кейс', 1000, json.dumps([
+                        {'type': 'coins', 'amount': [500, 1000], 'chance': 0.3},
+                        {'type': 'coins', 'amount': [-300, -100], 'chance': 0.2},
+                        {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.15},
+                        {'type': 'bonus', 'multiplier': 2.0, 'duration': 48, 'chance': 0.1},
+                        {'type': 'coins', 'amount': [1001, 3000], 'chance': 0.15},
+                        {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.1}
+                    ])),
+                    ('🔮 Секретный кейс', 2000, json.dumps([
+                        {'type': 'coins', 'amount': [800, 1500], 'chance': 0.3},
+                        {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.15},
+                        {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.15},
+                        {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.1},
+                        {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.15},
+                        {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.15}
+                    ]))
+                ]
+                
+                for case in default_cases:
+                    cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', case)
+                
+                print("✅ Стандартные кейсы добавлены!")
             
-            for item in default_items:
-                cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (%s, %s, %s, %s)', item)
-        
-        self.conn.commit()
+            # Проверяем, есть ли уже предметы
+            cursor.execute('SELECT COUNT(*) FROM items')
+            if cursor.fetchone()[0] == 0:
+                print("🔄 Добавление стандартных предметов...")
+                
+                default_items = [
+                    ('Золотой ключ', 'Открывает особые кейсы', 500, 'rare'),
+                    ('Древний артефакт', 'Мощный магический предмет', 1000, 'epic'),
+                    ('Мифический предмет', 'Легендарный артефакт', 2000, 'legendary'),
+                    ('Билет VIP', 'Дает доступ к VIP зоне', 300, 'uncommon'),
+                    ('Магический свиток', 'Увеличивает удачу', 150, 'common'),
+                    ('Сундук с сокровищами', 'Содержит случайные награды', 800, 'rare'),
+                    ('Зачарованный амулет', 'Дает защиту от проигрышей', 600, 'uncommon')
+                ]
+                
+                for item in default_items:
+                    cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (%s, %s, %s, %s)', item)
+                
+                print("✅ Стандартные предметы добавлены!")
+            
+            self.conn.commit()
+            print("✅ Начальные данные успешно инициализированы!")
+            
+        except Exception as e:
+            print(f"❌ Ошибка при инициализации данных: {e}")
+            self.conn.rollback()
     
     def get_user(self, user_id):
         cursor = self.conn.cursor()
@@ -383,7 +478,13 @@ class Database:
         cursor.execute('SELECT * FROM items')
         return cursor.fetchall()
 
-db = Database()
+# Создаем экземпляр базы данных
+try:
+    db = Database()
+    print("✅ База данных успешно инициализирована!")
+except Exception as e:
+    print(f"💥 Критическая ошибка при инициализации базы данных: {e}")
+    exit(1)
 
 # Система достижений
 ACHIEVEMENTS = {
@@ -414,25 +515,16 @@ def get_reward(case):
 
 async def create_custom_role_webhook(user):
     try:
-        # Получаем канал для логов
         channel = bot.get_channel(LOG_CHANNEL_ID)
         if channel:
-            # Создаем вебхук
             webhook = await channel.create_webhook(name=f"Role-{user.name}")
-            
-            # Создаем сообщение с пингом
             message = f"🎉 <@{user.id}> Поздравляю, вам выпала кастом роль на 2 дня, администратор <@{ADMIN_USER_ID}> скоро вам ответит и вы выберете свою роль"
-            
-            # Отправляем сообщение через вебхук
             await webhook.send(
                 content=message,
                 username="Case System",
                 avatar_url=bot.user.avatar.url if bot.user.avatar else None
             )
-            
-            # Удаляем вебхук после использования
             await webhook.delete()
-            
             return True
     except Exception as e:
         print(f"Ошибка создания вебхука для роли: {e}")
@@ -521,7 +613,7 @@ class CaseView(View):
         
         await interaction.edit_original_response(embed=embed)
 
-# ОБНОВЛЕННЫЙ КЛАСС ДУЭЛИ С 50/50 ШАНСОМ
+# КЛАСС ДУЭЛИ С 50/50 ШАНСОМ
 class DuelView(View):
     def __init__(self, challenger_id, target_id, bet):
         super().__init__(timeout=30)
@@ -595,10 +687,7 @@ class DuelView(View):
 # Улучшенная функция проверки прав администратора
 def is_admin():
     async def predicate(interaction: discord.Interaction) -> bool:
-        # Проверяем ID пользователя
         is_admin = interaction.user.id in ADMIN_IDS
-        
-        # Если пользователь не админ, отправляем сообщение
         if not is_admin:
             await interaction.response.send_message(
                 "❌ У вас нет прав для использования этой команды!",
@@ -611,7 +700,6 @@ def is_admin():
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     if isinstance(error, app_commands.CheckFailure):
-        # Эта ошибка уже обработана в проверке is_admin
         return
     elif isinstance(error, app_commands.CommandNotFound):
         await interaction.response.send_message("❌ Команда не найдена!", ephemeral=True)
@@ -625,13 +713,12 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
                 ephemeral=True
             )
         except:
-            # Если уже был ответ, используем followup
             await interaction.followup.send(
                 "❌ Произошла неизвестная ошибка при выполнении команды!",
                 ephemeral=True
             )
 
-# Команды бота
+# КОМАНДЫ БОТА
 
 # Экономические команды
 @bot.tree.command(name="balance", description="Показать ваш баланс")
@@ -669,7 +756,7 @@ async def daily(interaction: discord.Interaction):
     
     db.update_balance(interaction.user.id, reward)
     cursor = db.conn.cursor()
-    cursor.execute('UPDATE users SET daily_streak = ?, last_daily = ? WHERE user_id = ?', 
+    cursor.execute('UPDATE users SET daily_streak = %s, last_daily = %s WHERE user_id = %s', 
                    (streak, now.isoformat(), interaction.user.id))
     db.conn.commit()
     db.log_transaction(interaction.user.id, 'daily', reward)
@@ -806,7 +893,7 @@ async def inventory(interaction: discord.Interaction):
     else:
         embed.add_field(name="🎁 Кейсы", value="Пусто", inline=False)
     
-    # Показываем предметы - ИСПРАВЛЕННАЯ ЧАСТЬ
+    # Показываем предметы
     items = inventory_data.get("items", {})
     if items:
         items_text = ""
@@ -908,7 +995,7 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
             return
         
         cursor = db.conn.cursor()
-        cursor.execute('INSERT INTO market (seller_id, item_name, price) VALUES (?, ?, ?)', 
+        cursor.execute('INSERT INTO market (seller_id, item_name, price) VALUES (%s, %s, %s)', 
                       (interaction.user.id, item_name, price))
         db.conn.commit()
         
@@ -925,7 +1012,7 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
             return
         
         cursor = db.conn.cursor()
-        cursor.execute('SELECT * FROM market WHERE id = ?', (int(item_name),))
+        cursor.execute('SELECT * FROM market WHERE id = %s', (int(item_name),))
         item = cursor.fetchone()
         
         if not item:
@@ -940,7 +1027,7 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
         # Покупка предмета
         db.update_balance(interaction.user.id, -item[3])
         db.update_balance(item[1], item[3])
-        cursor.execute('DELETE FROM market WHERE id = ?', (int(item_name),))
+        cursor.execute('DELETE FROM market WHERE id = %s', (int(item_name),))
         db.conn.commit()
         
         db.log_transaction(interaction.user.id, 'market_buy', -item[3], item[1], f"Покупка: {item[2]}")
@@ -1016,7 +1103,7 @@ async def dice(interaction: discord.Interaction, bet: int):
     )
     await interaction.response.send_message(embed=embed)
 
-# ОБНОВЛЕННАЯ КОМАНДА ДУЭЛИ С 50/50 ШАНСОМ
+# КОМАНДА ДУЭЛИ С 50/50 ШАНСОМ
 @bot.tree.command(name="duel", description="Вызвать пользователя на дуэль")
 @app_commands.describe(user="Пользователь для дуэли", bet="Ставка в монетах")
 async def duel(interaction: discord.Interaction, user: discord.Member, bet: int):
@@ -1051,7 +1138,7 @@ async def duel(interaction: discord.Interaction, user: discord.Member, bet: int)
     view = DuelView(interaction.user.id, user.id, bet)
     await interaction.response.send_message(embed=embed, view=view)
 
-# Измененная команда /steal с рандомной суммой и КД 30 минут
+# Команда /steal с рандомной суммой и КД 30 минут
 @bot.tree.command(name="steal", description="Попытаться украсть монеты у другого пользователя (КД 30 мин)")
 @app_commands.describe(user="Пользователь, у которого крадем")
 @app_commands.checks.cooldown(1, 1800.0, key=lambda i: (i.guild_id, i.user.id))  # 30 минут кд
@@ -1108,7 +1195,6 @@ async def steal(interaction: discord.Interaction, user: discord.Member):
 @steal.error
 async def steal_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     if isinstance(error, app_commands.CommandOnCooldown):
-        # Преобразуем время в читаемый формат
         minutes = int(error.retry_after // 60)
         seconds = int(error.retry_after % 60)
         
@@ -1138,7 +1224,6 @@ async def quest(interaction: discord.Interaction):
 @quest.error
 async def quest_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
     if isinstance(error, app_commands.CommandOnCooldown):
-        # Преобразуем время в читаемый формат
         hours = int(error.retry_after // 3600)
         minutes = int((error.retry_after % 3600) // 60)
         seconds = int(error.retry_after % 60)
@@ -1219,7 +1304,7 @@ async def leaderboard(interaction: discord.Interaction, type: app_commands.Choic
 @bot.tree.command(name="achievements", description="Показать ваши достижения")
 async def achievements(interaction: discord.Interaction):
     cursor = db.conn.cursor()
-    cursor.execute('SELECT achievement_id FROM achievements WHERE user_id = ?', (interaction.user.id,))
+    cursor.execute('SELECT achievement_id FROM achievements WHERE user_id = %s', (interaction.user.id,))
     user_achievements = [row[0] for row in cursor.fetchall()]
     
     embed = discord.Embed(title="🏅 Ваши достижения", color=0xffd700)
@@ -1388,7 +1473,7 @@ async def admin_viewtransactions(interaction: discord.Interaction, user: discord
         cursor = db.conn.cursor()
         
         if user:
-            cursor.execute('SELECT * FROM transactions WHERE user_id = ? OR target_user_id = ? ORDER BY timestamp DESC LIMIT 10', (user.id, user.id))
+            cursor.execute('SELECT * FROM transactions WHERE user_id = %s OR target_user_id = %s ORDER BY timestamp DESC LIMIT 10', (user.id, user.id))
             title = f"📊 Транзакции пользователя {user.name}"
         else:
             cursor.execute('SELECT * FROM transactions ORDER BY timestamp DESC LIMIT 10')
@@ -1429,7 +1514,7 @@ async def admin_database(interaction: discord.Interaction, table: app_commands.C
             users = db.get_all_users()
             embed = discord.Embed(title="👥 База данных: Пользователи", color=0x3498db)
             
-            for user in users[:10]:  # Показываем только первых 10
+            for user in users[:10]:
                 embed.add_field(
                     name=f"ID: {user[0]}",
                     value=f"Баланс: {user[1]} {EMOJIS['coin']}\nСерия: {user[2]} дней",
@@ -1609,6 +1694,26 @@ async def help_command(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
+# НОВАЯ КОМАНДА: Принудительная инициализация БД
+@bot.tree.command(name="admin_init_db", description="Принудительно инициализировать базу данных (админ)")
+@is_admin()
+async def admin_init_db(interaction: discord.Interaction):
+    try:
+        db.create_tables()
+        embed = discord.Embed(
+            title="✅ База данных инициализирована",
+            description="Все таблицы успешно созданы!",
+            color=0x00ff00
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    except Exception as e:
+        embed = discord.Embed(
+            title="❌ Ошибка инициализации БД",
+            description=f"Ошибка: {str(e)}",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 # Синхронизация команд при запуске
 @bot.event
 async def on_ready():
@@ -1625,4 +1730,3 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
-

@@ -9,6 +9,7 @@ import asyncio
 import datetime
 import aiohttp
 from typing import Dict, List, Optional
+import traceback
 
 # Попробуем разные варианты импорта PostgreSQL
 try:
@@ -1578,6 +1579,30 @@ class BlackjackView(View):
             score = sum(cards)
         return score
     
+    async def update_game(self, interaction: discord.Interaction):
+        """ИСПРАВЛЕННЫЙ МЕТОД - используем response.send_message для первого вызова"""
+        user_score = self.calculate_score(self.user_cards)
+        dealer_score = self.calculate_score([self.dealer_cards[0]])  # Показываем только одну карту дилера
+        
+        embed = discord.Embed(title="🃏 Блэкджек", color=0x2ecc71)
+        embed.add_field(
+            name="Ваши карты",
+            value=f"{' '.join(['🃏'] * len(self.user_cards))} (Очки: {user_score})",
+            inline=False
+        )
+        embed.add_field(
+            name="Карты дилера", 
+            value=f"🃏 ? (Очки: {dealer_score}+)",
+            inline=False
+        )
+        embed.add_field(name="Ставка", value=f"{self.bet} {EMOJIS['coin']}", inline=True)
+        
+        # ИСПРАВЛЕНИЕ: используем response.send_message для первого взаимодействия
+        if not interaction.response.is_done():
+            await interaction.response.send_message(embed=embed, view=self)
+        else:
+            await interaction.edit_original_response(embed=embed, view=self)
+    
     @discord.ui.button(label='Взять карту', style=discord.ButtonStyle.primary)
     async def hit(self, interaction: discord.Interaction, button: Button):
         if self.game_over:
@@ -1609,25 +1634,6 @@ class BlackjackView(View):
             self.dealer_cards.append(self.draw_card())
         
         await self.end_game(interaction, "stand")
-    
-    async def update_game(self, interaction: discord.Interaction):
-        user_score = self.calculate_score(self.user_cards)
-        dealer_score = self.calculate_score([self.dealer_cards[0]])  # Показываем только одну карту дилера
-        
-        embed = discord.Embed(title="🃏 Блэкджек", color=0x2ecc71)
-        embed.add_field(
-            name="Ваши карты",
-            value=f"{' '.join(['🃏'] * len(self.user_cards))} (Очки: {user_score})",
-            inline=False
-        )
-        embed.add_field(
-            name="Карты дилера", 
-            value=f"🃏 ? (Очки: {dealer_score}+)",
-            inline=False
-        )
-        embed.add_field(name="Ставка", value=f"{self.bet} {EMOJIS['coin']}", inline=True)
-        
-        await interaction.response.edit_message(embed=embed, view=self)
     
     async def end_game(self, interaction: discord.Interaction, reason):
         self.game_over = True
@@ -1689,7 +1695,7 @@ class BlackjackView(View):
         if result == "win":
             embed.add_field(name="Выигрыш", value=f"{winnings} {EMOJIS['coin']}", inline=True)
         
-        await interaction.response.edit_message(embed=embed, view=None)
+        await interaction.edit_original_response(embed=embed, view=None)
 
 # Улучшенная функция проверки прав администратора
 def is_admin():
@@ -1861,6 +1867,105 @@ async def daily(interaction: discord.Interaction):
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
+@bot.tree.command(name="items", description="Показать все доступные предметы с бафами")
+async def items_list(interaction: discord.Interaction):
+    items = db.get_all_items()
+    
+    embed = discord.Embed(title="📦 Все доступные предметы", color=0x3498db)
+    
+    for item in items:
+        # item: [id, name, description, value, rarity, buff_type, buff_value, buff_description, created_at]
+        rarity_emoji = {
+            'common': '⚪',
+            'uncommon': '🟢', 
+            'rare': '🔵',
+            'epic': '🟣',
+            'legendary': '🟠',
+            'mythic': '🟡'
+        }.get(item[4], '⚪')
+        
+        buff_info = f"**Баф:** {item[7]}\n" if item[7] else ""
+        embed.add_field(
+            name=f"{rarity_emoji} {item[1]}",
+            value=f"{item[2]}\n{buff_info}**Цена:** {item[3]} {EMOJIS['coin']}",
+            inline=False
+        )
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="myitems", description="Показать ваши предметы с бафами")
+async def my_items(interaction: discord.Interaction):
+    inventory = db.get_user_inventory(interaction.user.id)
+    
+    embed = discord.Embed(title=f"📦 Предметы {interaction.user.display_name}", color=0x3498db)
+    
+    items = inventory.get("items", {})
+    if not items:
+        embed.description = "У вас пока нет предметов. Открывайте кейсы или покупайте на маркетплейсе!"
+        await interaction.response.send_message(embed=embed)
+        return
+    
+    for item_id, count in items.items():
+        item_data = db.get_item(int(item_id))
+        if item_data:
+            rarity_emoji = {
+                'common': '⚪',
+                'uncommon': '🟢', 
+                'rare': '🔵',
+                'epic': '🟣',
+                'legendary': '🟠',
+                'mythic': '🟡'
+            }.get(item_data[4], '⚪')
+            
+            buff_info = f"\n**Эффект:** {item_data[7]}" if item_data[7] else ""
+            embed.add_field(
+                name=f"{rarity_emoji} {item_data[1]} ×{count}",
+                value=f"{item_data[2]}{buff_info}",
+                inline=True
+            )
+    
+    # Показываем активные бафы
+    buffs = db.get_user_buffs(interaction.user.id)
+    if buffs:
+        buffs_text = "\n".join([f"• **{buff['item_name']}**: {buff['description']}" for buff in buffs.values()])
+        embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="admin_giveitem", description="Выдать предмет пользователю (админ)")
+@app_commands.describe(user="Пользователь", item_name="Название предмета")
+@is_admin()
+async def admin_giveitem(interaction: discord.Interaction, user: discord.Member, item_name: str):
+    try:
+        # Проверяем существование предмета
+        item_data = db.get_item_by_name(item_name)
+        if not item_data:
+            # Показываем список доступных предметов
+            all_items = db.get_all_items()
+            item_list = "\n".join([f"• {item[1]}" for item in all_items[:10]])
+            if len(all_items) > 10:
+                item_list += f"\n• ... и ещё {len(all_items) - 10} предметов"
+            
+            embed = discord.Embed(
+                title="❌ Предмет не найден",
+                description=f"Доступные предметы:\n{item_list}",
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
+        db.add_item_to_inventory(user.id, item_name)
+        
+        embed = discord.Embed(
+            title="⚙️ Админ действие",
+            description=f"Предмет '{item_name}' выдан пользователю {user.mention}",
+            color=0x00ff00
+        )
+        embed.add_field(name="Эффект", value=item_data[7] if item_data[7] else "Нет бафа")
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
+
 @bot.tree.command(name="pay", description="Перевести монеты другому пользователю")
 @app_commands.describe(user="Пользователь, которому переводим", amount="Сумма перевода")
 async def pay(interaction: discord.Interaction, user: discord.Member, amount: int):
@@ -1901,37 +2006,68 @@ async def pay(interaction: discord.Interaction, user: discord.Member, amount: in
 async def cases_list(interaction: discord.Interaction):
     cases = db.get_cases()
     
-    embed = discord.Embed(title="🎁 Доступные кейсы", color=0xff69b4)
+    # Разбиваем на страницы по 5 кейсов
+    pages = []
+    current_page = []
     
-    for case in cases:
-        rewards = json.loads(case[3])
-        rewards_desc = "\n".join([f"• {r['type']} ({r['chance']*100:.1f}%)" for r in rewards[:3]])  # Показываем только первые 3 награды
-        if len(rewards) > 3:
-            rewards_desc += f"\n• ... и ещё {len(rewards) - 3} наград"
-        embed.add_field(
-            name=f"{case[1]} - {case[2]} {EMOJIS['coin']} (ID: {case[0]})",
-            value=rewards_desc,
-            inline=False
-        )
+    for i, case in enumerate(cases):
+        if i > 0 and i % 5 == 0:
+            pages.append(current_page)
+            current_page = []
+        current_page.append(case)
     
-    await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name="opencase", description="Открыть кейс")
-@app_commands.describe(case_id="ID кейса для открытия")
-async def open_case(interaction: discord.Interaction, case_id: int):
-    case_data = db.get_case(case_id)
-    if not case_data:
-        await interaction.response.send_message("Кейс не найден! Используйте /cases для списка.", ephemeral=True)
+    if current_page:
+        pages.append(current_page)
+    
+    if not pages:
+        await interaction.response.send_message("Кейсы не найдены!", ephemeral=True)
         return
     
-    view = CaseView(case_id, interaction.user.id)
+    current_page_index = 0
     
-    embed = discord.Embed(
-        title=f"🎁 {case_data[1]}",
-        description=f"Стоимость: {case_data[2]} {EMOJIS['coin']}",
-        color=0xff69b4
-    )
+    class CasesView(View):
+        def __init__(self):
+            super().__init__(timeout=60)
+        
+        @discord.ui.button(label='⬅️ Назад', style=discord.ButtonStyle.secondary)
+        async def previous(self, interaction: discord.Interaction, button: Button):
+            nonlocal current_page_index
+            if current_page_index > 0:
+                current_page_index -= 1
+                await self.update_embed(interaction)
+        
+        @discord.ui.button(label='➡️ Вперед', style=discord.ButtonStyle.secondary)
+        async def next(self, interaction: discord.Interaction, button: Button):
+            nonlocal current_page_index
+            if current_page_index < len(pages) - 1:
+                current_page_index += 1
+                await self.update_embed(interaction)
+        
+        async def update_embed(self, interaction: discord.Interaction):
+            embed = self.create_embed(pages[current_page_index], current_page_index, len(pages))
+            await interaction.response.edit_message(embed=embed, view=self)
+        
+        def create_embed(self, page_cases, page_num, total_pages):
+            embed = discord.Embed(
+                title=f"🎁 Доступные кейсы (Страница {page_num + 1}/{total_pages})", 
+                color=0xff69b4
+            )
+            
+            for case in page_cases:
+                rewards = json.loads(case[3])
+                rewards_desc = "\n".join([f"• {r['type']} ({r['chance']*100:.1f}%)" for r in rewards[:3]])
+                if len(rewards) > 3:
+                    rewards_desc += f"\n• ... и ещё {len(rewards) - 3} наград"
+                embed.add_field(
+                    name=f"{case[1]} - {case[2]} {EMOJIS['coin']} (ID: {case[0]})",
+                    value=rewards_desc,
+                    inline=False
+                )
+            
+            return embed
     
+    view = CasesView()
+    embed = view.create_embed(pages[0], 0, len(pages))
     await interaction.response.send_message(embed=embed, view=view)
 
 @bot.tree.command(name="giftcase", description="Подарить кейс другому пользователю")
@@ -2077,109 +2213,130 @@ async def openmycase(interaction: discord.Interaction, case_id: int):
 
 # Команды маркетплейса
 @bot.tree.command(name="market", description="Взаимодействие с маркетплейсом")
-@app_commands.describe(action="Действие на маркетплейсе")
+@app_commands.describe(action="Действие на маркетплейсе", item_name="Название предмета (для покупки/продажи)", price="Цена (для продажи)")
 @app_commands.choices(action=[
     app_commands.Choice(name="📋 Список товаров", value="list"),
     app_commands.Choice(name="💰 Продать предмет", value="sell"),
     app_commands.Choice(name="🛒 Купить предмет", value="buy")
 ])
 async def market(interaction: discord.Interaction, action: app_commands.Choice[str], item_name: str = None, price: int = None):
-    if action.value == "list":
-        cursor = db.conn.cursor()
-        cursor.execute('SELECT * FROM market LIMIT 10')
-        items = cursor.fetchall()
-        
-        embed = discord.Embed(title="🏪 Маркетплейс", color=0x00ff00)
-        
-        for item in items:
-            seller = bot.get_user(item[1])
-            # Получаем информацию о бафе предмета
-            item_data = db.get_item_by_name(item[2])
-            buff_info = f" - {item_data[7]}" if item_data and item_data[7] else ""
+    try:
+        if action.value == "list":
+            cursor = db.conn.cursor()
+            cursor.execute('SELECT * FROM market LIMIT 10')
+            items = cursor.fetchall()
             
-            embed.add_field(
-                name=f"#{item[0]} {item[2]}{buff_info}",
-                value=f"Цена: {item[3]} {EMOJIS['coin']}\nПродавец: {seller.name if seller else 'Неизвестно'}",
-                inline=False
+            embed = discord.Embed(title="🏪 Маркетплейс", color=0x00ff00)
+            
+            if not items:
+                embed.description = "На маркетплейсе пока нет товаров."
+            else:
+                for item in items:
+                    seller = bot.get_user(item[1])
+                    # Получаем информацию о бафе предмета
+                    item_data = db.get_item_by_name(item[2])
+                    buff_info = f" - {item_data[7]}" if item_data and len(item_data) > 7 and item_data[7] else ""
+                    
+                    embed.add_field(
+                        name=f"#{item[0]} {item[2]}{buff_info}",
+                        value=f"Цена: {item[3]} {EMOJIS['coin']}\nПродавец: {seller.name if seller else 'Неизвестно'}",
+                        inline=False
+                    )
+            
+            await interaction.response.send_message(embed=embed)
+        
+        elif action.value == "sell":
+            if not item_name or not price:
+                await interaction.response.send_message("Укажите название предмета и цену!", ephemeral=True)
+                return
+            
+            if price <= 0:
+                await interaction.response.send_message("Цена должна быть положительной!", ephemeral=True)
+                return
+            
+            # Проверяем, есть ли предмет в инвентаре
+            inventory = db.get_user_inventory(interaction.user.id)
+            item_found = False
+            item_id_to_remove = None
+            
+            for item_id, count in inventory.get("items", {}).items():
+                item_data = db.get_item(int(item_id))
+                if item_data and item_data[1] == item_name:
+                    item_found = True
+                    item_id_to_remove = item_id
+                    break
+            
+            if not item_found:
+                await interaction.response.send_message("У вас нет такого предмета в инвентаре!", ephemeral=True)
+                return
+            
+            cursor = db.conn.cursor()
+            cursor.execute('INSERT INTO market (seller_id, item_name, price) VALUES (%s, %s, %s)', 
+                          (interaction.user.id, item_name, price))
+            db.conn.commit()
+            db.update_user_stat(interaction.user.id, 'market_sales')
+            
+            # Убираем предмет из инвентаря
+            db.remove_item_from_inventory(interaction.user.id, item_name)
+            
+            embed = discord.Embed(
+                title="🏪 Предмет выставлен на продажу",
+                description=f"Предмет: {item_name}\nЦена: {price} {EMOJIS['coin']}",
+                color=0x00ff00
             )
+            await interaction.response.send_message(embed=embed)
         
-        await interaction.response.send_message(embed=embed)
+        elif action.value == "buy":
+            if not item_name:
+                await interaction.response.send_message("Укажите ID предмета для покупки!", ephemeral=True)
+                return
+            
+            try:
+                item_id = int(item_name)
+            except ValueError:
+                await interaction.response.send_message("ID предмета должен быть числом!", ephemeral=True)
+                return
+            
+            cursor = db.conn.cursor()
+            cursor.execute('SELECT * FROM market WHERE id = %s', (item_id,))
+            item = cursor.fetchone()
+            
+            if not item:
+                await interaction.response.send_message("Предмет не найден!", ephemeral=True)
+                return
+            
+            user_data = db.get_user(interaction.user.id)
+            if user_data[1] < item[3]:
+                await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
+                return
+            
+            # Покупка предмета
+            db.update_balance(interaction.user.id, -item[3])
+            db.update_balance(item[1], item[3])
+            
+            # Добавляем предмет покупателю (баф сохраняется)
+            db.add_item_to_inventory(interaction.user.id, item[2])
+            
+            cursor.execute('DELETE FROM market WHERE id = %s', (item_id,))
+            db.conn.commit()
+            
+            db.log_transaction(interaction.user.id, 'market_buy', -item[3], item[1], f"Покупка: {item[2]}")
+            db.log_transaction(item[1], 'market_sell', item[3], interaction.user.id, f"Продажа: {item[2]}")
+            
+            # Получаем информацию о бафе купленного предмета
+            item_data = db.get_item_by_name(item[2])
+            buff_info = f"\nБаф: {item_data[7]}" if item_data and len(item_data) > 7 and item_data[7] else ""
+            
+            embed = discord.Embed(
+                title="🏪 Покупка совершена!",
+                description=f"Вы купили {item[2]} за {item[3]} {EMOJIS['coin']}{buff_info}",
+                color=0x00ff00
+            )
+            await interaction.response.send_message(embed=embed)
     
-    elif action.value == "sell":
-        if not item_name or not price:
-            await interaction.response.send_message("Укажите название предмета и цену!", ephemeral=True)
-            return
-        
-        # Проверяем, есть ли предмет в инвентаре
-        inventory = db.get_user_inventory(interaction.user.id)
-        item_found = False
-        item_id_to_remove = None
-        
-        for item_id, count in inventory.get("items", {}).items():
-            item_data = db.get_item(int(item_id))
-            if item_data and item_data[1] == item_name:
-                item_found = True
-                item_id_to_remove = item_id
-                break
-        
-        if not item_found:
-            await interaction.response.send_message("У вас нет такого предмета в инвентаре!", ephemeral=True)
-            return
-        
-        cursor = db.conn.cursor()
-        cursor.execute('INSERT INTO market (seller_id, item_name, price) VALUES (%s, %s, %s)', 
-                      (interaction.user.id, item_name, price))
-        db.conn.commit()
-        db.update_user_stat(interaction.user.id, 'market_sales')
-        
-        embed = discord.Embed(
-            title="🏪 Предмет выставлен на продажу",
-            description=f"Предмет: {item_name}\nЦена: {price} {EMOJIS['coin']}",
-            color=0x00ff00
-        )
-        await interaction.response.send_message(embed=embed)
-    
-    elif action.value == "buy":
-        if not item_name:
-            await interaction.response.send_message("Укажите ID предмета для покупки!", ephemeral=True)
-            return
-        
-        cursor = db.conn.cursor()
-        cursor.execute('SELECT * FROM market WHERE id = %s', (int(item_name),))
-        item = cursor.fetchone()
-        
-        if not item:
-            await interaction.response.send_message("Предмет не найден!", ephemeral=True)
-            return
-        
-        user_data = db.get_user(interaction.user.id)
-        if user_data[1] < item[3]:
-            await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
-            return
-        
-        # Покупка предмета
-        db.update_balance(interaction.user.id, -item[3])
-        db.update_balance(item[1], item[3])
-        
-        # Добавляем предмет покупателю (баф сохраняется)
-        db.add_item_to_inventory(interaction.user.id, item[2])
-        
-        cursor.execute('DELETE FROM market WHERE id = %s', (int(item_name),))
-        db.conn.commit()
-        
-        db.log_transaction(interaction.user.id, 'market_buy', -item[3], item[1], f"Покупка: {item[2]}")
-        db.log_transaction(item[1], 'market_sell', item[3], interaction.user.id, f"Продажа: {item[2]}")
-        
-        # Получаем информацию о бафе купленного предмета
-        item_data = db.get_item_by_name(item[2])
-        buff_info = f"\nБаф: {item_data[7]}" if item_data and item_data[7] else ""
-        
-        embed = discord.Embed(
-            title="🏪 Покупка совершена!",
-            description=f"Вы купили {item[2]} за {item[3]} {EMOJIS['coin']}{buff_info}",
-            color=0x00ff00
-        )
-        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        print(f"❌ Ошибка в команде market: {e}")
+        await interaction.response.send_message("❌ Произошла ошибка при выполнении команды!", ephemeral=True)
 
 # МИНИ-ИГРЫ
 
@@ -3674,10 +3831,17 @@ if __name__ == "__main__":
         bot.run(BOT_TOKEN)
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
+        traceback.print_exc()
         print("🔄 Попытка перезапуска через 5 секунд...")
         import time
         time.sleep(5)
-        bot.run(BOT_TOKEN)
+        # Попробуем перезапустить бота
+        try:
+            bot.run(BOT_TOKEN)
+        except Exception as e2:
+            print(f"💥 Повторная критическая ошибка: {e2}")
+            traceback.print_exc()
+
 
 
 

@@ -252,10 +252,16 @@ class Database:
         cursor.execute('SELECT * FROM items WHERE id = %s', (item_id,))
         return cursor.fetchone()
     
-    def get_item_by_name(self, item_name):
+def get_item_by_name(self, item_name):
+    """Безопасное получение предмета по имени"""
+    try:
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM items WHERE name = %s', (item_name,))
-        return cursor.fetchone()
+        item = cursor.fetchone()
+        return item
+    except Exception as e:
+        print(f"❌ Ошибка в get_item_by_name для {item_name}: {e}")
+        return None
     
     def add_item_to_inventory(self, user_id, item_name):
         cursor = self.conn.cursor()
@@ -352,7 +358,9 @@ class Database:
         cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', (json.dumps(inventory), user_id))
         self.conn.commit()
     
-    def get_user_inventory(self, user_id):
+def get_user_inventory(self, user_id):
+    """Безопасное получение инвентаря пользователя"""
+    try:
         cursor = self.conn.cursor()
         cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
         result = cursor.fetchone()
@@ -362,6 +370,9 @@ class Database:
                 return json.loads(result[0])
             except json.JSONDecodeError:
                 return {"cases": {}, "items": {}}
+        return {"cases": {}, "items": {}}
+    except Exception as e:
+        print(f"❌ Ошибка в get_user_inventory для {user_id}: {e}")
         return {"cases": {}, "items": {}}
     
     def remove_case_from_inventory(self, user_id, case_id):
@@ -2223,7 +2234,7 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
     try:
         if action.value == "list":
             cursor = db.conn.cursor()
-            cursor.execute('SELECT * FROM market LIMIT 10')
+            cursor.execute('SELECT id, seller_id, item_name, price FROM market LIMIT 10')
             items = cursor.fetchall()
             
             embed = discord.Embed(title="🏪 Маркетплейс", color=0x00ff00)
@@ -2232,14 +2243,26 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
                 embed.description = "На маркетплейсе пока нет товаров."
             else:
                 for item in items:
-                    seller = bot.get_user(item[1])
-                    # Получаем информацию о бафе предмета
-                    item_data = db.get_item_by_name(item[2])
-                    buff_info = f" - {item_data[7]}" if item_data and len(item_data) > 7 and item_data[7] else ""
+                    # БЕЗОПАСНЫЙ ДОСТУП К ДАННЫМ
+                    item_id = item[0] if len(item) > 0 else "N/A"
+                    seller_id = item[1] if len(item) > 1 else None
+                    item_name_db = item[2] if len(item) > 2 else "Неизвестный предмет"
+                    item_price = item[3] if len(item) > 3 else 0
+                    
+                    seller = bot.get_user(seller_id) if seller_id else None
+                    
+                    # Получаем информацию о бафе предмета безопасно
+                    buff_info = ""
+                    try:
+                        item_data = db.get_item_by_name(item_name_db)
+                        if item_data and len(item_data) > 7 and item_data[7]:
+                            buff_info = f" - {item_data[7]}"
+                    except Exception as e:
+                        print(f"⚠️ Ошибка получения информации о предмете {item_name_db}: {e}")
                     
                     embed.add_field(
-                        name=f"#{item[0]} {item[2]}{buff_info}",
-                        value=f"Цена: {item[3]} {EMOJIS['coin']}\nПродавец: {seller.name if seller else 'Неизвестно'}",
+                        name=f"#{item_id} {item_name_db}{buff_info}",
+                        value=f"Цена: {item_price} {EMOJIS['coin']}\nПродавец: {seller.name if seller else 'Неизвестно'}",
                         inline=False
                     )
             
@@ -2257,14 +2280,16 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
             # Проверяем, есть ли предмет в инвентаре
             inventory = db.get_user_inventory(interaction.user.id)
             item_found = False
-            item_id_to_remove = None
             
             for item_id, count in inventory.get("items", {}).items():
-                item_data = db.get_item(int(item_id))
-                if item_data and item_data[1] == item_name:
-                    item_found = True
-                    item_id_to_remove = item_id
-                    break
+                try:
+                    item_data = db.get_item(int(item_id))
+                    if item_data and len(item_data) > 1 and item_data[1] == item_name:
+                        item_found = True
+                        break
+                except (ValueError, IndexError) as e:
+                    print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
+                    continue
             
             if not item_found:
                 await interaction.response.send_message("У вас нет такого предмета в инвентаре!", ephemeral=True)
@@ -2298,45 +2323,67 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
                 return
             
             cursor = db.conn.cursor()
-            cursor.execute('SELECT * FROM market WHERE id = %s', (item_id,))
+            cursor.execute('SELECT id, seller_id, item_name, price FROM market WHERE id = %s', (item_id,))
             item = cursor.fetchone()
             
             if not item:
                 await interaction.response.send_message("Предмет не найден!", ephemeral=True)
                 return
             
+            # БЕЗОПАСНЫЙ ДОСТУП К ДАННЫМ ТОВАРА
+            market_item_id = item[0] if len(item) > 0 else None
+            seller_id = item[1] if len(item) > 1 else None
+            market_item_name = item[2] if len(item) > 2 else "Неизвестный предмет"
+            item_price = item[3] if len(item) > 3 else 0
+            
+            if not seller_id:
+                await interaction.response.send_message("Ошибка: продавец не найден!", ephemeral=True)
+                return
+            
             user_data = db.get_user(interaction.user.id)
-            if user_data[1] < item[3]:
+            user_balance = user_data[1] if len(user_data) > 1 else 0
+            
+            if user_balance < item_price:
                 await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
                 return
             
             # Покупка предмета
-            db.update_balance(interaction.user.id, -item[3])
-            db.update_balance(item[1], item[3])
+            db.update_balance(interaction.user.id, -item_price)
+            db.update_balance(seller_id, item_price)
             
-            # Добавляем предмет покупателю (баф сохраняется)
-            db.add_item_to_inventory(interaction.user.id, item[2])
+            # Добавляем предмет покупателю
+            db.add_item_to_inventory(interaction.user.id, market_item_name)
             
-            cursor.execute('DELETE FROM market WHERE id = %s', (item_id,))
+            cursor.execute('DELETE FROM market WHERE id = %s', (market_item_id,))
             db.conn.commit()
             
-            db.log_transaction(interaction.user.id, 'market_buy', -item[3], item[1], f"Покупка: {item[2]}")
-            db.log_transaction(item[1], 'market_sell', item[3], interaction.user.id, f"Продажа: {item[2]}")
+            db.log_transaction(interaction.user.id, 'market_buy', -item_price, seller_id, f"Покупка: {market_item_name}")
+            db.log_transaction(seller_id, 'market_sell', item_price, interaction.user.id, f"Продажа: {market_item_name}")
             
             # Получаем информацию о бафе купленного предмета
-            item_data = db.get_item_by_name(item[2])
-            buff_info = f"\nБаф: {item_data[7]}" if item_data and len(item_data) > 7 and item_data[7] else ""
+            buff_info = ""
+            try:
+                item_data = db.get_item_by_name(market_item_name)
+                if item_data and len(item_data) > 7 and item_data[7]:
+                    buff_info = f"\n**Эффект:** {item_data[7]}"
+            except Exception as e:
+                print(f"⚠️ Ошибка получения бафа предмета {market_item_name}: {e}")
             
             embed = discord.Embed(
                 title="🏪 Покупка совершена!",
-                description=f"Вы купили {item[2]} за {item[3]} {EMOJIS['coin']}{buff_info}",
+                description=f"Вы купили **{market_item_name}** за {item_price} {EMOJIS['coin']}{buff_info}",
                 color=0x00ff00
             )
             await interaction.response.send_message(embed=embed)
     
     except Exception as e:
-        print(f"❌ Ошибка в команде market: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка при выполнении команды!", ephemeral=True)
+        print(f"❌ Критическая ошибка в команде market: {e}")
+        error_embed = discord.Embed(
+            title="❌ Ошибка маркетплейса",
+            description="Произошла ошибка при выполнении команды. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 # МИНИ-ИГРЫ
 
@@ -3261,6 +3308,7 @@ async def help_command(interaction: discord.Interaction):
 **/admin_viewtransactions** [@пользователь] - Просмотр транзакций
 **/admin_database** таблица - Просмотр базы данных
 **/admin_broadcast** сообщение - Отправить объявление
+**/admin_reset_market** Очистить маркетплейс
 **/admin_init_db** - Принудительно инициализировать БД""",
             inline=False
         )
@@ -3526,6 +3574,71 @@ async def active_bonuses_cmd(interaction: discord.Interaction):
         )
     
     await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="admin_reset_market", description="Очистить маркетплейс (админ)")
+@is_admin()
+async def admin_reset_market(interaction: discord.Interaction):
+    try:
+        cursor = db.conn.cursor()
+        cursor.execute('DELETE FROM market')
+        db.conn.commit()
+        
+        embed = discord.Embed(
+            title="🔄 Маркетплейс очищен",
+            description="Все товары удалены с маркетплейса.",
+            color=0x00ff00
+        )
+        await interaction.response.send_message(embed=embed)
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Ошибка очистки маркетплейса",
+            description=f"Ошибка: {str(e)}",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
+
+@bot.tree.command(name="debug_market", description="Проверить структуру маркетплейса (админ)")
+@is_admin()
+async def debug_market(interaction: discord.Interaction):
+    try:
+        cursor = db.conn.cursor()
+        
+        # Проверяем структуру таблицы
+        cursor.execute("""
+            SELECT column_name, data_type, is_nullable 
+            FROM information_schema.columns 
+            WHERE table_name = 'market'
+        """)
+        columns = cursor.fetchall()
+        
+        # Проверяем существующие записи
+        cursor.execute('SELECT * FROM market LIMIT 5')
+        items = cursor.fetchall()
+        
+        embed = discord.Embed(title="🐛 Отладка маркетплейса", color=0x3498db)
+        
+        # Показываем структуру таблицы
+        columns_info = "\n".join([f"• {col[0]} ({col[1]}) - nullable: {col[2]}" for col in columns])
+        embed.add_field(name="📊 Структура таблицы", value=columns_info, inline=False)
+        
+        # Показываем примеры записей
+        if items:
+            items_info = ""
+            for item in items:
+                items_info += f"• {item}\n"
+            embed.add_field(name="📝 Примеры записей", value=items_info, inline=False)
+        else:
+            embed.add_field(name="📝 Записи", value="Таблица пуста", inline=False)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Ошибка отладки",
+            description=f"Ошибка: {str(e)}",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 # СИСТЕМА ВОССТАНОВЛЕНИЯ ДАННЫХ
 @bot.tree.command(name="recover", description="Восстановить данные пользователя (если есть проблемы)")
@@ -3841,6 +3954,7 @@ if __name__ == "__main__":
         except Exception as e2:
             print(f"💥 Повторная критическая ошибка: {e2}")
             traceback.print_exc()
+
 
 
 

@@ -21,16 +21,14 @@ except ImportError:
     import psycopg2
     from psycopg2.extras import RealDictCursor
 
-# ПОЛУЧЕНИЕ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ С АЛЬТЕРНАТИВНЫМИ ВАРИАНТАМИ
+# ПОЛУЧЕНИЕ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ
 def get_database_url():
     """Получаем DATABASE_URL разными способами"""
-    # Способ 1: Стандартная переменная
     database_url = os.environ.get('DATABASE_URL')
     if database_url:
         print("✅ DATABASE_URL найден в переменных окружения")
         return database_url
     
-    # Способ 2: Альтернативные имена переменных
     alternative_names = ['POSTGRES_URL', 'POSTGRESQL_URL', 'RAILWAY_DATABASE_URL']
     for name in alternative_names:
         database_url = os.environ.get(name)
@@ -38,7 +36,6 @@ def get_database_url():
             print(f"✅ DATABASE_URL найден как {name}")
             return database_url
     
-    # Способ 3: Собираем вручную из отдельных переменных
     db_user = os.environ.get('PGUSER')
     db_password = os.environ.get('PGPASSWORD')
     db_host = os.environ.get('PGHOST')
@@ -57,27 +54,12 @@ def get_database_url():
 DATABASE_URL = get_database_url()
 BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
 
-# Выводим отладочную информацию
-print("=== ДЕБАГ ИНФОРМАЦИЯ ===")
-print(f"BOT_TOKEN: {'✅ Установлен' if BOT_TOKEN else '❌ Отсутствует'}")
-print(f"DATABASE_URL: {'✅ Установлен' if DATABASE_URL else '❌ Отсутствует'}")
-if DATABASE_URL:
-    print(f"DATABASE_URL (первые 50 символов): {DATABASE_URL[:50]}...")
-print("Все переменные окружения:", list(os.environ.keys()))
-print("========================")
-
 if not BOT_TOKEN:
     print("❌ КРИТИЧЕСКАЯ ОШИБКА: DISCORD_BOT_TOKEN не установлен!")
-    print("💡 Добавь DISCORD_BOT_TOKEN в Variables в Railway")
     exit(1)
 
 if not DATABASE_URL:
     print("❌ КРИТИЧЕСКАЯ ОШИБКА: DATABASE_URL не установлен!")
-    print("💡 Убедись, что:")
-    print("   1. PostgreSQL плагин добавлен в Railway")
-    print("   2. DATABASE_URL присутствует в Variables")
-    print("   3. Или добавь вручную DATABASE_URL со значением:")
-    print("      postgresql://postgres:cULeSFiMpXjKhOVANPZqkeKjmDptXWTp@postgres.railway.internal:5432/railway")
     exit(1)
 
 # Настройки бота
@@ -101,7 +83,65 @@ EMOJIS = {
     'quest': '🗺️',
     'dice': '🎲',
     'duel': '⚔️',
-    'admin': '⚙️'
+    'admin': '⚙️',
+    'slot': '🎰',
+    'coinflip': '🪙',
+    'blackjack': '🃏'
+}
+
+# Система бафов от предметов
+ITEM_BUFFS = {
+    'Золотой амулет': {'type': 'daily_bonus', 'value': 1.2, 'description': '+20% к ежедневной награде'},
+    'Серебряный амулет': {'type': 'daily_bonus', 'value': 1.1, 'description': '+10% к ежедневной награде'},
+    'Кольцо удачи': {'type': 'case_bonus', 'value': 1.15, 'description': '+15% к наградам из кейсов'},
+    'Браслет везения': {'type': 'game_bonus', 'value': 1.1, 'description': '+10% к выигрышам в играх'},
+    'Защитный талисман': {'type': 'steal_protection', 'value': 0.5, 'description': '-50% к шансу кражи у вас'},
+    'Перчатка вора': {'type': 'steal_bonus', 'value': 1.2, 'description': '+20% к шансу успешной кражи'},
+    'Магический свиток': {'type': 'roulette_bonus', 'value': 1.25, 'description': '+25% к выигрышу в рулетке'},
+    'Кристалл маны': {'type': 'multiplier', 'value': 1.3, 'description': 'x1.3 к любым наградам'},
+    'Древний артефакт': {'type': 'multiplier', 'value': 1.5, 'description': 'x1.5 к любым наградам'},
+    'Мифический предмет': {'type': 'multiplier', 'value': 2.0, 'description': 'x2.0 к любым наградам'},
+    'Счастливая монета': {'type': 'coinflip_bonus', 'value': 1.2, 'description': '+20% к выигрышу в coinflip'},
+    'Карточный шулер': {'type': 'blackjack_bonus', 'value': 1.15, 'description': '+15% к выигрышу в блэкджеке'},
+    'Слот-мастер': {'type': 'slot_bonus', 'value': 1.25, 'description': '+25% к выигрышу в слотах'},
+    'Щит богатства': {'type': 'loss_protection', 'value': 0.8, 'description': '-20% к проигрышам'},
+    'Флакон зелья': {'type': 'quest_bonus', 'value': 1.2, 'description': '+20% к наградам за квесты'},
+    'Зелье удачи': {'type': 'all_bonus', 'value': 1.1, 'description': '+10% ко всем наградам'},
+    'Руна богатства': {'type': 'transfer_bonus', 'value': 0.9, 'description': '-10% к комиссии переводов'},
+    'Тотем защиты': {'type': 'duel_bonus', 'value': 1.2, 'description': '+20% к шансу победы в дуэлях'},
+    'Ожерелье мудрости': {'type': 'xp_bonus', 'value': 1.15, 'description': '+15% к опыту'},
+    'Плащ тени': {'type': 'steal_chance', 'value': 1.15, 'description': '+15% к шансу кражи'}
+}
+
+# Улучшенная система достижений
+ACHIEVEMENTS = {
+    'first_daily': {'name': 'Первый шаг', 'description': 'Получите первую ежедневную награду', 'reward': 100},
+    'rich': {'name': 'Богач', 'description': 'Накопите 10,000 монет', 'reward': 500},
+    'millionaire': {'name': 'Миллионер', 'description': 'Накопите 100,000 монет', 'reward': 5000},
+    'gambler': {'name': 'Азартный игрок', 'description': 'Выиграйте в рулетку 25 раз', 'reward': 1000},
+    'thief': {'name': 'Вор', 'description': 'Успешно украдите монеты 20 раз', 'reward': 800},
+    'case_opener': {'name': 'Коллекционер', 'description': 'Откройте 50 кейсов', 'reward': 1500},
+    'case_master': {'name': 'Мастер кейсов', 'description': 'Откройте 200 кейсов', 'reward': 5000},
+    'duel_master': {'name': 'Мастер дуэлей', 'description': 'Выиграйте 25 дуэлей', 'reward': 1200},
+    'slot_king': {'name': 'Король слотов', 'description': 'Выиграйте джекпот в слотах', 'reward': 3000},
+    'blackjack_pro': {'name': 'Профи в блэкджеке', 'description': 'Выиграйте 10 раз в блэкджек', 'reward': 2000},
+    'coinflip_champ': {'name': 'Чемпион монетки', 'description': 'Выиграйте 30 раз в подбрасывание монеты', 'reward': 1500},
+    'trader': {'name': 'Торговец', 'description': 'Продайте 15 предметов на маркетплейсе', 'reward': 800},
+    'gifter': {'name': 'Щедрый', 'description': 'Подарите 10 кейсов', 'reward': 1000},
+    'veteran': {'name': 'Ветеран', 'description': 'Получите ежедневную награду 30 дней подряд', 'reward': 3000},
+    'lucky': {'name': 'Везунчик', 'description': 'Выиграйте 3 раза подряд в любую игру', 'reward': 2000},
+    'item_collector': {'name': 'Коллекционер предметов', 'description': 'Соберите 10 разных предметов', 'reward': 1500},
+    'buff_master': {'name': 'Мастер бафов', 'description': 'Активируйте 5 разных бафов одновременно', 'reward': 2000}
+}
+
+# Система квестов
+QUESTS = {
+    'daily_rich': {'name': 'Ежедневный богач', 'description': 'Получите 7 ежедневных наград подряд', 'reward': 1000},
+    'gambling_king': {'name': 'Король азарта', 'description': 'Выиграйте 10,000 монет в азартных играх', 'reward': 2500},
+    'case_hunter': {'name': 'Охотник за кейсами', 'description': 'Откройте 15 кейсов любого типа', 'reward': 1200},
+    'market_expert': {'name': 'Эксперт рынка', 'description': 'Купите и продайте 5 предметов на маркетплейсе', 'reward': 800},
+    'duel_champion': {'name': 'Чемпион дуэлей', 'description': 'Выиграйте 5 дуэлей подряд', 'reward': 1500},
+    'item_collector_quest': {'name': 'Коллекционер', 'description': 'Соберите 5 разных магических предметов', 'reward': 2000}
 }
 
 # Исправленный класс Database для PostgreSQL
@@ -226,7 +266,32 @@ class Database:
                     description TEXT,
                     value INTEGER,
                     rarity TEXT,
+                    buff_type TEXT,
+                    buff_value REAL,
+                    buff_description TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Таблица статистики пользователей
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_stats (
+                    user_id BIGINT PRIMARY KEY,
+                    cases_opened INTEGER DEFAULT 0,
+                    duels_won INTEGER DEFAULT 0,
+                    steals_successful INTEGER DEFAULT 0,
+                    steals_failed INTEGER DEFAULT 0,
+                    roulette_wins INTEGER DEFAULT 0,
+                    slot_wins INTEGER DEFAULT 0,
+                    blackjack_wins INTEGER DEFAULT 0,
+                    coinflip_wins INTEGER DEFAULT 0,
+                    daily_claimed INTEGER DEFAULT 0,
+                    total_earned INTEGER DEFAULT 0,
+                    market_sales INTEGER DEFAULT 0,
+                    gifts_sent INTEGER DEFAULT 0,
+                    consecutive_wins INTEGER DEFAULT 0,
+                    items_collected INTEGER DEFAULT 0,
+                    last_win_time TIMESTAMP
                 )
             ''')
             
@@ -252,38 +317,110 @@ class Database:
                 print("🔄 Добавление стандартных кейсов...")
                 
                 default_cases = [
+                    ('📦 Начинающий кейс', 25, json.dumps([
+                        {'type': 'coins', 'amount': [10, 30], 'chance': 0.6},
+                        {'type': 'coins', 'amount': [31, 80], 'chance': 0.3},
+                        {'type': 'coins', 'amount': [81, 150], 'chance': 0.1}
+                    ])),
                     ('📦 Малый кейс', 50, json.dumps([
-                        {'type': 'coins', 'amount': [10, 40], 'chance': 0.8},
-                        {'type': 'coins', 'amount': [41, 100], 'chance': 0.15},
-                        {'type': 'coins', 'amount': [101, 300], 'chance': 0.05}
+                        {'type': 'coins', 'amount': [20, 50], 'chance': 0.5},
+                        {'type': 'coins', 'amount': [51, 120], 'chance': 0.3},
+                        {'type': 'coins', 'amount': [121, 250], 'chance': 0.15},
+                        {'type': 'special_item', 'name': 'Серебряный амулет', 'chance': 0.05}
                     ])),
                     ('📦 Средний кейс', 150, json.dumps([
-                        {'type': 'coins', 'amount': [50, 120], 'chance': 0.7},
-                        {'type': 'coins', 'amount': [121, 300], 'chance': 0.2},
-                        {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.05},
-                        {'type': 'coins', 'amount': [301, 800], 'chance': 0.05}
+                        {'type': 'coins', 'amount': [50, 100], 'chance': 0.4},
+                        {'type': 'coins', 'amount': [101, 250], 'chance': 0.3},
+                        {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.15},
+                        {'type': 'coins', 'amount': [251, 500], 'chance': 0.1},
+                        {'type': 'bonus', 'multiplier': 1.2, 'duration': 12, 'chance': 0.05}
                     ])),
                     ('💎 Большой кейс', 500, json.dumps([
-                        {'type': 'coins', 'amount': [200, 400], 'chance': 0.6},
-                        {'type': 'coins', 'amount': [401, 1000], 'chance': 0.25},
-                        {'type': 'special_item', 'name': 'Золотой ключ', 'chance': 0.08},
-                        {'type': 'bonus', 'multiplier': 1.5, 'duration': 24, 'chance': 0.07}
+                        {'type': 'coins', 'amount': [150, 300], 'chance': 0.35},
+                        {'type': 'coins', 'amount': [301, 600], 'chance': 0.25},
+                        {'type': 'special_item', 'name': 'Кольцо удачи', 'chance': 0.15},
+                        {'type': 'bonus', 'multiplier': 1.5, 'duration': 24, 'chance': 0.1},
+                        {'type': 'coins', 'amount': [601, 1000], 'chance': 0.1},
+                        {'type': 'special_item', 'name': 'Браслет везения', 'chance': 0.05}
                     ])),
                     ('👑 Элитный кейс', 1000, json.dumps([
-                        {'type': 'coins', 'amount': [500, 1000], 'chance': 0.3},
-                        {'type': 'coins', 'amount': [-300, -100], 'chance': 0.2},
-                        {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.15},
-                        {'type': 'bonus', 'multiplier': 2.0, 'duration': 48, 'chance': 0.1},
-                        {'type': 'coins', 'amount': [1001, 3000], 'chance': 0.15},
-                        {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.1}
+                        {'type': 'coins', 'amount': [300, 600], 'chance': 0.3},
+                        {'type': 'coins', 'amount': [-200, -100], 'chance': 0.1},
+                        {'type': 'special_item', 'name': 'Защитный талисман', 'chance': 0.2},
+                        {'type': 'bonus', 'multiplier': 2.0, 'duration': 48, 'chance': 0.15},
+                        {'type': 'coins', 'amount': [601, 1500], 'chance': 0.15},
+                        {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.1}
                     ])),
                     ('🔮 Секретный кейс', 2000, json.dumps([
-                        {'type': 'coins', 'amount': [800, 1500], 'chance': 0.3},
-                        {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.15},
-                        {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.15},
-                        {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.1},
-                        {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.15},
-                        {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.15}
+                        {'type': 'coins', 'amount': [500, 1000], 'chance': 0.25},
+                        {'type': 'coins', 'amount': [-500, -200], 'chance': 0.1},
+                        {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.2},
+                        {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.15},
+                        {'type': 'coins', 'amount': [1001, 2500], 'chance': 0.15},
+                        {'type': 'coins', 'amount': [2501, 5000], 'chance': 0.1},
+                        {'type': 'custom_role', 'chance': 0.05}
+                    ])),
+                    ('⚡ Быстрый кейс', 75, json.dumps([
+                        {'type': 'coins', 'amount': [30, 80], 'chance': 0.7},
+                        {'type': 'coins', 'amount': [81, 180], 'chance': 0.2},
+                        {'type': 'special_item', 'name': 'Перчатка вора', 'chance': 0.1}
+                    ])),
+                    ('🎭 Загадочный кейс', 300, json.dumps([
+                        {'type': 'coins', 'amount': [50, 200], 'chance': 0.3},
+                        {'type': 'coins', 'amount': [-150, -50], 'chance': 0.2},
+                        {'type': 'coins', 'amount': [201, 500], 'chance': 0.2},
+                        {'type': 'special_item', 'name': 'Кристалл маны', 'chance': 0.15},
+                        {'type': 'coins', 'amount': [501, 1200], 'chance': 0.1},
+                        {'type': 'bonus', 'multiplier': 1.8, 'duration': 36, 'chance': 0.05}
+                    ])),
+                    ('🌟 Звездный кейс', 750, json.dumps([
+                        {'type': 'coins', 'amount': [200, 400], 'chance': 0.4},
+                        {'type': 'coins', 'amount': [401, 800], 'chance': 0.25},
+                        {'type': 'special_item', 'name': 'Счастливая монета', 'chance': 0.15},
+                        {'type': 'bonus', 'multiplier': 1.7, 'duration': 24, 'chance': 0.1},
+                        {'type': 'coins', 'amount': [801, 2000], 'chance': 0.08},
+                        {'type': 'special_item', 'name': 'Карточный шулер', 'chance': 0.02}
+                    ])),
+                    ('🐉 Драконий кейс', 1500, json.dumps([
+                        {'type': 'coins', 'amount': [400, 800], 'chance': 0.35},
+                        {'type': 'coins', 'amount': [801, 1600], 'chance': 0.2},
+                        {'type': 'special_item', 'name': 'Слот-мастер', 'chance': 0.15},
+                        {'type': 'bonus', 'multiplier': 2.2, 'duration': 48, 'chance': 0.1},
+                        {'type': 'coins', 'amount': [1601, 3500], 'chance': 0.1},
+                        {'type': 'special_item', 'name': 'Щит богатства', 'chance': 0.05},
+                        {'type': 'coins', 'amount': [3501, 7000], 'chance': 0.05}
+                    ])),
+                    ('🔥 Огненный кейс', 600, json.dumps([
+                        {'type': 'coins', 'amount': [150, 350], 'chance': 0.5},
+                        {'type': 'coins', 'amount': [351, 700], 'chance': 0.25},
+                        {'type': 'special_item', 'name': 'Флакон зелья', 'chance': 0.15},
+                        {'type': 'bonus', 'multiplier': 1.6, 'duration': 18, 'chance': 0.1}
+                    ])),
+                    ('❄️ Ледяной кейс', 600, json.dumps([
+                        {'type': 'coins', 'amount': [150, 350], 'chance': 0.5},
+                        {'type': 'coins', 'amount': [351, 700], 'chance': 0.25},
+                        {'type': 'special_item', 'name': 'Зелье удачи', 'chance': 0.15},
+                        {'type': 'bonus', 'multiplier': 1.6, 'duration': 18, 'chance': 0.1}
+                    ])),
+                    ('🌙 Лунный кейс', 1200, json.dumps([
+                        {'type': 'coins', 'amount': [300, 600], 'chance': 0.4},
+                        {'type': 'coins', 'amount': [601, 1200], 'chance': 0.25},
+                        {'type': 'special_item', 'name': 'Руна богатства', 'chance': 0.15},
+                        {'type': 'bonus', 'multiplier': 1.8, 'duration': 36, 'chance': 0.1},
+                        {'type': 'coins', 'amount': [1201, 2500], 'chance': 0.08},
+                        {'type': 'special_item', 'name': 'Тотем защиты', 'chance': 0.02}
+                    ])),
+                    ('⚗️ Алхимический кейс', 800, json.dumps([
+                        {'type': 'coins', 'amount': [200, 500], 'chance': 0.45},
+                        {'type': 'coins', 'amount': [501, 1000], 'chance': 0.25},
+                        {'type': 'special_item', 'name': 'Ожерелье мудрости', 'chance': 0.2},
+                        {'type': 'bonus', 'multiplier': 1.7, 'duration': 24, 'chance': 0.1}
+                    ])),
+                    ('🏹 Охотничий кейс', 400, json.dumps([
+                        {'type': 'coins', 'amount': [100, 300], 'chance': 0.6},
+                        {'type': 'coins', 'amount': [301, 600], 'chance': 0.25},
+                        {'type': 'special_item', 'name': 'Плащ тени', 'chance': 0.1},
+                        {'type': 'bonus', 'multiplier': 1.4, 'duration': 12, 'chance': 0.05}
                     ]))
                 ]
                 
@@ -298,17 +435,30 @@ class Database:
                 print("🔄 Добавление стандартных предметов...")
                 
                 default_items = [
-                    ('Золотой ключ', 'Открывает особые кейсы', 500, 'rare'),
-                    ('Древний артефакт', 'Мощный магический предмет', 1000, 'epic'),
-                    ('Мифический предмет', 'Легендарный артефакт', 2000, 'legendary'),
-                    ('Билет VIP', 'Дает доступ к VIP зоне', 300, 'uncommon'),
-                    ('Магический свиток', 'Увеличивает удачу', 150, 'common'),
-                    ('Сундук с сокровищами', 'Содержит случайные награды', 800, 'rare'),
-                    ('Зачарованный амулет', 'Дает защиту от проигрышей', 600, 'uncommon')
+                    ('Золотой амулет', 'Увеличивает ежедневную награду', 500, 'rare', 'daily_bonus', 1.2, '+20% к ежедневной награде'),
+                    ('Серебряный амулет', 'Небольшой бонус к ежедневной награде', 250, 'common', 'daily_bonus', 1.1, '+10% к ежедневной награде'),
+                    ('Кольцо удачи', 'Увеличивает награды из кейсов', 600, 'rare', 'case_bonus', 1.15, '+15% к наградам из кейсов'),
+                    ('Браслет везения', 'Увеличивает выигрыши в играх', 450, 'uncommon', 'game_bonus', 1.1, '+10% к выигрышам в играх'),
+                    ('Защитный талисман', 'Защищает от краж', 800, 'epic', 'steal_protection', 0.5, '-50% к шансу кражи у вас'),
+                    ('Перчатка вора', 'Увеличивает шанс успешной кражи', 700, 'rare', 'steal_bonus', 1.2, '+20% к шансу успешной кражи'),
+                    ('Магический свиток', 'Увеличивает выигрыш в рулетке', 550, 'rare', 'roulette_bonus', 1.25, '+25% к выигрышу в рулетке'),
+                    ('Кристалл маны', 'Умножает все награды', 1000, 'epic', 'multiplier', 1.3, 'x1.3 к любым наградам'),
+                    ('Древний артефакт', 'Мощный множитель наград', 2000, 'legendary', 'multiplier', 1.5, 'x1.5 к любым наградам'),
+                    ('Мифический предмет', 'Легендарный множитель наград', 5000, 'mythic', 'multiplier', 2.0, 'x2.0 к любым наградам'),
+                    ('Счастливая монета', 'Увеличивает выигрыш в coinflip', 400, 'uncommon', 'coinflip_bonus', 1.2, '+20% к выигрышу в coinflip'),
+                    ('Карточный шулер', 'Увеличивает выигрыш в блэкджеке', 650, 'rare', 'blackjack_bonus', 1.15, '+15% к выигрышу в блэкджеке'),
+                    ('Слот-мастер', 'Увеличивает выигрыш в слотах', 750, 'rare', 'slot_bonus', 1.25, '+25% к выигрышу в слотах'),
+                    ('Щит богатства', 'Уменьшает проигрыши', 900, 'epic', 'loss_protection', 0.8, '-20% к проигрышам'),
+                    ('Флакон зелья', 'Увеличивает награды за квесты', 350, 'uncommon', 'quest_bonus', 1.2, '+20% к наградам за квесты'),
+                    ('Зелье удачи', 'Небольшой бонус ко всем наградам', 300, 'common', 'all_bonus', 1.1, '+10% ко всем наградам'),
+                    ('Руна богатства', 'Уменьшает комиссию переводов', 500, 'rare', 'transfer_bonus', 0.9, '-10% к комиссии переводов'),
+                    ('Тотем защиты', 'Увеличивает шанс победы в дуэлях', 850, 'epic', 'duel_bonus', 1.2, '+20% к шансу победы в дуэлях'),
+                    ('Ожерелье мудрости', 'Увеличивает получаемый опыт', 600, 'rare', 'xp_bonus', 1.15, '+15% к опыту'),
+                    ('Плащ тени', 'Увеличивает шанс кражи', 550, 'uncommon', 'steal_chance', 1.15, '+15% к шансу кражи')
                 ]
                 
                 for item in default_items:
-                    cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (%s, %s, %s, %s)', item)
+                    cursor.execute('INSERT INTO items (name, description, value, rarity, buff_type, buff_value, buff_description) VALUES (%s, %s, %s, %s, %s, %s, %s)', item)
                 
                 print("✅ Стандартные предметы добавлены!")
             
@@ -382,6 +532,11 @@ class Database:
         cursor.execute('SELECT * FROM items WHERE id = %s', (item_id,))
         return cursor.fetchone()
     
+    def get_item_by_name(self, item_name):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM items WHERE name = %s', (item_name,))
+        return cursor.fetchone()
+    
     def add_item_to_inventory(self, user_id, item_name):
         cursor = self.conn.cursor()
         
@@ -389,6 +544,7 @@ class Database:
         item_result = cursor.fetchone()
         
         if not item_result:
+            # Если предмет не найден, создаем его без бафа
             cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (%s, %s, %s, %s) RETURNING id', 
                           (item_name, 'Автоматически созданный предмет', 100, 'common'))
             item_id = cursor.fetchone()[0]
@@ -415,6 +571,9 @@ class Database:
         cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', 
                       (json.dumps(inventory_data), user_id))
         self.conn.commit()
+        
+        # Обновляем статистику собранных предметов
+        self.update_user_stat(user_id, 'items_collected')
     
     def remove_item_from_inventory(self, user_id, item_name):
         cursor = self.conn.cursor()
@@ -507,6 +666,166 @@ class Database:
             return True
         return False
 
+    # СИСТЕМА СТАТИСТИКИ И ДОСТИЖЕНИЙ
+    def update_user_stat(self, user_id, stat_name, increment=1):
+        """Обновляет статистику пользователя и проверяет достижения"""
+        cursor = self.conn.cursor()
+        
+        # Проверяем существование записи статистики
+        cursor.execute('SELECT 1 FROM user_stats WHERE user_id = %s', (user_id,))
+        if not cursor.fetchone():
+            cursor.execute('INSERT INTO user_stats (user_id) VALUES (%s)', (user_id,))
+        
+        # Обновляем статистику
+        cursor.execute(f'''
+            UPDATE user_stats SET {stat_name} = {stat_name} + %s 
+            WHERE user_id = %s
+        ''', (increment, user_id))
+        
+        self.conn.commit()
+        
+        # Проверяем достижения
+        return self.check_achievements(user_id)
+    
+    def check_achievements(self, user_id):
+        """Проверяет и выдает достижения пользователю"""
+        cursor = self.conn.cursor()
+        
+        # Получаем статистику пользователя
+        cursor.execute('SELECT * FROM user_stats WHERE user_id = %s', (user_id,))
+        stats = cursor.fetchone()
+        
+        if not stats:
+            return []
+        
+        # Получаем баланс пользователя
+        user_data = self.get_user(user_id)
+        balance = user_data[1]
+        
+        # Получаем инвентарь для проверки уникальных предметов
+        inventory = self.get_user_inventory(user_id)
+        unique_items = len(inventory.get("items", {}))
+        
+        # Получаем уже полученные достижения
+        cursor.execute('SELECT achievement_id FROM achievements WHERE user_id = %s', (user_id,))
+        user_achievements = [row[0] for row in cursor.fetchall()]
+        
+        # Проверяем каждое достижение
+        achievements_to_add = []
+        
+        # Достижения по балансу
+        if 'rich' not in user_achievements and balance >= 10000:
+            achievements_to_add.append('rich')
+        if 'millionaire' not in user_achievements and balance >= 100000:
+            achievements_to_add.append('millionaire')
+        
+        # Достижения по кейсам
+        if 'case_opener' not in user_achievements and stats[1] >= 50:  # cases_opened
+            achievements_to_add.append('case_opener')
+        if 'case_master' not in user_achievements and stats[1] >= 200:
+            achievements_to_add.append('case_master')
+        
+        # Достижения по играм
+        if 'gambler' not in user_achievements and stats[5] >= 25:  # roulette_wins
+            achievements_to_add.append('gambler')
+        if 'thief' not in user_achievements and stats[3] >= 20:  # steals_successful
+            achievements_to_add.append('thief')
+        if 'duel_master' not in user_achievements and stats[2] >= 25:  # duels_won
+            achievements_to_add.append('duel_master')
+        if 'slot_king' not in user_achievements and stats[6] >= 1:  # slot_wins (джекпот)
+            achievements_to_add.append('slot_king')
+        if 'blackjack_pro' not in user_achievements and stats[7] >= 10:  # blackjack_wins
+            achievements_to_add.append('blackjack_pro')
+        if 'coinflip_champ' not in user_achievements and stats[8] >= 30:  # coinflip_wins
+            achievements_to_add.append('coinflip_champ')
+        
+        # Другие достижения
+        if 'trader' not in user_achievements and stats[11] >= 15:  # market_sales
+            achievements_to_add.append('trader')
+        if 'gifter' not in user_achievements and stats[12] >= 10:  # gifts_sent
+            achievements_to_add.append('gifter')
+        if 'veteran' not in user_achievements and stats[9] >= 30:  # daily_claimed
+            achievements_to_add.append('veteran')
+        if 'lucky' not in user_achievements and stats[13] >= 3:  # consecutive_wins
+            achievements_to_add.append('lucky')
+        if 'item_collector' not in user_achievements and unique_items >= 10:
+            achievements_to_add.append('item_collector')
+        if 'buff_master' not in user_achievements and self.get_active_buffs_count(user_id) >= 5:
+            achievements_to_add.append('buff_master')
+        
+        # Добавляем новые достижения и выдаем награды
+        for achievement_id in achievements_to_add:
+            cursor.execute('INSERT INTO achievements (user_id, achievement_id) VALUES (%s, %s)', 
+                          (user_id, achievement_id))
+            
+            # Выдаем награду за достижение
+            reward = ACHIEVEMENTS[achievement_id]['reward']
+            self.update_balance(user_id, reward)
+            self.log_transaction(user_id, 'achievement_reward', reward, description=f"Достижение: {ACHIEVEMENTS[achievement_id]['name']}")
+        
+        self.conn.commit()
+        
+        return achievements_to_add
+    
+    def update_consecutive_wins(self, user_id, win=True):
+        """Обновляет счетчик последовательных побед"""
+        cursor = self.conn.cursor()
+        
+        if win:
+            cursor.execute('''
+                UPDATE user_stats 
+                SET consecutive_wins = consecutive_wins + 1, last_win_time = CURRENT_TIMESTAMP
+                WHERE user_id = %s
+            ''', (user_id,))
+        else:
+            cursor.execute('''
+                UPDATE user_stats 
+                SET consecutive_wins = 0
+                WHERE user_id = %s
+            ''', (user_id,))
+        
+        self.conn.commit()
+    
+    def get_user_buffs(self, user_id):
+        """Возвращает активные бафы пользователя на основе предметов в инвентаре"""
+        inventory = self.get_user_inventory(user_id)
+        buffs = {}
+        
+        for item_id, count in inventory.get("items", {}).items():
+            item_data = self.get_item(int(item_id))
+            if item_data and item_data[5]:  # buff_type
+                buff_type = item_data[5]
+                buff_value = item_data[6]
+                
+                # Берем самый сильный баф каждого типа
+                if buff_type not in buffs or buff_value > buffs[buff_type]['value']:
+                    buffs[buff_type] = {
+                        'value': buff_value,
+                        'description': item_data[7],
+                        'item_name': item_data[1]
+                    }
+        
+        return buffs
+    
+    def get_active_buffs_count(self, user_id):
+        """Возвращает количество активных уникальных бафов"""
+        buffs = self.get_user_buffs(user_id)
+        return len(buffs)
+    
+    def apply_buff_to_amount(self, user_id, base_amount, buff_type):
+        """Применяет баф к сумме, если он есть у пользователя"""
+        buffs = self.get_user_buffs(user_id)
+        if buff_type in buffs:
+            return int(base_amount * buffs[buff_type]['value'])
+        return base_amount
+    
+    def apply_buff_to_chance(self, user_id, base_chance, buff_type):
+        """Применяет баф к шансу, если он есть у пользователя"""
+        buffs = self.get_user_buffs(user_id)
+        if buff_type in buffs:
+            return base_chance * buffs[buff_type]['value']
+        return base_chance
+    
     def get_all_users(self):
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM users ORDER BY balance DESC')
@@ -529,23 +848,6 @@ try:
 except Exception as e:
     print(f"💥 Критическая ошибка при инициализации базы данных: {e}")
     exit(1)
-
-# Система достижений
-ACHIEVEMENTS = {
-    'first_daily': {'name': 'Первый шаг', 'description': 'Получите первую ежедневную награду'},
-    'rich': {'name': 'Богач', 'description': 'Накопите 1000 монет'},
-    'gambler': {'name': 'Азартный игрок', 'description': 'Выиграйте в рулетку 10 раз'},
-    'thief': {'name': 'Вор', 'description': 'Успешно украдите монеты 5 раз'},
-    'case_opener': {'name': 'Коллекционер', 'description': 'Откройте 20 кейсов'},
-    'duel_master': {'name': 'Мастер дуэлей', 'description': 'Выиграйте 10 дуэлей'}
-}
-
-# Система квестов
-QUESTS = {
-    'daily_rich': {'name': 'Ежедневный богач', 'description': 'Получите 3 ежедневные награды подряд', 'reward': 300},
-    'gambling_king': {'name': 'Король азарта', 'description': 'Выиграйте 5000 монет в азартных играх', 'reward': 1000},
-    'case_hunter': {'name': 'Охотник за кейсами', 'description': 'Откройте 5 кейсов любого типа', 'reward': 500}
-}
 
 # Вспомогательные функции для работы с наградами
 def get_reward(case):
@@ -577,6 +879,11 @@ async def create_custom_role_webhook(user):
 async def process_reward(user, reward, case):
     if reward['type'] == 'coins':
         amount = random.randint(reward['amount'][0], reward['amount'][1])
+        # Применяем бафы к награде из кейса
+        amount = db.apply_buff_to_amount(user.id, amount, 'case_bonus')
+        amount = db.apply_buff_to_amount(user.id, amount, 'multiplier')
+        amount = db.apply_buff_to_amount(user.id, amount, 'all_bonus')
+        
         db.update_balance(user.id, amount)
         db.log_transaction(user.id, 'case_reward', amount, description=f"Награда из {case['name']}")
         return f"Монеты: {amount} {EMOJIS['coin']}"
@@ -596,6 +903,8 @@ async def process_reward(user, reward, case):
         return f"👑 Роль: {reward['name']} на {reward['duration']}ч"
     
     return "Неизвестная награда"
+
+# КЛАССЫ ДЛЯ МИНИ-ИГР
 
 class CaseView(View):
     def __init__(self, case_id, user_id):
@@ -645,6 +954,9 @@ class CaseView(View):
         db.update_balance(self.user_id, -case['price'])
         db.log_transaction(self.user_id, 'case_purchase', -case['price'], description=f"Кейс: {case['name']}")
         
+        # Обновляем статистику открытия кейсов
+        db.update_user_stat(self.user_id, 'cases_opened')
+        
         # Выдача награды
         reward_text = await process_reward(interaction.user, reward, case)
         
@@ -657,7 +969,6 @@ class CaseView(View):
         
         await interaction.edit_original_response(embed=embed)
 
-# КЛАСС ДУЭЛИ С 50/50 ШАНСОМ
 class DuelView(View):
     def __init__(self, challenger_id, target_id, bet):
         super().__init__(timeout=30)
@@ -704,16 +1015,41 @@ class DuelView(View):
         
         await asyncio.sleep(1)
         
-        # Определяем победителя - настоящий 50/50 шанс
-        winner_id = random.choice([self.challenger_id, self.target_id])
+        # Определяем победителя с учетом бафов
+        base_challenger_chance = 0.5
+        base_target_chance = 0.5
+        
+        # Применяем бафы к шансам
+        challenger_buff = db.apply_buff_to_chance(self.challenger_id, 1.0, 'duel_bonus')
+        target_buff = db.apply_buff_to_chance(self.target_id, 1.0, 'duel_bonus')
+        
+        challenger_chance = base_challenger_chance * challenger_buff
+        target_chance = base_target_chance * target_buff
+        
+        # Нормализуем шансы
+        total = challenger_chance + target_chance
+        challenger_chance /= total
+        target_chance /= total
+        
+        # Определяем победителя
+        winner_id = random.choices([self.challenger_id, self.target_id], 
+                                 weights=[challenger_chance, target_chance])[0]
         loser_id = self.target_id if winner_id == self.challenger_id else self.challenger_id
         
-        # Выдаем выигрыш
-        db.update_balance(winner_id, self.bet * 2)
+        # Выдаем выигрыш с учетом бафов
+        base_winnings = self.bet * 2
+        winnings = db.apply_buff_to_amount(winner_id, base_winnings, 'game_bonus')
+        winnings = db.apply_buff_to_amount(winner_id, winnings, 'multiplier')
+        winnings = db.apply_buff_to_amount(winner_id, winnings, 'all_bonus')
         
-        # Логируем
-        db.log_transaction(winner_id, 'duel_win', self.bet * 2, loser_id, "Победа в дуэли")
+        db.update_balance(winner_id, winnings)
+        
+        # Логируем и обновляем статистику
+        db.log_transaction(winner_id, 'duel_win', winnings, loser_id, "Победа в дуэли")
         db.log_transaction(loser_id, 'duel_loss', -self.bet, winner_id, "Проигрыш в дуэли")
+        db.update_user_stat(winner_id, 'duels_won')
+        db.update_consecutive_wins(winner_id, True)
+        db.update_consecutive_wins(loser_id, False)
         
         winner = bot.get_user(winner_id)
         loser = bot.get_user(loser_id)
@@ -723,10 +1059,221 @@ class DuelView(View):
             description=f"**Победитель:** {winner.mention}\n**Проигравший:** {loser.mention}",
             color=0x00ff00
         )
-        embed.add_field(name="Выигрыш", value=f"{self.bet * 2} {EMOJIS['coin']}")
-        embed.add_field(name="Шанс победы", value="50/50")
+        embed.add_field(name="Выигрыш", value=f"{winnings} {EMOJIS['coin']}")
+        embed.add_field(name="Шанс победы", value=f"{challenger_chance*100:.1f}% / {target_chance*100:.1f}%")
         
         await interaction.edit_original_response(embed=embed)
+
+class CoinFlipView(View):
+    def __init__(self, user_id, bet):
+        super().__init__(timeout=30)
+        self.user_id = user_id
+        self.bet = bet
+        self.choice_made = False
+    
+    @discord.ui.button(label='🦅 Орёл', style=discord.ButtonStyle.primary)
+    async def heads(self, interaction: discord.Interaction, button: Button):
+        await self.process_choice(interaction, 'heads')
+    
+    @discord.ui.button(label='💰 Решка', style=discord.ButtonStyle.primary)
+    async def tails(self, interaction: discord.Interaction, button: Button):
+        await self.process_choice(interaction, 'tails')
+    
+    async def process_choice(self, interaction: discord.Interaction, choice):
+        if self.choice_made:
+            return
+        
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Эта игра не для вас!", ephemeral=True)
+            return
+        
+        self.choice_made = True
+        
+        # Подбрасываем монету
+        result = random.choice(['heads', 'tails'])
+        win = choice == result
+        
+        # Анимация
+        embed = discord.Embed(title="🪙 Монета в воздухе...", color=0xffd700)
+        await interaction.response.edit_message(embed=embed, view=None)
+        
+        for i in range(3):
+            await asyncio.sleep(0.5)
+            embed.description = "🌀" * (i + 1)
+            await interaction.edit_original_response(embed=embed)
+        
+        await asyncio.sleep(1)
+        
+        if win:
+            base_winnings = int(self.bet * 1.8)  # 80% прибыль
+            # Применяем бафы к выигрышу
+            winnings = db.apply_buff_to_amount(self.user_id, base_winnings, 'coinflip_bonus')
+            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'game_bonus')
+            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'multiplier')
+            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'all_bonus')
+            
+            db.update_balance(self.user_id, winnings)
+            db.log_transaction(self.user_id, 'coinflip_win', winnings, description="Победа в coinflip")
+            db.update_user_stat(self.user_id, 'coinflip_wins')
+            db.update_consecutive_wins(self.user_id, True)
+            
+            result_text = f"ПОБЕДА! Выпало: {'🦅 Орёл' if result == 'heads' else '💰 Решка'}\nВыигрыш: {winnings} {EMOJIS['coin']}"
+            color = 0x00ff00
+        else:
+            # Применяем баф защиты от проигрышей
+            loss = db.apply_buff_to_amount(self.user_id, self.bet, 'loss_protection')
+            db.update_balance(self.user_id, -loss)
+            db.log_transaction(self.user_id, 'coinflip_loss', -loss, description="Проигрыш в coinflip")
+            db.update_consecutive_wins(self.user_id, False)
+            
+            result_text = f"ПРОИГРЫШ! Выпало: {'🦅 Орёл' if result == 'heads' else '💰 Решка'}\nПотеряно: {loss} {EMOJIS['coin']}"
+            color = 0xff0000
+        
+        embed = discord.Embed(
+            title=f"🪙 Результат подбрасывания монеты",
+            description=f"Ваш выбор: {'🦅 Орёл' if choice == 'heads' else '💰 Решка'}\n{result_text}",
+            color=color
+        )
+        embed.add_field(name="Ставка", value=f"{self.bet} {EMOJIS['coin']}")
+        
+        await interaction.edit_original_response(embed=embed)
+
+class BlackjackView(View):
+    def __init__(self, user_id, bet):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+        self.bet = bet
+        self.user_cards = []
+        self.dealer_cards = []
+        self.game_over = False
+        
+        # Начальная раздача
+        self.user_cards = [self.draw_card(), self.draw_card()]
+        self.dealer_cards = [self.draw_card(), self.draw_card()]
+    
+    def draw_card(self):
+        return random.randint(1, 11)  # 11 - это туз
+    
+    def calculate_score(self, cards):
+        score = sum(cards)
+        # Обработка тузов
+        if score > 21 and 11 in cards:
+            cards[cards.index(11)] = 1
+            score = sum(cards)
+        return score
+    
+    @discord.ui.button(label='Взять карту', style=discord.ButtonStyle.primary)
+    async def hit(self, interaction: discord.Interaction, button: Button):
+        if self.game_over:
+            return
+        
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Эта игра не для вас!", ephemeral=True)
+            return
+        
+        self.user_cards.append(self.draw_card())
+        user_score = self.calculate_score(self.user_cards)
+        
+        if user_score > 21:
+            await self.end_game(interaction, "перебор")
+        else:
+            await self.update_game(interaction)
+    
+    @discord.ui.button(label='Остановиться', style=discord.ButtonStyle.secondary)
+    async def stand(self, interaction: discord.Interaction, button: Button):
+        if self.game_over:
+            return
+        
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("Эта игра не для вас!", ephemeral=True)
+            return
+        
+        # Дилер берет карты пока не наберет 17 или больше
+        while self.calculate_score(self.dealer_cards) < 17:
+            self.dealer_cards.append(self.draw_card())
+        
+        await self.end_game(interaction, "stand")
+    
+    async def update_game(self, interaction: discord.Interaction):
+        user_score = self.calculate_score(self.user_cards)
+        dealer_score = self.calculate_score([self.dealer_cards[0]])  # Показываем только одну карту дилера
+        
+        embed = discord.Embed(title="🃏 Блэкджек", color=0x2ecc71)
+        embed.add_field(
+            name="Ваши карты",
+            value=f"{' '.join(['🃏'] * len(self.user_cards))} (Очки: {user_score})",
+            inline=False
+        )
+        embed.add_field(
+            name="Карты дилера", 
+            value=f"🃏 ? (Очки: {dealer_score}+)",
+            inline=False
+        )
+        embed.add_field(name="Ставка", value=f"{self.bet} {EMOJIS['coin']}", inline=True)
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+    
+    async def end_game(self, interaction: discord.Interaction, reason):
+        self.game_over = True
+        user_score = self.calculate_score(self.user_cards)
+        dealer_score = self.calculate_score(self.dealer_cards)
+        
+        # Определяем победителя
+        if reason == "перебор":
+            result = "lose"
+            result_text = "Перебор! Вы проиграли."
+        elif user_score > dealer_score or dealer_score > 21:
+            result = "win"
+            result_text = "Вы выиграли!"
+        elif user_score == dealer_score:
+            result = "push"
+            result_text = "Ничья!"
+        else:
+            result = "lose"
+            result_text = "Дилер выиграл."
+        
+        # Обработка выигрыша
+        if result == "win":
+            base_winnings = int(self.bet * 2)
+            # Применяем бафы к выигрышу
+            winnings = db.apply_buff_to_amount(self.user_id, base_winnings, 'blackjack_bonus')
+            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'game_bonus')
+            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'multiplier')
+            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'all_bonus')
+            
+            db.update_balance(self.user_id, winnings)
+            db.log_transaction(self.user_id, 'blackjack_win', winnings, description="Победа в блэкджеке")
+            db.update_user_stat(self.user_id, 'blackjack_wins')
+            db.update_consecutive_wins(self.user_id, True)
+            color = 0x00ff00
+        elif result == "push":
+            db.update_balance(self.user_id, 0)  # Возвращаем ставку
+            color = 0xffff00
+        else:
+            # Применяем баф защиты от проигрышей
+            loss = db.apply_buff_to_amount(self.user_id, self.bet, 'loss_protection')
+            db.update_balance(self.user_id, -loss)
+            db.log_transaction(self.user_id, 'blackjack_loss', -loss, description="Проигрыш в блэкджеке")
+            db.update_consecutive_wins(self.user_id, False)
+            color = 0xff0000
+        
+        embed = discord.Embed(title="🃏 Результат блэкджека", color=color)
+        embed.add_field(
+            name="Ваши карты",
+            value=f"{' '.join([f'{card}️' for card in self.user_cards])} (Очки: {user_score})",
+            inline=False
+        )
+        embed.add_field(
+            name="Карты дилера",
+            value=f"{' '.join([f'{card}️' for card in self.dealer_cards])} (Очки: {dealer_score})",
+            inline=False
+        )
+        embed.add_field(name="Результат", value=result_text, inline=False)
+        
+        if result == "win":
+            embed.add_field(name="Выигрыш", value=f"{winnings} {EMOJIS['coin']}", inline=True)
+        
+        await interaction.response.edit_message(embed=embed, view=None)
 
 # Улучшенная функция проверки прав администратора
 def is_admin():
@@ -771,12 +1318,26 @@ async def balance(interaction: discord.Interaction, user: discord.Member = None)
     user = user or interaction.user
     user_data = db.get_user(user.id)
     
+    # Получаем статистику достижений
+    cursor = db.conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM achievements WHERE user_id = %s', (user.id,))
+    achievements_count = cursor.fetchone()[0]
+    
+    # Получаем активные бафы
+    buffs = db.get_user_buffs(user.id)
+    
     embed = discord.Embed(
         title=f"{EMOJIS['coin']} Баланс {user.display_name}",
         color=0xffd700
     )
     embed.add_field(name="Баланс", value=f"{user_data[1]} {EMOJIS['coin']}", inline=True)
     embed.add_field(name="Ежедневная серия", value=f"{user_data[2]} дней", inline=True)
+    embed.add_field(name="Достижения", value=f"{achievements_count}/{len(ACHIEVEMENTS)}", inline=True)
+    
+    # Показываем активные бафы
+    if buffs:
+        buffs_text = "\n".join([f"• {buff['item_name']}: {buff['description']}" for buff in buffs.values()])
+        embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
     
     if user.avatar:
         embed.set_thumbnail(url=user.avatar.url)
@@ -796,7 +1357,14 @@ async def daily(interaction: discord.Interaction):
         return
     
     streak = user_data[2] + 1 if last_daily and (now - last_daily).days == 1 else 1
-    reward = 100 + (streak * 10)
+    base_reward = 100
+    streak_bonus = streak * 10
+    reward = base_reward + streak_bonus
+    
+    # Применяем бафы к награде
+    reward = db.apply_buff_to_amount(interaction.user.id, reward, 'daily_bonus')
+    reward = db.apply_buff_to_amount(interaction.user.id, reward, 'multiplier')
+    reward = db.apply_buff_to_amount(interaction.user.id, reward, 'all_bonus')
     
     db.update_balance(interaction.user.id, reward)
     cursor = db.conn.cursor()
@@ -804,12 +1372,20 @@ async def daily(interaction: discord.Interaction):
                    (streak, now.isoformat(), interaction.user.id))
     db.conn.commit()
     db.log_transaction(interaction.user.id, 'daily', reward)
+    db.update_user_stat(interaction.user.id, 'daily_claimed')
     
     embed = discord.Embed(
         title=f"{EMOJIS['daily']} Ежедневная награда",
-        description=f"Награда: {reward} {EMOJIS['coin']}\nСерия: {streak} дней",
+        description=f"Награда: {reward} {EMOJIS['coin']}\nСерия: {streak} дней\nБонус за серию: +{streak_bonus} {EMOJIS['coin']}",
         color=0x00ff00
     )
+    
+    # Проверяем достижения после получения награды
+    new_achievements = db.check_achievements(interaction.user.id)
+    if new_achievements:
+        achievements_text = "\n".join([f"🎉 {ACHIEVEMENTS[ach_id]['name']} (+{ACHIEVEMENTS[ach_id]['reward']} {EMOJIS['coin']})" for ach_id in new_achievements])
+        embed.add_field(name="Новые достижения!", value=achievements_text, inline=False)
+    
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="pay", description="Перевести монеты другому пользователю")
@@ -828,9 +1404,12 @@ async def pay(interaction: discord.Interaction, user: discord.Member, amount: in
         await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
         return
     
-    db.update_balance(interaction.user.id, -amount)
-    db.update_balance(user.id, amount)
-    db.log_transaction(interaction.user.id, 'transfer', -amount, user.id, f"Перевод {user.name}")
+    # Применяем баф к комиссии (если есть)
+    transfer_amount = db.apply_buff_to_amount(interaction.user.id, amount, 'transfer_bonus')
+    
+    db.update_balance(interaction.user.id, -transfer_amount)
+    db.update_balance(user.id, amount)  # Получатель получает полную сумму
+    db.log_transaction(interaction.user.id, 'transfer', -transfer_amount, user.id, f"Перевод {user.name}")
     db.log_transaction(user.id, 'transfer', amount, interaction.user.id, f"Получено от {interaction.user.name}")
     
     embed = discord.Embed(
@@ -839,6 +1418,9 @@ async def pay(interaction: discord.Interaction, user: discord.Member, amount: in
         color=0x00ff00
     )
     embed.add_field(name="Сумма", value=f"{amount} {EMOJIS['coin']}")
+    if transfer_amount < amount:
+        embed.add_field(name="Комиссия", value=f"-{amount - transfer_amount} {EMOJIS['coin']} (баф)")
+    
     await interaction.response.send_message(embed=embed)
 
 # Команды кейсов
@@ -850,7 +1432,9 @@ async def cases_list(interaction: discord.Interaction):
     
     for case in cases:
         rewards = json.loads(case[3])
-        rewards_desc = "\n".join([f"• {r['type']} ({r['chance']*100:.1f}%)" for r in rewards])
+        rewards_desc = "\n".join([f"• {r['type']} ({r['chance']*100:.1f}%)" for r in rewards[:3]])  # Показываем только первые 3 награды
+        if len(rewards) > 3:
+            rewards_desc += f"\n• ... и ещё {len(rewards) - 3} наград"
         embed.add_field(
             name=f"{case[1]} - {case[2]} {EMOJIS['coin']} (ID: {case[0]})",
             value=rewards_desc,
@@ -902,6 +1486,7 @@ async def giftcase(interaction: discord.Interaction, user: discord.Member, case_
     db.update_balance(interaction.user.id, -case_data[2])
     db.add_case_to_inventory(user.id, case_id, case_data[1], "gifted")
     db.log_transaction(interaction.user.id, 'gift_case', -case_data[2], user.id, f"Подарок: {case_data[1]}")
+    db.update_user_stat(interaction.user.id, 'gifts_sent')
     
     embed = discord.Embed(
         title="🎁 Кейс в подарок!",
@@ -937,7 +1522,7 @@ async def inventory(interaction: discord.Interaction):
     else:
         embed.add_field(name="🎁 Кейсы", value="Пусто", inline=False)
     
-    # Показываем предметы
+    # Показываем предметы с информацией о бафах
     items = inventory_data.get("items", {})
     if items:
         items_text = ""
@@ -946,13 +1531,20 @@ async def inventory(interaction: discord.Interaction):
             item_data = db.get_item(int(item_id)) if item_id.isdigit() else None
             if item_data:
                 item_name = item_data[1]  # Название предмета
-                items_text += f"• {item_name} ×{count}\n"
+                buff_desc = f" - {item_data[7]}" if item_data[7] else ""  # Описание бафа
+                items_text += f"• {item_name}{buff_desc} ×{count}\n"
             else:
                 # Если предмет не найден в базе, показываем ID
                 items_text += f"• Предмет ID:{item_id} ×{count}\n"
         embed.add_field(name="📦 Предметы", value=items_text, inline=False)
     else:
         embed.add_field(name="📦 Предметы", value="Пусто", inline=False)
+    
+    # Показываем активные бафы
+    buffs = db.get_user_buffs(interaction.user.id)
+    if buffs:
+        buffs_text = "\n".join([f"• **{buff['item_name']}**: {buff['description']}" for buff in buffs.values()])
+        embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
     
     await interaction.response.send_message(embed=embed)
 
@@ -998,6 +1590,9 @@ async def openmycase(interaction: discord.Interaction, case_id: int):
     reward = get_reward(case)
     reward_text = await process_reward(interaction.user, reward, case)
     
+    # Обновляем статистику открытия кейсов
+    db.update_user_stat(interaction.user.id, 'cases_opened')
+    
     embed = discord.Embed(
         title=f"🎉 {case['name']} открыт!",
         description=reward_text,
@@ -1025,8 +1620,12 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
         
         for item in items:
             seller = bot.get_user(item[1])
+            # Получаем информацию о бафе предмета
+            item_data = db.get_item_by_name(item[2])
+            buff_info = f" - {item_data[7]}" if item_data and item_data[7] else ""
+            
             embed.add_field(
-                name=f"#{item[0]} {item[2]}",
+                name=f"#{item[0]} {item[2]}{buff_info}",
                 value=f"Цена: {item[3]} {EMOJIS['coin']}\nПродавец: {seller.name if seller else 'Неизвестно'}",
                 inline=False
             )
@@ -1038,10 +1637,27 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
             await interaction.response.send_message("Укажите название предмета и цену!", ephemeral=True)
             return
         
+        # Проверяем, есть ли предмет в инвентаре
+        inventory = db.get_user_inventory(interaction.user.id)
+        item_found = False
+        item_id_to_remove = None
+        
+        for item_id, count in inventory.get("items", {}).items():
+            item_data = db.get_item(int(item_id))
+            if item_data and item_data[1] == item_name:
+                item_found = True
+                item_id_to_remove = item_id
+                break
+        
+        if not item_found:
+            await interaction.response.send_message("У вас нет такого предмета в инвентаре!", ephemeral=True)
+            return
+        
         cursor = db.conn.cursor()
         cursor.execute('INSERT INTO market (seller_id, item_name, price) VALUES (%s, %s, %s)', 
                       (interaction.user.id, item_name, price))
         db.conn.commit()
+        db.update_user_stat(interaction.user.id, 'market_sales')
         
         embed = discord.Embed(
             title="🏪 Предмет выставлен на продажу",
@@ -1071,20 +1687,29 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
         # Покупка предмета
         db.update_balance(interaction.user.id, -item[3])
         db.update_balance(item[1], item[3])
+        
+        # Добавляем предмет покупателю (баф сохраняется)
+        db.add_item_to_inventory(interaction.user.id, item[2])
+        
         cursor.execute('DELETE FROM market WHERE id = %s', (int(item_name),))
         db.conn.commit()
         
         db.log_transaction(interaction.user.id, 'market_buy', -item[3], item[1], f"Покупка: {item[2]}")
         db.log_transaction(item[1], 'market_sell', item[3], interaction.user.id, f"Продажа: {item[2]}")
         
+        # Получаем информацию о бафе купленного предмета
+        item_data = db.get_item_by_name(item[2])
+        buff_info = f"\nБаф: {item_data[7]}" if item_data and item_data[7] else ""
+        
         embed = discord.Embed(
             title="🏪 Покупка совершена!",
-            description=f"Вы купили {item[2]} за {item[3]} {EMOJIS['coin']}",
+            description=f"Вы купили {item[2]} за {item[3]} {EMOJIS['coin']}{buff_info}",
             color=0x00ff00
         )
         await interaction.response.send_message(embed=embed)
 
-# Мини-игры
+# МИНИ-ИГРЫ
+
 @bot.tree.command(name="roulette", description="Сыграть в рулетку")
 @app_commands.describe(bet="Ставка в монетах")
 async def roulette(interaction: discord.Interaction, bet: int):
@@ -1099,13 +1724,26 @@ async def roulette(interaction: discord.Interaction, bet: int):
     
     if user_number == winning_number:
         multiplier = 35
-        winnings = bet * multiplier
+        base_winnings = bet * multiplier
+        # Применяем бафы к выигрышу
+        winnings = db.apply_buff_to_amount(interaction.user.id, base_winnings, 'roulette_bonus')
+        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'game_bonus')
+        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'multiplier')
+        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'all_bonus')
+        
         db.update_balance(interaction.user.id, winnings)
+        db.log_transaction(interaction.user.id, 'roulette_win', winnings, description="Победа в рулетке")
+        db.update_user_stat(interaction.user.id, 'roulette_wins')
+        db.update_consecutive_wins(interaction.user.id, True)
         result = f"ПОБЕДА! x{multiplier}\nВыигрыш: {winnings} {EMOJIS['coin']}"
         color = 0x00ff00
     else:
-        db.update_balance(interaction.user.id, -bet)
-        result = f"ПРОИГРЫШ!\nВыпало: {winning_number}, Ваше: {user_number}"
+        # Применяем баф защиты от проигрышей
+        loss = db.apply_buff_to_amount(interaction.user.id, bet, 'loss_protection')
+        db.update_balance(interaction.user.id, -loss)
+        db.log_transaction(interaction.user.id, 'roulette_loss', -loss, description="Проигрыш в рулетке")
+        db.update_consecutive_wins(interaction.user.id, False)
+        result = f"ПРОИГРЫШ!\nВыпало: {winning_number}, Ваше: {user_number}\nПотеряно: {loss} {EMOJIS['coin']}"
         color = 0xff0000
     
     embed = discord.Embed(
@@ -1115,39 +1753,122 @@ async def roulette(interaction: discord.Interaction, bet: int):
     )
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="dice", description="Бросить кости на ставку")
+@bot.tree.command(name="coinflip", description="Подбросить монету на ставку (50/50 шанс)")
 @app_commands.describe(bet="Ставка в монетах")
-async def dice(interaction: discord.Interaction, bet: int):
+async def coinflip(interaction: discord.Interaction, bet: int):
     user_data = db.get_user(interaction.user.id)
     
     if user_data[1] < bet:
         await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
         return
     
-    user_roll = random.randint(1, 6)
-    bot_roll = random.randint(1, 6)
-    
-    if user_roll > bot_roll:
-        winnings = bet * 2
-        db.update_balance(interaction.user.id, winnings)
-        result = f"ПОБЕДА!\nВаш бросок: {user_roll}\nБросок бота: {bot_roll}\nВыигрыш: {winnings} {EMOJIS['coin']}"
-        color = 0x00ff00
-    elif user_roll < bot_roll:
-        db.update_balance(interaction.user.id, -bet)
-        result = f"ПРОИГРЫШ!\nВаш бросок: {user_roll}\nБросок бота: {bot_roll}"
-        color = 0xff0000
-    else:
-        result = f"НИЧЬЯ!\nОба выбросили: {user_roll}"
-        color = 0xffff00
-    
     embed = discord.Embed(
-        title=f"{EMOJIS['dice']} Игра в кости - Ставка: {bet} {EMOJIS['coin']}",
-        description=result,
-        color=color
+        title=f"🪙 Подбрасывание монеты",
+        description=f"Ставка: {bet} {EMOJIS['coin']}\nВыберите сторону монеты:",
+        color=0xffd700
     )
-    await interaction.response.send_message(embed=embed)
+    
+    view = CoinFlipView(interaction.user.id, bet)
+    await interaction.response.send_message(embed=embed, view=view)
 
-# КОМАНДА ДУЭЛИ С 50/50 ШАНСОМ
+@bot.tree.command(name="blackjack", description="Сыграть в блэкджек")
+@app_commands.describe(bet="Ставка в монетах")
+async def blackjack(interaction: discord.Interaction, bet: int):
+    user_data = db.get_user(interaction.user.id)
+    
+    if user_data[1] < bet:
+        await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
+        return
+    
+    view = BlackjackView(interaction.user.id, bet)
+    await view.update_game(interaction)
+
+@bot.tree.command(name="slots", description="Играть в игровые автоматы")
+@app_commands.describe(bet="Ставка в монетах")
+async def slots(interaction: discord.Interaction, bet: int):
+    user_data = db.get_user(interaction.user.id)
+    
+    if user_data[1] < bet:
+        await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
+        return
+    
+    # Символы для слотов
+    symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '💎', '7️⃣']
+    
+    # Анимация вращения
+    embed = discord.Embed(title="🎰 Игровые автоматы", description="Вращение...", color=0xff69b4)
+    message = await interaction.response.send_message(embed=embed)
+    
+    for i in range(3):
+        await asyncio.sleep(0.5)
+        slot_result = [random.choice(symbols) for _ in range(3)]
+        embed.description = f"🎰 | {' | '.join(slot_result)} | 🎰"
+        await interaction.edit_original_response(embed=embed)
+    
+    await asyncio.sleep(1)
+    
+    # Финальный результат
+    final_result = [random.choice(symbols) for _ in range(3)]
+    embed.description = f"🎰 | {' | '.join(final_result)} | 🎰"
+    
+    # Проверка выигрыша
+    if final_result[0] == final_result[1] == final_result[2]:
+        if final_result[0] == '💎':
+            # Джекпот
+            multiplier = 100
+            db.update_user_stat(interaction.user.id, 'slot_wins')
+        elif final_result[0] == '7️⃣':
+            multiplier = 50
+        elif final_result[0] == '🔔':
+            multiplier = 20
+        else:
+            multiplier = 5
+        
+        base_winnings = bet * multiplier
+        # Применяем бафы к выигрышу
+        winnings = db.apply_buff_to_amount(interaction.user.id, base_winnings, 'slot_bonus')
+        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'game_bonus')
+        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'multiplier')
+        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'all_bonus')
+        
+        db.update_balance(interaction.user.id, winnings)
+        db.log_transaction(interaction.user.id, 'slots_win', winnings, description=f"Победа в слотах x{multiplier}")
+        db.update_consecutive_wins(interaction.user.id, True)
+        
+        result_text = f"ДЖЕКПОТ! x{multiplier}\nВыигрыш: {winnings} {EMOJIS['coin']}"
+        color = 0x00ff00
+    elif final_result[0] == final_result[1] or final_result[1] == final_result[2]:
+        # Два одинаковых символа
+        base_winnings = bet * 2
+        # Применяем бафы к выигрышу
+        winnings = db.apply_buff_to_amount(interaction.user.id, base_winnings, 'slot_bonus')
+        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'game_bonus')
+        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'multiplier')
+        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'all_bonus')
+        
+        db.update_balance(interaction.user.id, winnings)
+        db.log_transaction(interaction.user.id, 'slots_win', winnings, description="Победа в слотах x2")
+        db.update_consecutive_wins(interaction.user.id, True)
+        
+        result_text = f"Два в ряд! x2\nВыигрыш: {winnings} {EMOJIS['coin']}"
+        color = 0x00ff00
+    else:
+        # Применяем баф защиты от проигрышей
+        loss = db.apply_buff_to_amount(interaction.user.id, bet, 'loss_protection')
+        db.update_balance(interaction.user.id, -loss)
+        db.log_transaction(interaction.user.id, 'slots_loss', -loss, description="Проигрыш в слотах")
+        db.update_consecutive_wins(interaction.user.id, False)
+        
+        result_text = f"Повезет в следующий раз!\nПотеряно: {loss} {EMOJIS['coin']}"
+        color = 0xff0000
+    
+    embed.add_field(name="Результат", value=result_text, inline=False)
+    embed.add_field(name="Ставка", value=f"{bet} {EMOJIS['coin']}", inline=True)
+    embed.color = color
+    
+    await interaction.edit_original_response(embed=embed)
+
+# ДУЭЛЬ С УЧЕТОМ БАФОВ
 @bot.tree.command(name="duel", description="Вызвать пользователя на дуэль")
 @app_commands.describe(user="Пользователь для дуэли", bet="Ставка в монетах")
 async def duel(interaction: discord.Interaction, user: discord.Member, bet: int):
@@ -1175,17 +1896,29 @@ async def duel(interaction: discord.Interaction, user: discord.Member, bet: int)
         color=0xff0000
     )
     embed.add_field(name="Ставка", value=f"{bet} {EMOJIS['coin']}", inline=True)
-    embed.add_field(name="Шанс победы", value="50/50", inline=True)
+    
+    # Показываем бафы участников
+    challenger_buffs = db.get_user_buffs(interaction.user.id)
+    target_buffs = db.get_user_buffs(user.id)
+    
+    if challenger_buffs or target_buffs:
+        buffs_text = ""
+        if challenger_buffs:
+            buffs_text += f"**{interaction.user.display_name}**: " + ", ".join([f"{buff['item_name']}" for buff in challenger_buffs.values()]) + "\n"
+        if target_buffs:
+            buffs_text += f"**{user.display_name}**: " + ", ".join([f"{buff['item_name']}" for buff in target_buffs.values()])
+        embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
+    
     embed.add_field(name="Время на ответ", value="30 секунд", inline=True)
     embed.set_footer(text="Победитель забирает всю ставку!")
     
     view = DuelView(interaction.user.id, user.id, bet)
     await interaction.response.send_message(embed=embed, view=view)
 
-# Команда /steal с рандомной суммой и КД 30 минут
+# КРАЖА С УЧЕТОМ БАФОВ
 @bot.tree.command(name="steal", description="Попытаться украсть монеты у другого пользователя (КД 30 мин)")
 @app_commands.describe(user="Пользователь, у которого крадем")
-@app_commands.checks.cooldown(1, 1800.0, key=lambda i: (i.guild_id, i.user.id))  # 30 минут кд
+@app_commands.checks.cooldown(1, 1800.0, key=lambda i: (i.guild_id, i.user.id))
 async def steal(interaction: discord.Interaction, user: discord.Member):
     if user.id == interaction.user.id:
         await interaction.response.send_message("Нельзя красть у себя!", ephemeral=True)
@@ -1211,27 +1944,48 @@ async def steal(interaction: discord.Interaction, user: discord.Member):
     else:
         amount = random.randint(min_steal, max_steal)
     
-    success_chance = 0.3
+    base_success_chance = 0.3
+    # Применяем бафы к шансу кражи
+    success_chance = db.apply_buff_to_chance(interaction.user.id, base_success_chance, 'steal_chance')
+    success_chance = db.apply_buff_to_chance(interaction.user.id, success_chance, 'steal_bonus')
+    
+    # Применяем баф защиты цели
+    target_protection = db.apply_buff_to_chance(user.id, 1.0, 'steal_protection')
+    success_chance = success_chance * (1 - target_protection)
+    
     if random.random() <= success_chance:
-        db.update_balance(interaction.user.id, amount)
-        db.update_balance(user.id, -amount)
-        db.log_transaction(interaction.user.id, 'steal', amount, user.id, "Успешная кража")
+        # Применяем бафы к украденной сумме
+        stolen_amount = db.apply_buff_to_amount(interaction.user.id, amount, 'multiplier')
+        stolen_amount = db.apply_buff_to_amount(interaction.user.id, stolen_amount, 'all_bonus')
+        
+        db.update_balance(interaction.user.id, stolen_amount)
+        db.update_balance(user.id, -amount)  # Цель теряет оригинальную сумму
+        db.log_transaction(interaction.user.id, 'steal', stolen_amount, user.id, "Успешная кража")
+        db.update_user_stat(interaction.user.id, 'steals_successful')
+        db.update_consecutive_wins(interaction.user.id, True)
         
         embed = discord.Embed(
             title=f"{EMOJIS['steal']} Успешная кража!",
-            description=f"{interaction.user.mention} украл {amount} {EMOJIS['coin']} у {user.mention}!",
+            description=f"{interaction.user.mention} украл {stolen_amount} {EMOJIS['coin']} у {user.mention}!",
             color=0x00ff00
         )
+        embed.add_field(name="Шанс успеха", value=f"{success_chance*100:.1f}%")
     else:
         penalty = min(amount // 2, 100)
-        db.update_balance(interaction.user.id, -penalty)
-        db.log_transaction(interaction.user.id, 'steal_fail', -penalty, user.id, "Неудачная кража")
+        # Применяем баф защиты от проигрышей к штрафу
+        actual_penalty = db.apply_buff_to_amount(interaction.user.id, penalty, 'loss_protection')
+        
+        db.update_balance(interaction.user.id, -actual_penalty)
+        db.log_transaction(interaction.user.id, 'steal_fail', -actual_penalty, user.id, "Неудачная кража")
+        db.update_user_stat(interaction.user.id, 'steals_failed')
+        db.update_consecutive_wins(interaction.user.id, False)
         
         embed = discord.Embed(
             title=f"{EMOJIS['lose']} Кража провалилась!",
-            description=f"{interaction.user.mention} оштрафован на {penalty} {EMOJIS['coin']}!",
+            description=f"{interaction.user.mention} оштрафован на {actual_penalty} {EMOJIS['coin']}!",
             color=0xff0000
         )
+        embed.add_field(name="Шанс успеха", value=f"{success_chance*100:.1f}%")
     
     await interaction.response.send_message(embed=embed)
 
@@ -1249,99 +2003,24 @@ async def steal_error(interaction: discord.Interaction, error: app_commands.AppC
     else:
         raise error
 
-# Команда /quest с кд 3 часа
+# КВЕСТЫ И ДОСТИЖЕНИЯ
 @bot.tree.command(name="quest", description="Получить случайный квест")
-@app_commands.checks.cooldown(1, 10800.0)  # 3 часа в секундах
+@app_commands.checks.cooldown(1, 10800.0)
 async def quest(interaction: discord.Interaction):
     quest_id, quest_data = random.choice(list(QUESTS.items()))
+    
+    base_reward = quest_data['reward']
+    # Применяем бафы к награде за квест
+    reward = db.apply_buff_to_amount(interaction.user.id, base_reward, 'quest_bonus')
+    reward = db.apply_buff_to_amount(interaction.user.id, reward, 'multiplier')
+    reward = db.apply_buff_to_amount(interaction.user.id, reward, 'all_bonus')
     
     embed = discord.Embed(
         title=f"{EMOJIS['quest']} Новый квест!",
         description=quest_data['description'],
         color=0x00ff00
     )
-    embed.add_field(name="Награда", value=f"{quest_data['reward']} {EMOJIS['coin']}")
-    
-    await interaction.response.send_message(embed=embed)
-
-# Обработчик кд для /quest
-@quest.error
-async def quest_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.CommandOnCooldown):
-        hours = int(error.retry_after // 3600)
-        minutes = int((error.retry_after % 3600) // 60)
-        seconds = int(error.retry_after % 60)
-        
-        await interaction.response.send_message(
-            f"❌ Следующий квест можно будет получить через {hours:02d}:{minutes:02d}:{seconds:02d}",
-            ephemeral=True
-        )
-    else:
-        raise error
-
-# Достижения и лидерборды
-@bot.tree.command(name="leaderboard", description="Показать таблицу лидеров")
-@app_commands.describe(type="Тип лидерборда")
-@app_commands.choices(type=[
-    app_commands.Choice(name="Баланс", value="balance"),
-    app_commands.Choice(name="Победы", value="wins"),
-    app_commands.Choice(name="Кражи", value="steals")
-])
-async def leaderboard(interaction: discord.Interaction, type: app_commands.Choice[str]):
-    cursor = db.conn.cursor()
-    
-    if type.value == 'balance':
-        cursor.execute('SELECT user_id, balance FROM users ORDER BY balance DESC LIMIT 10')
-        title = "🏆 Лидеры по балансу"
-        
-        embed = discord.Embed(title=title, color=0xffd700)
-        
-        for i, (user_id, balance) in enumerate(cursor.fetchall(), 1):
-            user = bot.get_user(user_id)
-            name = user.name if user else f"User#{user_id}"
-            embed.add_field(
-                name=f"{i}. {name}",
-                value=f"{balance} {EMOJIS['coin']}",
-                inline=False
-            )
-    
-    elif type.value == 'wins':
-        cursor.execute('''
-            SELECT user_id, COUNT(*) as wins FROM transactions 
-            WHERE type IN ('roulette_win', 'dice_win', 'duel_win') 
-            GROUP BY user_id ORDER BY wins DESC LIMIT 10
-        ''')
-        title = "🏆 Лидеры по победам"
-        
-        embed = discord.Embed(title=title, color=0xffd700)
-        
-        for i, (user_id, wins) in enumerate(cursor.fetchall(), 1):
-            user = bot.get_user(user_id)
-            name = user.name if user else f"User#{user_id}"
-            embed.add_field(
-                name=f"{i}. {name}",
-                value=f"{wins} побед",
-                inline=False
-            )
-    
-    elif type.value == 'steals':
-        cursor.execute('''
-            SELECT user_id, COUNT(*) as steals FROM transactions 
-            WHERE type = 'steal' 
-            GROUP BY user_id ORDER BY steals DESC LIMIT 10
-        ''')
-        title = "🏆 Лидеры по кражам"
-        
-        embed = discord.Embed(title=title, color=0xffd700)
-        
-        for i, (user_id, steals) in enumerate(cursor.fetchall(), 1):
-            user = bot.get_user(user_id)
-            name = user.name if user else f"User#{user_id}"
-            embed.add_field(
-                name=f"{i}. {name}",
-                value=f"{steals} краж",
-                inline=False
-            )
+    embed.add_field(name="Награда", value=f"{reward} {EMOJIS['coin']}")
     
     await interaction.response.send_message(embed=embed)
 
@@ -1353,17 +2032,193 @@ async def achievements(interaction: discord.Interaction):
     
     embed = discord.Embed(title="🏅 Ваши достижения", color=0xffd700)
     
+    unlocked_count = 0
     for achievement_id, achievement in ACHIEVEMENTS.items():
         status = "✅" if achievement_id in user_achievements else "❌"
+        if achievement_id in user_achievements:
+            unlocked_count += 1
+            
         embed.add_field(
             name=f"{status} {achievement['name']}",
-            value=achievement['description'],
+            value=f"{achievement['description']}\nНаграда: {achievement['reward']} {EMOJIS['coin']}",
             inline=False
         )
     
+    embed.set_footer(text=f"Разблокировано: {unlocked_count}/{len(ACHIEVEMENTS)}")
+    
     await interaction.response.send_message(embed=embed)
 
-# Админ-команды
+@bot.tree.command(name="stats", description="Показать вашу статистику")
+async def stats(interaction: discord.Interaction):
+    cursor = db.conn.cursor()
+    cursor.execute('SELECT * FROM user_stats WHERE user_id = %s', (interaction.user.id,))
+    stats_data = cursor.fetchone()
+    
+    if not stats_data:
+        # Создаем запись статистики если её нет
+        cursor.execute('INSERT INTO user_stats (user_id) VALUES (%s)', (interaction.user.id,))
+        db.conn.commit()
+        cursor.execute('SELECT * FROM user_stats WHERE user_id = %s', (interaction.user.id,))
+        stats_data = cursor.fetchone()
+    
+    # Получаем активные бафы
+    buffs = db.get_user_buffs(interaction.user.id)
+    
+    embed = discord.Embed(title="📊 Ваша статистика", color=0x3498db)
+    
+    embed.add_field(
+        name="🎮 Игровая статистика",
+        value=f"**Кейсы открыто:** {stats_data[1]}\n"
+              f"**Дуэлей выиграно:** {stats_data[2]}\n"
+              f"**Успешных краж:** {stats_data[3]}\n"
+              f"**Неудачных краж:** {stats_data[4]}",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="🎰 Статистика игр",
+        value=f"**Побед в рулетке:** {stats_data[5]}\n"
+              f"**Побед в слотах:** {stats_data[6]}\n"
+              f"**Побед в блэкджеке:** {stats_data[7]}\n"
+              f"**Побед в coinflip:** {stats_data[8]}",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📈 Другая статистика",
+        value=f"**Ежедневных наград:** {stats_data[9]}\n"
+              f"**Всего заработано:** {stats_data[10]} {EMOJIS['coin']}\n"
+              f"**Продаж на маркете:** {stats_data[11]}\n"
+              f"**Подарков отправлено:** {stats_data[12]}\n"
+              f"**Предметов собрано:** {stats_data[14]}",
+        inline=False
+    )
+    
+    # Показываем активные бафы
+    if buffs:
+        buffs_text = "\n".join([f"• **{buff['item_name']}**: {buff['description']}" for buff in buffs.values()])
+        embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
+    
+    await interaction.response.send_message(embed=embed)
+
+# ЛИДЕРБОРДЫ
+@bot.tree.command(name="leaderboard", description="Показать таблицу лидеров")
+@app_commands.describe(type="Тип лидерборда")
+@app_commands.choices(type=[
+    app_commands.Choice(name="💰 Баланс", value="balance"),
+    app_commands.Choice(name="🏆 Победы", value="wins"),
+    app_commands.Choice(name="🦹 Кражи", value="steals"),
+    app_commands.Choice(name="🎁 Кейсы", value="cases"),
+    app_commands.Choice(name="🏅 Достижения", value="achievements"),
+    app_commands.Choice(name="📦 Предметы", value="items")
+])
+async def leaderboard(interaction: discord.Interaction, type: app_commands.Choice[str]):
+    cursor = db.conn.cursor()
+    
+    if type.value == 'balance':
+        cursor.execute('SELECT user_id, balance FROM users ORDER BY balance DESC LIMIT 10')
+        title = "💰 Лидеры по балансу"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, balance) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{balance} {EMOJIS['coin']}",
+                inline=False
+            )
+    
+    elif type.value == 'wins':
+        cursor.execute('''
+            SELECT user_id, 
+                   (COALESCE(roulette_wins, 0) + COALESCE(duels_won, 0) + COALESCE(slot_wins, 0) + 
+                    COALESCE(blackjack_wins, 0) + COALESCE(coinflip_wins, 0)) as total_wins 
+            FROM user_stats 
+            ORDER BY total_wins DESC LIMIT 10
+        ''')
+        title = "🏆 Лидеры по победам"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, wins) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{wins} побед",
+                inline=False
+            )
+    
+    elif type.value == 'steals':
+        cursor.execute('SELECT user_id, steals_successful FROM user_stats ORDER BY steals_successful DESC LIMIT 10')
+        title = "🦹 Лидеры по кражам"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, steals) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{steals} краж",
+                inline=False
+            )
+    
+    elif type.value == 'cases':
+        cursor.execute('SELECT user_id, cases_opened FROM user_stats ORDER BY cases_opened DESC LIMIT 10')
+        title = "🎁 Лидеры по кейсам"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, cases) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{cases} кейсов",
+                inline=False
+            )
+    
+    elif type.value == 'achievements':
+        cursor.execute('''
+            SELECT user_id, COUNT(*) as achievement_count 
+            FROM achievements 
+            GROUP BY user_id 
+            ORDER BY achievement_count DESC LIMIT 10
+        ''')
+        title = "🏅 Лидеры по достижениям"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, achievements_count) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{achievements_count} достижений",
+                inline=False
+            )
+    
+    elif type.value == 'items':
+        cursor.execute('SELECT user_id, items_collected FROM user_stats ORDER BY items_collected DESC LIMIT 10')
+        title = "📦 Лидеры по предметам"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, items) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{items} предметов",
+                inline=False
+            )
+    
+    await interaction.response.send_message(embed=embed)
+
+# АДМИН-КОМАНДЫ (остаются без изменений, так как они уже были реализованы)
 @bot.tree.command(name="admin_addcoins", description="Добавить монеты пользователю (админ)")
 @app_commands.describe(user="Пользователь", amount="Количество монет")
 @is_admin()
@@ -1541,7 +2396,6 @@ async def admin_viewtransactions(interaction: discord.Interaction, user: discord
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
 
-# НОВАЯ КОМАНДА: Просмотр базы данных
 @bot.tree.command(name="admin_database", description="Просмотр содержимого базы данных (админ)")
 @app_commands.describe(table="Таблица для просмотра")
 @app_commands.choices(table=[
@@ -1549,7 +2403,8 @@ async def admin_viewtransactions(interaction: discord.Interaction, user: discord
     app_commands.Choice(name="💰 Транзакции", value="transactions"),
     app_commands.Choice(name="🎁 Кейсы", value="cases"),
     app_commands.Choice(name="📦 Предметы", value="items"),
-    app_commands.Choice(name="🏪 Маркет", value="market")
+    app_commands.Choice(name="🏪 Маркет", value="market"),
+    app_commands.Choice(name="📊 Статистика", value="stats")
 ])
 @is_admin()
 async def admin_database(interaction: discord.Interaction, table: app_commands.Choice[str]):
@@ -1595,9 +2450,10 @@ async def admin_database(interaction: discord.Interaction, table: app_commands.C
             embed = discord.Embed(title="📦 База данных: Предметы", color=0x3498db)
             
             for item in items:
+                buff_info = f" | {item[7]}" if item[7] else ""
                 embed.add_field(
                     name=f"#{item[0]} {item[1]}",
-                    value=f"Цена: {item[3]} {EMOJIS['coin']}\nРедкость: {item[4]}",
+                    value=f"Цена: {item[3]} {EMOJIS['coin']}\nРедкость: {item[4]}{buff_info}",
                     inline=False
                 )
                 
@@ -1612,6 +2468,22 @@ async def admin_database(interaction: discord.Interaction, table: app_commands.C
                 embed.add_field(
                     name=f"#{item[0]} {item[2]}",
                     value=f"Цена: {item[3]} {EMOJIS['coin']}\nПродавец ID: {item[1]}",
+                    inline=False
+                )
+        
+        elif table.value == "stats":
+            cursor = db.conn.cursor()
+            cursor.execute('SELECT * FROM user_stats ORDER BY total_earned DESC LIMIT 10')
+            stats = cursor.fetchall()
+            
+            embed = discord.Embed(title="📊 База данных: Статистика", color=0x3498db)
+            
+            for stat in stats:
+                user = bot.get_user(stat[0])
+                name = user.display_name if user else f"User#{stat[0]}"
+                embed.add_field(
+                    name=f"{name}",
+                    value=f"Кейсы: {stat[1]}, Заработано: {stat[10]} {EMOJIS['coin']}",
                     inline=False
                 )
         
@@ -1641,104 +2513,6 @@ async def admin_broadcast(interaction: discord.Interaction, message: str):
                 except:
                     continue
 
-# Команда помощи
-@bot.tree.command(name="help", description="Показать информацию о боте и список команд")
-async def help_command(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="🎮 Экономический Бот - Помощь",
-        description="Добро пожаловать в экономическую игру! Этот бот предоставляет полную систему экономики с кейсами, мини-играми, маркетплейсом и достижениями.",
-        color=0x3498db
-    )
-    
-    # Основная информация о боте
-    embed.add_field(
-        name="📊 О боте",
-        value="• Внутренняя валюта: монеты 🪙\n• Ежедневные бонусы 📅\n• Система кейсов 🎁\n• Маркетплейс 🏪\n• Мини-игры 🎰\n• Достижения 🏅",
-        inline=False
-    )
-    
-    # Экономические команды
-    embed.add_field(
-        name="💰 Экономические команды",
-        value="""**/balance** [пользователь] - Показать баланс
-**/daily** - Получить ежедневную награду
-**/pay** @пользователь сумма - Перевести монеты
-**/inventory** - Показать инвентарь""",
-        inline=False
-    )
-    
-    # Команды кейсов
-    embed.add_field(
-        name="🎁 Команды кейсов",
-        value="""**/cases** - Список доступных кейсов
-**/opencase** ID_кейса - Купить и открыть кейс
-**/openmycase** ID_кейса - Открыть кейс из инвентаря
-**/giftcase** @пользователь ID_кейса - Подарить кейс""",
-        inline=False
-    )
-    
-    # Маркетплейс
-    embed.add_field(
-        name="🏪 Маркетплейс",
-        value="""**/market** list - Список товаров
-**/market** sell название_предмета цена - Продать предмет
-**/market** buy ID_товара - Купить товар""",
-        inline=False
-    )
-    
-    # Мини-игры
-    embed.add_field(
-        name="🎮 Мини-игры",
-        value="""**/roulette** ставка - Игра в рулетку
-**/dice** ставка - Игра в кости
-**/duel** @пользователь ставка - Дуэль с игроком (50/50 шанс)
-**/quest** - Получить случайный квест (КД 3 часа)
-**/steal** @пользователь - Попытаться украсть монеты (случайная сумма, КД 30 мин)""",
-        inline=False
-    )
-    
-    # Достижения и лидерборды
-    embed.add_field(
-        name="🏅 Достижения и лидерборды",
-        value="""**/leaderboard** balance - Лидеры по балансу
-**/leaderboard** wins - Лидеры по победам
-**/leaderboard** steals - Лидеры по кражам
-**/achievements** - Ваши достижения""",
-        inline=False
-    )
-    
-    # Админ-команды (только для админов)
-    if interaction.user.id in ADMIN_IDS:
-        embed.add_field(
-            name="⚙️ Админ-команды",
-            value="""**/admin_addcoins** @пользователь сумма - Добавить монеты
-**/admin_removecoins** @пользователь сумма - Забрать монеты
-**/admin_giveitem** @пользователь предмет - Выдать предмет
-**/admin_removeitem** @пользователь предмет - Забрать предмет
-**/admin_createcase** название цена JSON_наград - Создать кейс
-**/admin_editcase** ID_кейса [название] [цена] [JSON_наград] - Редактировать кейс
-**/admin_deletecase** ID_кейса - Удалить кейс
-**/admin_viewtransactions** [@пользователь] - Просмотр транзакций
-**/admin_database** таблица - Просмотр базы данных
-**/admin_broadcast** сообщение - Отправить объявление""",
-            inline=False
-        )
-    
-    # Полезные советы
-    embed.add_field(
-        name="💡 Советы",
-        value="""• Используйте **/daily** каждый день для увеличения серии
-• Открывайте кейсы для получения редких предметов и ролей
-• Торгуйте предметами на маркетплейсе
-• Соревнуйтесь за место в лидербордах""",
-        inline=False
-    )
-    
-    embed.set_footer(text="Для подробной информации о команде используйте /команда")
-    
-    await interaction.response.send_message(embed=embed)
-
-# НОВАЯ КОМАНДА: Принудительная инициализация БД
 @bot.tree.command(name="admin_init_db", description="Принудительно инициализировать базу данных (админ)")
 @is_admin()
 async def admin_init_db(interaction: discord.Interaction):
@@ -1758,20 +2532,520 @@ async def admin_init_db(interaction: discord.Interaction):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# Синхронизация команд при запуске
+# КОМАНДА ПОМОЩИ
+@bot.tree.command(name="help", description="Показать информацию о боте и список команд")
+async def help_command(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🎮 Экономический Бот - Помощь",
+        description="Добро пожаловать в экономическую игру! Этот бот предоставляет полную систему экономики с кейсами, мини-играми, маркетплейсом, достижениями и системой бафов.",
+        color=0x3498db
+    )
+    
+    # Основная информация о боте
+    embed.add_field(
+        name="📊 О боте",
+        value="• Внутренняя валюта: монеты 🪙\n• Ежедневные бонусы 📅\n• Система кейсов 🎁\n• Маркетплейс 🏪\n• Мини-игры 🎰\n• Достижения 🏅\n• Система бафов 🎯",
+        inline=False
+    )
+    
+    # Экономические команды
+    embed.add_field(
+        name="💰 Экономические команды",
+        value="""**/balance** [пользователь] - Показать баланс и активные бафы
+**/daily** - Получить ежедневную награду (учитывает бафы)
+**/pay** @пользователь сумма - Перевести монеты
+**/inventory** - Показать инвентарь и активные бафы
+**/stats** - Показать статистику""",
+        inline=False
+    )
+    
+    # Команды кейсов
+    embed.add_field(
+        name="🎁 Команды кейсов",
+        value="""**/cases** - Список доступных кейсов
+**/opencase** ID_кейса - Купить и открыть кейс
+**/openmycase** ID_кейса - Открыть кейс из инвентаря
+**/giftcase** @пользователь ID_кейса - Подарить кейс""",
+        inline=False
+    )
+    
+    # Маркетплейс
+    embed.add_field(
+        name="🏪 Маркетплейс",
+        value="""**/market** list - Список товаров
+**/market** sell название_предмета цена - Продать предмет
+**/market** buy ID_товара - Купить товар (баф сохраняется)""",
+        inline=False
+    )
+    
+    # Мини-игры
+    embed.add_field(
+        name="🎮 Мини-игры",
+        value="""**/roulette** ставка - Игра в рулетку (учитывает бафы)
+**/slots** ставка - Игровые автоматы (учитывает бафы)
+**/blackjack** ставка - Игра в блэкджек (учитывает бафы)
+**/coinflip** ставка - Подбрасывание монеты (50/50, учитывает бафы)
+**/duel** @пользователь ставка - Дуэль с игроком (учитывает бафы)
+**/quest** - Получить случайный квест (КД 3 часа)
+**/steal** @пользователь - Попытаться украсть монеты (учитывает бафы, КД 30 мин)""",
+        inline=False
+    )
+    
+    # Достижения и лидерборды
+    embed.add_field(
+        name="🏅 Достижения и лидерборды",
+        value="""**/leaderboard** balance - Лидеры по балансу
+**/leaderboard** wins - Лидеры по победам
+**/leaderboard** steals - Лидеры по кражам
+**/leaderboard** cases - Лидеры по кейсам
+**/leaderboard** achievements - Лидеры по достижениям
+**/leaderboard** items - Лидеры по предметам
+**/achievements** - Ваши достижения""",
+        inline=False
+    )
+    
+    # Админ-команды (только для админов)
+    if interaction.user.id in ADMIN_IDS:
+        embed.add_field(
+            name="⚙️ Админ-команды",
+            value="""**/admin_addcoins** @пользователь сумма - Добавить монеты
+**/admin_removecoins** @пользователь сумма - Забрать монеты
+**/admin_giveitem** @пользователь предмет - Выдать предмет
+**/admin_removeitem** @пользователь предмет - Забрать предмет
+**/admin_createcase** название цена JSON_наград - Создать кейс
+**/admin_editcase** ID_кейса [название] [цена] [JSON_наград] - Редактировать кейс
+**/admin_deletecase** ID_кейса - Удалить кейс
+**/admin_viewtransactions** [@пользователь] - Просмотр транзакций
+**/admin_database** таблица - Просмотр базы данных
+**/admin_broadcast** сообщение - Отправить объявление
+**/admin_init_db** - Принудительно инициализировать БД""",
+            inline=False
+        )
+    
+    embed.set_footer(text="Используйте / для просмотра всех команд")
+    
+    await interaction.response.send_message(embed=embed)
+
+# СИСТЕМА КВЕСТОВ И ПРОГРЕССА
+@bot.tree.command(name="quests", description="Показать ваши активные квесты")
+async def quests(interaction: discord.Interaction):
+    cursor = db.conn.cursor()
+    cursor.execute('SELECT quest_id, progress, completed FROM quests WHERE user_id = %s', (interaction.user.id,))
+    user_quests = cursor.fetchall()
+    
+    embed = discord.Embed(title=f"{EMOJIS['quest']} Ваши квесты", color=0x9b59b6)
+    
+    if not user_quests:
+        embed.description = "У вас пока нет активных квестов. Используйте `/quest` чтобы получить новый!"
+        await interaction.response.send_message(embed=embed)
+        return
+    
+    completed_quests = 0
+    for quest_id, progress, completed in user_quests:
+        if quest_id in QUESTS:
+            quest_data = QUESTS[quest_id]
+            status = "✅" if completed else f"📊 {progress}%"
+            embed.add_field(
+                name=f"{status} {quest_data['name']}",
+                value=f"{quest_data['description']}\nНаграда: {quest_data['reward']} {EMOJIS['coin']}",
+                inline=False
+            )
+            if completed:
+                completed_quests += 1
+    
+    embed.set_footer(text=f"Завершено: {completed_quests}/{len(user_quests)}")
+    await interaction.response.send_message(embed=embed)
+
+# КОМАНДА ПЕРЕЗАГРУЗКИ БАФОВ
+@bot.tree.command(name="buffs", description="Показать ваши активные бафы")
+async def buffs(interaction: discord.Interaction):
+    buffs = db.get_user_buffs(interaction.user.id)
+    
+    embed = discord.Embed(title="🎯 Ваши активные бафы", color=0x00ff00)
+    
+    if not buffs:
+        embed.description = "У вас пока нет активных бафов. Приобретайте предметы в кейсах или на маркетплейсе!"
+        await interaction.response.send_message(embed=embed)
+        return
+    
+    for buff_type, buff_info in buffs.items():
+        embed.add_field(
+            name=f"✨ {buff_info['item_name']}",
+            value=f"**Эффект:** {buff_info['description']}\n**Множитель:** x{buff_info['value']}",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"Всего активных бафов: {len(buffs)}")
+    await interaction.response.send_message(embed=embed)
+
+# СИСТЕМА ПОМОЩИ ПО КОМАНДАМ
+@bot.tree.command(name="commands", description="Показать все доступные команды")
+async def commands_list(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="📋 Все команды бота",
+        description="Вот полный список доступных команд:",
+        color=0x3498db
+    )
+    
+    # Экономика
+    embed.add_field(
+        name="💰 Экономика",
+        value="""`/balance` - Ваш баланс
+`/daily` - Ежедневная награда
+`/pay` - Перевести монеты
+`/inventory` - Ваш инвентарь
+`/stats` - Ваша статистика""",
+        inline=True
+    )
+    
+    # Кейсы
+    embed.add_field(
+        name="🎁 Кейсы",
+        value="""`/cases` - Список кейсов
+`/opencase` - Открыть кейс
+`/openmycase` - Открыть кейс из инвентаря
+`/giftcase` - Подарить кейс""",
+        inline=True
+    )
+    
+    # Игры
+    embed.add_field(
+        name="🎮 Игры",
+        value="""`/roulette` - Рулетка
+`/slots` - Игровые автоматы
+`/blackjack` - Блэкджек
+`/coinflip` - Подброс монеты
+`/duel` - Дуэль
+`/steal` - Кража (КД 30 мин)""",
+        inline=True
+    )
+    
+    # Маркет и предметы
+    embed.add_field(
+        name="🏪 Маркет",
+        value="""`/market list` - Список товаров
+`/market sell` - Продать предмет
+`/market buy` - Купить предмет
+`/buffs` - Активные бафы""",
+        inline=True
+    )
+    
+    # Прогресс
+    embed.add_field(
+        name="🏅 Прогресс",
+        value="""`/leaderboard` - Таблица лидеров
+`/achievements` - Достижения
+`/quest` - Получить квест
+`/quests` - Активные квесты""",
+        inline=True
+    )
+    
+    # Админ команды (только для админов)
+    if interaction.user.id in ADMIN_IDS:
+        embed.add_field(
+            name="⚙️ Админ",
+            value="Команды с префиксом `/admin_*`\nДля управления системой",
+            inline=True
+        )
+    
+    embed.set_footer(text="Используйте /help для подробной информации о командах")
+    await interaction.response.send_message(embed=embed)
+
+# СИСТЕМА УВЕДОМЛЕНИЙ О ДОСТИЖЕНИЯХ
+async def notify_achievement(channel, user, achievement_id):
+    achievement = ACHIEVEMENTS[achievement_id]
+    embed = discord.Embed(
+        title="🏆 Новое достижение!",
+        description=f"Поздравляем {user.mention} с получением достижения!",
+        color=0xffd700
+    )
+    embed.add_field(name=achievement['name'], value=achievement['description'], inline=False)
+    embed.add_field(name="Награда", value=f"{achievement['reward']} {EMOJIS['coin']}", inline=True)
+    
+    try:
+        await channel.send(embed=embed)
+    except:
+        pass  # Игнорируем ошибки отправки
+
+# СИСТЕМА ВРЕМЕННЫХ БОНУСОВ
+active_bonuses = {}
+
+class BonusSystem:
+    @staticmethod
+    def add_bonus(user_id, bonus_type, multiplier, duration_hours):
+        expiry = datetime.datetime.now() + datetime.timedelta(hours=duration_hours)
+        if user_id not in active_bonuses:
+            active_bonuses[user_id] = {}
+        active_bonuses[user_id][bonus_type] = {
+            'multiplier': multiplier,
+            'expiry': expiry
+        }
+    
+    @staticmethod
+    def get_bonus_multiplier(user_id, bonus_type):
+        if user_id not in active_bonuses or bonus_type not in active_bonuses[user_id]:
+            return 1.0
+        
+        bonus = active_bonuses[user_id][bonus_type]
+        if datetime.datetime.now() > bonus['expiry']:
+            del active_bonuses[user_id][bonus_type]
+            if not active_bonuses[user_id]:
+                del active_bonuses[user_id]
+            return 1.0
+        
+        return bonus['multiplier']
+    
+    @staticmethod
+    def cleanup_expired():
+        current_time = datetime.datetime.now()
+        expired_users = []
+        
+        for user_id, bonuses in active_bonuses.items():
+            expired_bonuses = []
+            for bonus_type, bonus in bonuses.items():
+                if current_time > bonus['expiry']:
+                    expired_bonuses.append(bonus_type)
+            
+            for bonus_type in expired_bonuses:
+                del bonuses[bonus_type]
+            
+            if not bonuses:
+                expired_users.append(user_id)
+        
+        for user_id in expired_users:
+            del active_bonuses[user_id]
+
+# ЗАДАЧА ДЛЯ ОЧИСТКИ ПРОСРОЧЕННЫХ БОНУСОВ
+@tasks.loop(minutes=30)
+async def cleanup_bonuses():
+    BonusSystem.cleanup_expired()
+
+# ОБНОВЛЕННАЯ ФУНКЦИЯ ПРОЦЕССА НАГРАД С УЧЕТОМ БОНУСОВ
+async def process_reward(user, reward, case):
+    if reward['type'] == 'coins':
+        amount = random.randint(reward['amount'][0], reward['amount'][1])
+        
+        # Применяем все возможные бафы и бонусы
+        amount = db.apply_buff_to_amount(user.id, amount, 'case_bonus')
+        amount = db.apply_buff_to_amount(user.id, amount, 'multiplier')
+        amount = db.apply_buff_to_amount(user.id, amount, 'all_bonus')
+        
+        # Применяем временные бонусы
+        bonus_multiplier = BonusSystem.get_bonus_multiplier(user.id, 'all')
+        amount = int(amount * bonus_multiplier)
+        
+        db.update_balance(user.id, amount)
+        db.log_transaction(user.id, 'case_reward', amount, description=f"Награда из {case['name']}")
+        return f"Монеты: {amount} {EMOJIS['coin']}"
+    
+    elif reward['type'] == 'custom_role':
+        await create_custom_role_webhook(user)
+        return "🎭 Кастомная роль! (Создан запрос в канале администрации)"
+    
+    elif reward['type'] == 'special_item':
+        db.add_item_to_inventory(user.id, reward['name'])
+        return f"📦 Особый предмет: {reward['name']}"
+    
+    elif reward['type'] == 'bonus':
+        BonusSystem.add_bonus(user.id, 'all', reward['multiplier'], reward['duration'])
+        return f"🚀 Бонус x{reward['multiplier']} на {reward['duration']}ч"
+    
+    elif reward['type'] == 'role':
+        return f"👑 Роль: {reward['name']} на {reward['duration']}ч"
+    
+    return "Неизвестная награда"
+
+# КОМАНДА ДЛЯ ПРОВЕРКИ ВРЕМЕННЫХ БОНУСОВ
+@bot.tree.command(name="activebonuses", description="Показать активные временные бонусы")
+async def active_bonuses_cmd(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    
+    if user_id not in active_bonuses or not active_bonuses[user_id]:
+        embed = discord.Embed(
+            title="⏰ Активные бонусы",
+            description="У вас нет активных временных бонусов.",
+            color=0xffff00
+        )
+        await interaction.response.send_message(embed=embed)
+        return
+    
+    embed = discord.Embed(title="⏰ Ваши активные бонусы", color=0x00ff00)
+    
+    for bonus_type, bonus in active_bonuses[user_id].items():
+        time_left = bonus['expiry'] - datetime.datetime.now()
+        hours_left = max(0, int(time_left.total_seconds() // 3600))
+        minutes_left = max(0, int((time_left.total_seconds() % 3600) // 60))
+        
+        embed.add_field(
+            name=f"✨ {bonus_type.upper()} бонус",
+            value=f"Множитель: x{bonus['multiplier']}\nОсталось: {hours_left}ч {minutes_left}м",
+            inline=False
+        )
+    
+    await interaction.response.send_message(embed=embed)
+
+# СИСТЕМА ВОССТАНОВЛЕНИЯ ДАННЫХ
+@bot.tree.command(name="recover", description="Восстановить данные пользователя (если есть проблемы)")
+async def recover_data(interaction: discord.Interaction):
+    # Создаем запись пользователя если её нет
+    user_data = db.get_user(interaction.user.id)
+    
+    # Восстанавливаем инвентарь если он поврежден
+    inventory = db.get_user_inventory(interaction.user.id)
+    if not isinstance(inventory, dict):
+        cursor = db.conn.cursor()
+        cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', 
+                      (json.dumps({"cases": {}, "items": {}}), interaction.user.id))
+        db.conn.commit()
+    
+    embed = discord.Embed(
+        title="🔧 Восстановление данных",
+        description="Ваши данные были проверены и восстановлены при необходимости!",
+        color=0x00ff00
+    )
+    embed.add_field(name="Баланс", value=f"{user_data[1]} {EMOJIS['coin']}", inline=True)
+    embed.add_field(name="Ежедневная серия", value=f"{user_data[2]} дней", inline=True)
+    
+    await interaction.response.send_message(embed=embed)
+
+# ОБРАБОТЧИКИ СОБЫТИЙ БОТА
 @bot.event
 async def on_ready():
-    print(f'Бот {bot.user.name} запущен!')
+    print(f'✅ Бот {bot.user.name} успешно запущен!')
+    print(f'🔗 ID бота: {bot.user.id}')
+    print(f'🌐 Количество серверов: {len(bot.guilds)}')
     
-    # Синхронизация слеш-команд
+    # Запускаем фоновые задачи
+    cleanup_bonuses.start()
+    
+    # Синхронизация команд
     try:
         synced = await bot.tree.sync()
-        print(f"Синхронизировано {len(synced)} команд")
+        print(f'✅ Успешно синхронизировано {len(synced)} команд')
     except Exception as e:
-        print(f"Ошибка синхронизации команд: {e}")
+        print(f'❌ Ошибка синхронизации команд: {e}')
     
-    await bot.change_presence(activity=discord.Game(name="Экономическую игру | /help"))
+    # Устанавливаем статус бота
+    activity = discord.Activity(
+        type=discord.ActivityType.watching,
+        name="экономику сервера | /help"
+    )
+    await bot.change_presence(activity=activity)
+    
+    # Отправляем сообщение в лог-канал
+    try:
+        channel = bot.get_channel(LOG_CHANNEL_ID)
+        if channel:
+            embed = discord.Embed(
+                title="🟢 Бот запущен",
+                description=f"Бот {bot.user.mention} успешно запущен и готов к работе!",
+                color=0x00ff00,
+                timestamp=datetime.datetime.now()
+            )
+            embed.add_field(name="Серверов", value=len(bot.guilds), inline=True)
+            embed.add_field(name="Пинг", value=f"{round(bot.latency * 1000)}мс", inline=True)
+            embed.add_field(name="Версия", value="2.0", inline=True)
+            await channel.send(embed=embed)
+    except Exception as e:
+        print(f"❌ Ошибка отправки сообщения о запуске: {e}")
 
+@bot.event
+async def on_guild_join(guild):
+    print(f'✅ Бот добавлен на сервер: {guild.name} (ID: {guild.id})')
+    
+    # Отправляем приветственное сообщение
+    try:
+        system_channel = guild.system_channel
+        if system_channel and system_channel.permissions_for(guild.me).send_messages:
+            embed = discord.Embed(
+                title="🎮 Добро пожаловать в экономическую игру!",
+                description="Спасибо за добавление бота на ваш сервер!",
+                color=0x3498db
+            )
+            embed.add_field(
+                name="🚀 Начало работы",
+                value="Используйте `/help` для просмотра всех команд\n`/balance` чтобы проверить баланс\n`/daily` для получения ежедневной награды",
+                inline=False
+            )
+            embed.add_field(
+                name="🎯 Основные возможности",
+                value="• Полная экономическая система\n• Система кейсов с наградами\n• Мини-игры и дуэли\n• Маркетплейс для торговли\n• Достижения и квесты\n• Система бафов от предметов",
+                inline=False
+            )
+            embed.set_footer(text="Для помощи используйте /help или /commands")
+            
+            await system_channel.send(embed=embed)
+    except Exception as e:
+        print(f"❌ Ошибка отправки приветственного сообщения: {e}")
+    
+    # Логируем в лог-канал
+    try:
+        channel = bot.get_channel(LOG_CHANNEL_ID)
+        if channel:
+            embed = discord.Embed(
+                title="✅ Бот добавлен на новый сервер",
+                description=f"Сервер: **{guild.name}**\nID: `{guild.id}`\nУчастников: {guild.member_count}",
+                color=0x00ff00,
+                timestamp=datetime.datetime.now()
+            )
+            await channel.send(embed=embed)
+    except Exception as e:
+        print(f"❌ Ошибка логирования добавления на сервер: {e}")
+
+@bot.event
+async def on_guild_remove(guild):
+    print(f'❌ Бот удален с сервера: {guild.name} (ID: {guild.id})')
+    
+    # Логируем в лог-канал
+    try:
+        channel = bot.get_channel(LOG_CHANNEL_ID)
+        if channel:
+            embed = discord.Embed(
+                title="❌ Бот удален с сервера",
+                description=f"Сервер: **{guild.name}**\nID: `{guild.id}`",
+                color=0xff0000,
+                timestamp=datetime.datetime.now()
+            )
+            await channel.send(embed=embed)
+    except Exception as e:
+        print(f"❌ Ошибка логирования удаления с сервера: {e}")
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandOnCooldown):
+        minutes = int(error.retry_after // 60)
+        seconds = int(error.retry_after % 60)
+        await ctx.send(f"❌ Эта команда на перезарядке! Попробуйте через {minutes}м {seconds}с", delete_after=10)
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ У вас недостаточно прав для использования этой команды!", delete_after=10)
+    elif isinstance(error, commands.CommandNotFound):
+        await ctx.send("❌ Команда не найдена! Используйте `/help` для списка команд", delete_after=10)
+    else:
+        print(f"❌ Необработанная ошибка: {error}")
+
+# КОМАНДА ДЛЯ ПРОВЕРКИ ПИНГА
+@bot.tree.command(name="ping", description="Проверить пинг бота")
+async def ping(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🏓 Понг!",
+        description=f"Задержка бота: {round(bot.latency * 1000)}мс",
+        color=0x00ff00
+    )
+    await interaction.response.send_message(embed=embed)
+
+# ЗАПУСК БОТА
 if __name__ == "__main__":
-    bot.run(BOT_TOKEN)
-
+    print("🚀 Запуск экономического бота...")
+    print(f"🔑 Токен: {'✅ Найден' if BOT_TOKEN else '❌ Отсутствует'}")
+    print(f"🗄️ База данных: {'✅ Подключена' if DATABASE_URL else '❌ Ошибка'}")
+    print(f"👑 Админы: {len(ADMIN_IDS)} пользователей")
+    print("=" * 50)
+    
+    try:
+        bot.run(BOT_TOKEN)
+    except Exception as e:
+        print(f"💥 Критическая ошибка при запуске бота: {e}")
+        print("🔄 Попытка перезапуска через 5 секунд...")
+        import time
+        time.sleep(5)
+        bot.run(BOT_TOKEN)

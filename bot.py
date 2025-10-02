@@ -1192,7 +1192,6 @@ class BlackjackView(View):
         self.user_cards = []
         self.dealer_cards = []
         self.game_over = False
-        self.message = None  # Добавляем ссылку на сообщение
         
         # Начальная раздача
         self.user_cards = [self.draw_card(), self.draw_card()]
@@ -1203,41 +1202,40 @@ class BlackjackView(View):
     
     def calculate_score(self, cards):
         score = sum(cards)
-        # Обработка тузов
         aces = cards.count(11)
+        
+        # Обработка тузов
         while score > 21 and aces > 0:
             score -= 10
             aces -= 1
+        
         return score
     
-    async def update_game(self, interaction: discord.Interaction):
-        """Исправленный метод обновления игры"""
+    def create_embed(self):
         user_score = self.calculate_score(self.user_cards)
         dealer_score = self.calculate_score([self.dealer_cards[0]])  # Показываем только одну карту дилера
         
         embed = discord.Embed(title="🃏 Блэкджек", color=0x2ecc71)
+        
+        # Отображаем карты пользователя
+        user_cards_display = ' '.join([f'`{card}`' for card in self.user_cards])
         embed.add_field(
             name="Ваши карты",
-            value=f"{' '.join(['🃏'] * len(self.user_cards))} (Очки: {user_score})",
+            value=f"{user_cards_display} (Очки: {user_score})",
             inline=False
         )
+        
+        # Отображаем карты дилера (только первую видна)
+        dealer_cards_display = f'`{self.dealer_cards[0]}` ' + ' '.join(['`?`' for _ in range(len(self.dealer_cards)-1)])
         embed.add_field(
             name="Карты дилера", 
-            value=f"🃏 ? (Очки: {dealer_score}+)",
+            value=f"{dealer_cards_display} (Очки: {dealer_score}+)",
             inline=False
         )
+        
         embed.add_field(name="Ставка", value=f"{self.bet} {EMOJIS['coin']}", inline=True)
         
-        # Если это первое сообщение
-        if not self.message:
-            self.message = await interaction.response.send_message(embed=embed, view=self)
-        else:
-            # Если сообщение уже существует, редактируем его
-            try:
-                await interaction.response.defer()  # Откладываем ответ
-                await self.message.edit(embed=embed, view=self)
-            except Exception as e:
-                print(f"Ошибка при обновлении блэкджека: {e}")
+        return embed
     
     @discord.ui.button(label='Взять карту', style=discord.ButtonStyle.primary)
     async def hit(self, interaction: discord.Interaction, button: Button):
@@ -1255,9 +1253,20 @@ class BlackjackView(View):
         
         # Проверяем перебор
         if user_score > 21:
+            # Отключаем кнопки перед завершением игры
+            for item in self.children:
+                item.disabled = True
+            
+            embed = self.create_embed()
+            embed.add_field(name="Результат", value="Перебор! Вы проиграли.", inline=False)
+            embed.color = 0xff0000
+            
+            await interaction.response.edit_message(embed=embed, view=self)
             await self.end_game(interaction, "перебор")
         else:
-            await self.update_game(interaction)
+            # Просто обновляем сообщение с новыми картами
+            embed = self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
     
     @discord.ui.button(label='Остановиться', style=discord.ButtonStyle.secondary)
     async def stand(self, interaction: discord.Interaction, button: Button):
@@ -1269,13 +1278,25 @@ class BlackjackView(View):
             await interaction.response.send_message("Эта игра не для вас!", ephemeral=True)
             return
         
-        # Откладываем ответ перед длительной операцией
-        await interaction.response.defer()
+        # Отключаем кнопки
+        for item in self.children:
+            item.disabled = True
         
         # Дилер берет карты пока не наберет 17 или больше
+        dealer_turn_embed = self.create_embed()
+        dealer_turn_embed.add_field(name="Действие", value="Дилер берет карты...", inline=False)
+        await interaction.response.edit_message(embed=dealer_turn_embed, view=self)
+        
+        # Даем немного времени для отображения
+        await asyncio.sleep(1)
+        
         while self.calculate_score(self.dealer_cards) < 17:
             self.dealer_cards.append(self.draw_card())
-            await asyncio.sleep(0.5)  # Небольшая задержка для драматизма
+            # Обновляем сообщение после каждой карты дилера
+            dealer_turn_embed = self.create_embed()
+            dealer_turn_embed.add_field(name="Действие", value="Дилер берет карты...", inline=False)
+            await interaction.edit_original_response(embed=dealer_turn_embed)
+            await asyncio.sleep(1)
         
         await self.end_game(interaction, "stand")
     
@@ -1326,16 +1347,23 @@ class BlackjackView(View):
         
         # Создаем финальное embed
         embed = discord.Embed(title="🃏 Результат блэкджека", color=color)
+        
+        # Отображаем все карты пользователя
+        user_cards_display = ' '.join([f'`{card}`' for card in self.user_cards])
         embed.add_field(
             name="Ваши карты",
-            value=f"{' '.join([f'`{card}`' for card in self.user_cards])} (Очки: {user_score})",
+            value=f"{user_cards_display} (Очки: {user_score})",
             inline=False
         )
+        
+        # Отображаем все карты дилера
+        dealer_cards_display = ' '.join([f'`{card}`' for card in self.dealer_cards])
         embed.add_field(
             name="Карты дилера",
-            value=f"{' '.join([f'`{card}`' for card in self.dealer_cards])} (Очки: {dealer_score})",
+            value=f"{dealer_cards_display} (Очки: {dealer_score})",
             inline=False
         )
+        
         embed.add_field(name="Результат", value=result_text, inline=False)
         
         if result == "win":
@@ -1345,19 +1373,8 @@ class BlackjackView(View):
         else:
             embed.add_field(name="Потеряно", value=f"{loss} {EMOJIS['coin']}", inline=True)
         
-        # Обновляем сообщение
-        try:
-            if self.message:
-                await self.message.edit(embed=embed, view=None)
-            else:
-                # Если сообщение не сохранилось, отправляем новое
-                await interaction.followup.send(embed=embed)
-        except Exception as e:
-            print(f"Ошибка при завершении блэкджека: {e}")
-            try:
-                await interaction.followup.send(embed=embed)
-            except:
-                pass
+        # Обновляем сообщение с финальным результатом
+        await interaction.edit_original_response(embed=embed, view=None)
 
 # Улучшенная функция проверки прав администратора
 def is_admin():
@@ -3402,4 +3419,5 @@ if __name__ == "__main__":
         except Exception as e2:
             print(f"💥 Повторная критическая ошибка: {e2}")
             traceback.print_exc()
+
 

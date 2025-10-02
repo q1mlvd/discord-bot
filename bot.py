@@ -469,16 +469,25 @@ class Database:
             print(f"❌ Ошибка при инициализации данных: {e}")
             self.conn.rollback()
     
-    def get_user(self, user_id):
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
-        user = cursor.fetchone()
-        if not user:
+def get_user(self, user_id):
+    cursor = self.conn.cursor()
+    cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
+    user = cursor.fetchone()
+    
+    if not user:
+        try:
             cursor.execute('INSERT INTO users (user_id, balance, inventory) VALUES (%s, %s, %s)', 
                          (user_id, 100, json.dumps({"cases": {}, "items": {}})))
             self.conn.commit()
-            return self.get_user(user_id)
-        return user
+            # Повторно получаем пользователя после создания
+            cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
+            user = cursor.fetchone()
+        except Exception as e:
+            print(f"❌ Ошибка при создании пользователя {user_id}: {e}")
+            # Создаем минимальный объект пользователя в случае ошибки
+            user = (user_id, 100, 0, None, json.dumps({"cases": {}, "items": {}}), datetime.datetime.now())
+    
+    return user
     
     def update_balance(self, user_id, amount):
         cursor = self.conn.cursor()
@@ -786,26 +795,34 @@ class Database:
         
         self.conn.commit()
     
-    def get_user_buffs(self, user_id):
-        """Возвращает активные бафы пользователя на основе предметов в инвентаре"""
+def get_user_buffs(self, user_id):
+    """Безопасное получение бафов пользователя"""
+    try:
         inventory = self.get_user_inventory(user_id)
         buffs = {}
         
         for item_id, count in inventory.get("items", {}).items():
-            item_data = self.get_item(int(item_id))
-            if item_data and item_data[5]:  # buff_type
-                buff_type = item_data[5]
-                buff_value = item_data[6]
-                
-                # Берем самый сильный баф каждого типа
-                if buff_type not in buffs or buff_value > buffs[buff_type]['value']:
-                    buffs[buff_type] = {
-                        'value': buff_value,
-                        'description': item_data[7],
-                        'item_name': item_data[1]
-                    }
+            try:
+                item_data = self.get_item(int(item_id))
+                if item_data and len(item_data) > 6 and item_data[5]:  # buff_type
+                    buff_type = item_data[5]
+                    buff_value = item_data[6] if len(item_data) > 6 else 1.0
+                    
+                    # Берем самый сильный баф каждого типа
+                    if buff_type not in buffs or buff_value > buffs[buff_type]['value']:
+                        buffs[buff_type] = {
+                            'value': buff_value,
+                            'description': item_data[7] if len(item_data) > 7 else "Бонус",
+                            'item_name': item_data[1] if len(item_data) > 1 else "Предмет"
+                        }
+            except (ValueError, IndexError) as e:
+                print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
+                continue
         
         return buffs
+    except Exception as e:
+        print(f"❌ Ошибка в get_user_buffs для {user_id}: {e}")
+        return {}
     
     def get_active_buffs_count(self, user_id):
         """Возвращает количество активных уникальных бафов"""
@@ -1296,18 +1313,32 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
         await interaction.response.send_message("❌ Команда не найдена!", ephemeral=True)
     elif isinstance(error, app_commands.MissingPermissions):
         await interaction.response.send_message("❌ Недостаточно прав!", ephemeral=True)
+    elif isinstance(error, IndexError):
+        print(f"🔴 IndexError в команде: {error}")
+        error_embed = discord.Embed(
+            title="❌ Ошибка данных",
+            description="Произошла ошибка при обработке данных. Администратор уведомлен.",
+            color=0xff0000
+        )
+        try:
+            await interaction.response.send_message(embed=error_embed, ephemeral=True)
+        except:
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
     else:
-        print(f"Произошла ошибка: {error}")
+        print(f"🔴 Необработанная ошибка: {error}")
         try:
             await interaction.response.send_message(
                 "❌ Произошла неизвестная ошибка при выполнении команды!",
                 ephemeral=True
             )
         except:
-            await interaction.followup.send(
-                "❌ Произошла неизвестная ошибка при выполнении команды!",
-                ephemeral=True
-            )
+            try:
+                await interaction.followup.send(
+                    "❌ Произошла неизвестная ошибка при выполнении команды!",
+                    ephemeral=True
+                )
+            except:
+                pass
 
 # КОМАНДЫ БОТА
 
@@ -1315,78 +1346,121 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 @bot.tree.command(name="balance", description="Показать ваш баланс")
 @app_commands.describe(user="Пользователь, чей баланс показать (опционально)")
 async def balance(interaction: discord.Interaction, user: discord.Member = None):
-    user = user or interaction.user
-    user_data = db.get_user(user.id)
-    
-    # Получаем статистику достижений
-    cursor = db.conn.cursor()
-    cursor.execute('SELECT COUNT(*) FROM achievements WHERE user_id = %s', (user.id,))
-    achievements_count = cursor.fetchone()[0]
-    
-    # Получаем активные бафы
-    buffs = db.get_user_buffs(user.id)
-    
-    embed = discord.Embed(
-        title=f"{EMOJIS['coin']} Баланс {user.display_name}",
-        color=0xffd700
-    )
-    embed.add_field(name="Баланс", value=f"{user_data[1]} {EMOJIS['coin']}", inline=True)
-    embed.add_field(name="Ежедневная серия", value=f"{user_data[2]} дней", inline=True)
-    embed.add_field(name="Достижения", value=f"{achievements_count}/{len(ACHIEVEMENTS)}", inline=True)
-    
-    # Показываем активные бафы
-    if buffs:
-        buffs_text = "\n".join([f"• {buff['item_name']}: {buff['description']}" for buff in buffs.values()])
-        embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
-    
-    if user.avatar:
-        embed.set_thumbnail(url=user.avatar.url)
-    elif user.default_avatar:
-        embed.set_thumbnail(url=user.default_avatar.url)
-    
-    await interaction.response.send_message(embed=embed)
-
+    try:
+        user = user or interaction.user
+        user_data = db.get_user(user.id)
+        
+        # БЕЗОПАСНОЕ ПОЛУЧЕНИЕ ДАННЫХ С ПРОВЕРКОЙ ИНДЕКСОВ
+        balance_amount = user_data[1] if len(user_data) > 1 else 100
+        daily_streak = user_data[2] if len(user_data) > 2 else 0
+        inventory_json = user_data[4] if len(user_data) > 4 else '{"cases": {}, "items": {}}'
+        
+        # Получаем статистику достижений
+        cursor = db.conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM achievements WHERE user_id = %s', (user.id,))
+        achievements_result = cursor.fetchone()
+        achievements_count = achievements_result[0] if achievements_result else 0
+        
+        # Получаем активные бафы
+        buffs = {}
+        try:
+            buffs = db.get_user_buffs(user.id)
+        except Exception as e:
+            print(f"⚠️ Ошибка получения бафов для пользователя {user.id}: {e}")
+        
+        embed = discord.Embed(
+            title=f"{EMOJIS['coin']} Баланс {user.display_name}",
+            color=0xffd700
+        )
+        embed.add_field(name="Баланс", value=f"{balance_amount} {EMOJIS['coin']}", inline=True)
+        embed.add_field(name="Ежедневная серия", value=f"{daily_streak} дней", inline=True)
+        embed.add_field(name="Достижения", value=f"{achievements_count}/{len(ACHIEVEMENTS)}", inline=True)
+        
+        # Показываем активные бафы
+        if buffs:
+            buffs_text = "\n".join([f"• {buff['item_name']}: {buff['description']}" for buff in buffs.values()])
+            embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
+        
+        if user.avatar:
+            embed.set_thumbnail(url=user.avatar.url)
+        elif user.default_avatar:
+            embed.set_thumbnail(url=user.default_avatar.url)
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        print(f"❌ Критическая ошибка в команде balance: {e}")
+        error_embed = discord.Embed(
+            title="❌ Ошибка",
+            description="Произошла ошибка при получении данных. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 @bot.tree.command(name="daily", description="Получить ежедневную награду")
 async def daily(interaction: discord.Interaction):
-    user_data = db.get_user(interaction.user.id)
-    last_daily = datetime.datetime.fromisoformat(user_data[3]) if user_data[3] else None
-    now = datetime.datetime.now()
-    
-    if last_daily and (now - last_daily).days < 1:
-        await interaction.response.send_message("Вы уже получали ежедневную награду сегодня!", ephemeral=True)
-        return
-    
-    streak = user_data[2] + 1 if last_daily and (now - last_daily).days == 1 else 1
-    base_reward = 100
-    streak_bonus = streak * 10
-    reward = base_reward + streak_bonus
-    
-    # Применяем бафы к награде
-    reward = db.apply_buff_to_amount(interaction.user.id, reward, 'daily_bonus')
-    reward = db.apply_buff_to_amount(interaction.user.id, reward, 'multiplier')
-    reward = db.apply_buff_to_amount(interaction.user.id, reward, 'all_bonus')
-    
-    db.update_balance(interaction.user.id, reward)
-    cursor = db.conn.cursor()
-    cursor.execute('UPDATE users SET daily_streak = %s, last_daily = %s WHERE user_id = %s', 
-                   (streak, now.isoformat(), interaction.user.id))
-    db.conn.commit()
-    db.log_transaction(interaction.user.id, 'daily', reward)
-    db.update_user_stat(interaction.user.id, 'daily_claimed')
-    
-    embed = discord.Embed(
-        title=f"{EMOJIS['daily']} Ежедневная награда",
-        description=f"Награда: {reward} {EMOJIS['coin']}\nСерия: {streak} дней\nБонус за серию: +{streak_bonus} {EMOJIS['coin']}",
-        color=0x00ff00
-    )
-    
-    # Проверяем достижения после получения награды
-    new_achievements = db.check_achievements(interaction.user.id)
-    if new_achievements:
-        achievements_text = "\n".join([f"🎉 {ACHIEVEMENTS[ach_id]['name']} (+{ACHIEVEMENTS[ach_id]['reward']} {EMOJIS['coin']})" for ach_id in new_achievements])
-        embed.add_field(name="Новые достижения!", value=achievements_text, inline=False)
-    
-    await interaction.response.send_message(embed=embed)
+    try:
+        user_data = db.get_user_safe(interaction.user.id)
+        
+        # БЕЗОПАСНЫЙ ДОСТУП К ДАННЫМ
+        last_daily_str = user_data[3] if len(user_data) > 3 else None
+        daily_streak = user_data[2] if len(user_data) > 2 else 0
+        
+        last_daily = None
+        if last_daily_str:
+            try:
+                last_daily = datetime.datetime.fromisoformat(last_daily_str)
+            except (ValueError, TypeError):
+                last_daily = None
+        
+        now = datetime.datetime.now()
+        
+        if last_daily and (now - last_daily).days < 1:
+            await interaction.response.send_message("Вы уже получали ежедневную награду сегодня!", ephemeral=True)
+            return
+        
+        streak = daily_streak + 1 if last_daily and (now - last_daily).days == 1 else 1
+        base_reward = 100
+        streak_bonus = streak * 10
+        reward = base_reward + streak_bonus
+        
+        # Применяем бафы к награде
+        reward = db.apply_buff_to_amount(interaction.user.id, reward, 'daily_bonus')
+        reward = db.apply_buff_to_amount(interaction.user.id, reward, 'multiplier')
+        reward = db.apply_buff_to_amount(interaction.user.id, reward, 'all_bonus')
+        
+        db.update_balance(interaction.user.id, reward)
+        cursor = db.conn.cursor()
+        cursor.execute('UPDATE users SET daily_streak = %s, last_daily = %s WHERE user_id = %s', 
+                       (streak, now.isoformat(), interaction.user.id))
+        db.conn.commit()
+        db.log_transaction(interaction.user.id, 'daily', reward)
+        db.update_user_stat(interaction.user.id, 'daily_claimed')
+        
+        embed = discord.Embed(
+            title=f"{EMOJIS['daily']} Ежедневная награда",
+            description=f"Награда: {reward} {EMOJIS['coin']}\nСерия: {streak} дней\nБонус за серию: +{streak_bonus} {EMOJIS['coin']}",
+            color=0x00ff00
+        )
+        
+        # Проверяем достижения после получения награды
+        try:
+            new_achievements = db.check_achievements(interaction.user.id)
+            if new_achievements:
+                achievements_text = "\n".join([f"🎉 {ACHIEVEMENTS[ach_id]['name']} (+{ACHIEVEMENTS[ach_id]['reward']} {EMOJIS['coin']})" for ach_id in new_achievements])
+                embed.add_field(name="Новые достижения!", value=achievements_text, inline=False)
+        except Exception as e:
+            print(f"⚠️ Ошибка проверки достижений: {e}")
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        print(f"❌ Ошибка в команде daily: {e}")
+        error_embed = discord.Embed(
+            title="❌ Ошибка",
+            description="Не удалось получить ежедневную награду. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 @bot.tree.command(name="pay", description="Перевести монеты другому пользователю")
 @app_commands.describe(user="Пользователь, которому переводим", amount="Сумма перевода")
@@ -2932,10 +3006,10 @@ async def on_ready():
     )
     await bot.change_presence(activity=activity)
     
-    # Отправляем сообщение в лог-канал
+    # ИСПРАВЛЕНИЕ: Проверяем тип канала перед отправкой
     try:
         channel = bot.get_channel(LOG_CHANNEL_ID)
-        if channel:
+        if channel and hasattr(channel, 'send') and isinstance(channel, (discord.TextChannel, discord.Thread)):
             embed = discord.Embed(
                 title="🟢 Бот запущен",
                 description=f"Бот {bot.user.mention} успешно запущен и готов к работе!",
@@ -2946,6 +3020,8 @@ async def on_ready():
             embed.add_field(name="Пинг", value=f"{round(bot.latency * 1000)}мс", inline=True)
             embed.add_field(name="Версия", value="2.0", inline=True)
             await channel.send(embed=embed)
+        else:
+            print(f"⚠️ Канал с ID {LOG_CHANNEL_ID} не найден или недоступен для отправки сообщений")
     except Exception as e:
         print(f"❌ Ошибка отправки сообщения о запуске: {e}")
 
@@ -3032,6 +3108,139 @@ async def ping(interaction: discord.Interaction):
         color=0x00ff00
     )
     await interaction.response.send_message(embed=embed)
+
+def get_user_safe(self, user_id):
+    """Безопасный метод получения данных пользователя с обработкой ошибок"""
+    try:
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT user_id, balance, daily_streak, last_daily, inventory, created_at 
+            FROM users WHERE user_id = %s
+        ''', (user_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            # Создаем нового пользователя с безопасными значениями по умолчанию
+            cursor.execute('''
+                INSERT INTO users (user_id, balance, daily_streak, inventory) 
+                VALUES (%s, %s, %s, %s)
+            ''', (user_id, 100, 0, json.dumps({"cases": {}, "items": {}})))
+            self.conn.commit()
+            
+            # Получаем созданного пользователя
+            cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
+            user = cursor.fetchone()
+        
+        return user
+        
+    except Exception as e:
+        print(f"❌ Ошибка в get_user_safe для {user_id}: {e}")
+        # Возвращаем кортеж с безопасными значениями по умолчанию
+        return (user_id, 100, 0, None, json.dumps({"cases": {}, "items": {}}), datetime.datetime.now())
+
+@bot.tree.command(name="debug_db", description="Проверить состояние базы данных (отладка)")
+@is_admin()
+async def debug_db(interaction: discord.Interaction):
+    try:
+        cursor = db.conn.cursor()
+        
+        # Проверяем таблицу пользователей
+        cursor.execute('SELECT COUNT(*) FROM users')
+        users_count = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM user_stats')
+        stats_count = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM achievements')
+        achievements_count = cursor.fetchone()[0]
+        
+        embed = discord.Embed(title="🐛 Отладка Базы Данных", color=0x3498db)
+        embed.add_field(name="👥 Пользователей", value=users_count, inline=True)
+        embed.add_field(name="📊 Записей статистики", value=stats_count, inline=True)
+        embed.add_field(name="🏅 Достижений", value=achievements_count, inline=True)
+        
+        # Проверяем текущего пользователя
+        user_data = db.get_user_safe(interaction.user.id)
+        embed.add_field(
+            name="🔍 Ваши данные", 
+            value=f"Баланс: {user_data[1]}\nСерия: {user_data[2]}\nДлина кортежа: {len(user_data)}",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Ошибка отладки",
+            description=f"Ошибка: {str(e)}",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
+
+def ensure_user_tables(user_id):
+    """Гарантирует, что все таблицы пользователя инициализированы"""
+    try:
+        cursor = db.conn.cursor()
+        
+        # Проверяем наличие в user_stats
+        cursor.execute('SELECT 1 FROM user_stats WHERE user_id = %s', (user_id,))
+        if not cursor.fetchone():
+            cursor.execute('INSERT INTO user_stats (user_id) VALUES (%s)', (user_id,))
+        
+        # Проверяем наличие квестов
+        cursor.execute('SELECT 1 FROM quests WHERE user_id = %s LIMIT 1', (user_id,))
+        if not cursor.fetchone():
+            # Инициализируем пустые квесты
+            pass
+            
+        db.conn.commit()
+        return True
+    except Exception as e:
+        print(f"⚠️ Ошибка инициализации таблиц для {user_id}: {e}")
+        db.conn.rollback()
+        return False
+
+@bot.tree.command(name="admin_fix_user", description="Исправить данные пользователя (админ)")
+@app_commands.describe(user="Пользователь для исправления")
+@is_admin()
+async def admin_fix_user(interaction: discord.Interaction, user: discord.Member):
+    try:
+        cursor = db.conn.cursor()
+        
+        # Создаем или обновляем пользователя
+        cursor.execute('''
+            INSERT INTO users (user_id, balance, daily_streak, inventory) 
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id) 
+            DO UPDATE SET 
+                balance = COALESCE(EXCLUDED.balance, 100),
+                daily_streak = COALESCE(EXCLUDED.daily_streak, 0),
+                inventory = COALESCE(EXCLUDED.inventory, '{"cases": {}, "items": {}}')
+        ''', (user.id, 100, 0, json.dumps({"cases": {}, "items": {}})))
+        
+        # Создаем запись статистики если её нет
+        cursor.execute('''
+            INSERT INTO user_stats (user_id) 
+            VALUES (%s)
+            ON CONFLICT (user_id) DO NOTHING
+        ''', (user.id,))
+        
+        db.conn.commit()
+        
+        embed = discord.Embed(
+            title="🔧 Данные пользователя исправлены",
+            description=f"Данные пользователя {user.mention} были успешно исправлены!",
+            color=0x00ff00
+        )
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Ошибка исправления",
+            description=f"Ошибка: {str(e)}",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 # ЗАПУСК БОТА
 if __name__ == "__main__":

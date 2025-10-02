@@ -1,56 +1,20 @@
 import os
-import discord
-from discord import app_commands
-from discord.ext import commands, tasks
-from discord.ui import Button, View, Select
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import json
 import random
-import asyncio
-import datetime
-import aiohttp
-from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
-# Получение токена из переменных окружения Railway
-BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
+# Получение DATABASE_URL из переменных окружения Railway
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
-if not BOT_TOKEN:
-    print("Ошибка: DISCORD_BOT_TOKEN не установлен в переменных окружения!")
+if not DATABASE_URL:
+    print("Ошибка: DATABASE_URL не установлен!")
     exit(1)
 
-# Настройки бота
-intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
-
-# Конфигурация
-DATABASE_FILE = 'economy.db'
-LOG_CHANNEL_ID = 1422557295811887175
-
-# ID администраторов (используем целые числа)
-ADMIN_IDS = [766767256742526996, 1195144951546265675, 691904643181314078, 1078693283695448064, 1138140772097597472]
-
-# ID администратора для уведомлений
-ADMIN_USER_ID = 1188261847850299514
-
-# Эмодзи для оформления
-EMOJIS = {
-    'coin': '🪙',
-    'daily': '📅',
-    'case': '🎁',
-    'win': '🎉',
-    'lose': '💀',
-    'steal': '🦹',
-    'market': '🏪',
-    'quest': '🗺️',
-    'dice': '🎲',
-    'duel': '⚔️',
-    'admin': '⚙️'
-}
-
-# База данных SQLite
 class Database:
     def __init__(self):
-        self.conn = sqlite3.connect(DATABASE_FILE, check_same_thread=False)
+        self.conn = psycopg2.connect(DATABASE_URL, sslmode='require')
         self.create_tables()
     
     def create_tables(self):
@@ -59,56 +23,56 @@ class Database:
         # Таблица пользователей
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
-                user_id INTEGER PRIMARY KEY,
+                user_id BIGINT PRIMARY KEY,
                 balance INTEGER DEFAULT 100,
                 daily_streak INTEGER DEFAULT 0,
                 last_daily TEXT,
                 inventory TEXT DEFAULT '{}',
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
         # Таблица транзакций
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT,
                 type TEXT,
                 amount INTEGER,
-                target_user_id INTEGER,
+                target_user_id BIGINT,
                 description TEXT,
-                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
         # Таблица кейсов
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS cases (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 name TEXT,
                 price INTEGER,
                 rewards TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
         # Таблица маркета
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS market (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                seller_id INTEGER,
+                id SERIAL PRIMARY KEY,
+                seller_id BIGINT,
                 item_name TEXT,
                 price INTEGER,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
         # Таблица достижений
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS achievements (
-                user_id INTEGER,
+                user_id BIGINT,
                 achievement_id TEXT,
-                unlocked_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (user_id, achievement_id)
             )
         ''')
@@ -116,7 +80,7 @@ class Database:
         # Таблица квестов
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS quests (
-                user_id INTEGER,
+                user_id BIGINT,
                 quest_id TEXT,
                 progress INTEGER DEFAULT 0,
                 completed INTEGER DEFAULT 0,
@@ -128,25 +92,25 @@ class Database:
         # Таблица дуэлей
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS duels (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                challenger_id INTEGER,
-                target_id INTEGER,
+                id SERIAL PRIMARY KEY,
+                challenger_id BIGINT,
+                target_id BIGINT,
                 bet INTEGER,
                 status TEXT DEFAULT 'pending',
-                winner_id INTEGER,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                winner_id BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
         # Таблица предметов
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 name TEXT,
                 description TEXT,
                 value INTEGER,
                 rarity TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -159,7 +123,6 @@ class Database:
         # Проверяем, есть ли уже кейсы
         cursor.execute('SELECT COUNT(*) FROM cases')
         if cursor.fetchone()[0] == 0:
-            # Добавляем стандартные кейсы без кастомных ролей и с одним предметом за раз
             default_cases = [
                 ('📦 Малый кейс', 50, json.dumps([
                     {'type': 'coins', 'amount': [10, 40], 'chance': 0.8},
@@ -197,12 +160,11 @@ class Database:
             ]
             
             for case in default_cases:
-                cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (?, ?, ?)', case)
+                cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', case)
         
         # Проверяем, есть ли уже предметы
         cursor.execute('SELECT COUNT(*) FROM items')
         if cursor.fetchone()[0] == 0:
-            # Добавляем стандартные предметы
             default_items = [
                 ('Золотой ключ', 'Открывает особые кейсы', 500, 'rare'),
                 ('Древний артефакт', 'Мощный магический предмет', 1000, 'epic'),
@@ -214,17 +176,16 @@ class Database:
             ]
             
             for item in default_items:
-                cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (?, ?, ?, ?)', item)
+                cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (%s, %s, %s, %s)', item)
         
         self.conn.commit()
     
     def get_user(self, user_id):
         cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
+        cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
         user = cursor.fetchone()
         if not user:
-            # Создаем пользователя с правильным JSON для инвентаря
-            cursor.execute('INSERT INTO users (user_id, balance, inventory) VALUES (?, ?, ?)', 
+            cursor.execute('INSERT INTO users (user_id, balance, inventory) VALUES (%s, %s, %s)', 
                          (user_id, 100, json.dumps({"cases": {}, "items": {}})))
             self.conn.commit()
             return self.get_user(user_id)
@@ -232,14 +193,14 @@ class Database:
     
     def update_balance(self, user_id, amount):
         cursor = self.conn.cursor()
-        cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
+        cursor.execute('UPDATE users SET balance = balance + %s WHERE user_id = %s', (amount, user_id))
         self.conn.commit()
     
     def log_transaction(self, user_id, transaction_type, amount, target_user_id=None, description=""):
         cursor = self.conn.cursor()
         cursor.execute('''
             INSERT INTO transactions (user_id, type, amount, target_user_id, description)
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s)
         ''', (user_id, transaction_type, amount, target_user_id, description))
         self.conn.commit()
     
@@ -250,24 +211,26 @@ class Database:
     
     def get_case(self, case_id):
         cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM cases WHERE id = ?', (case_id,))
+        cursor.execute('SELECT * FROM cases WHERE id = %s', (case_id,))
         return cursor.fetchone()
     
     def create_case(self, name, price, rewards):
         cursor = self.conn.cursor()
-        cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (?, ?, ?)', (name, price, json.dumps(rewards)))
+        cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s) RETURNING id', 
+                      (name, price, json.dumps(rewards)))
+        case_id = cursor.fetchone()[0]
         self.conn.commit()
-        return cursor.lastrowid
+        return case_id
     
     def update_case(self, case_id, name, price, rewards):
         cursor = self.conn.cursor()
-        cursor.execute('UPDATE cases SET name = ?, price = ?, rewards = ? WHERE id = ?', 
+        cursor.execute('UPDATE cases SET name = %s, price = %s, rewards = %s WHERE id = %s', 
                       (name, price, json.dumps(rewards), case_id))
         self.conn.commit()
     
     def delete_case(self, case_id):
         cursor = self.conn.cursor()
-        cursor.execute('DELETE FROM cases WHERE id = ?', (case_id,))
+        cursor.execute('DELETE FROM cases WHERE id = %s', (case_id,))
         self.conn.commit()
     
     def get_items(self):
@@ -277,26 +240,23 @@ class Database:
     
     def get_item(self, item_id):
         cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM items WHERE id = ?', (item_id,))
+        cursor.execute('SELECT * FROM items WHERE id = %s', (item_id,))
         return cursor.fetchone()
     
     def add_item_to_inventory(self, user_id, item_name):
         cursor = self.conn.cursor()
         
-        # Находим ID предмета по имени
-        cursor.execute('SELECT id FROM items WHERE name = ?', (item_name,))
+        cursor.execute('SELECT id FROM items WHERE name = %s', (item_name,))
         item_result = cursor.fetchone()
         
         if not item_result:
-            # Если предмет не найден, создаем его
-            cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (?, ?, ?, ?)', 
+            cursor.execute('INSERT INTO items (name, description, value, rarity) VALUES (%s, %s, %s, %s) RETURNING id', 
                           (item_name, 'Автоматически созданный предмет', 100, 'common'))
-            item_id = cursor.lastrowid
+            item_id = cursor.fetchone()[0]
         else:
             item_id = item_result[0]
         
-        # Получаем инвентарь пользователя
-        cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
+        cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
         result = cursor.fetchone()
         
         if result and result[0]:
@@ -307,22 +267,20 @@ class Database:
         if "items" not in inventory_data:
             inventory_data["items"] = {}
             
-        # Сохраняем ID предмета вместо названия
         item_key = str(item_id)
         if item_key in inventory_data["items"]:
             inventory_data["items"][item_key] += 1
         else:
             inventory_data["items"][item_key] = 1
         
-        cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', 
+        cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', 
                       (json.dumps(inventory_data), user_id))
         self.conn.commit()
     
     def remove_item_from_inventory(self, user_id, item_name):
         cursor = self.conn.cursor()
         
-        # Находим ID предмета по имени
-        cursor.execute('SELECT id FROM items WHERE name = ?', (item_name,))
+        cursor.execute('SELECT id FROM items WHERE name = %s', (item_name,))
         item_result = cursor.fetchone()
         
         if not item_result:
@@ -330,7 +288,7 @@ class Database:
             
         item_id = str(item_result[0])
         
-        cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
+        cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
         result = cursor.fetchone()
         
         if not result or not result[0]:
@@ -344,7 +302,7 @@ class Database:
             else:
                 del inventory_data["items"][item_id]
             
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', 
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', 
                           (json.dumps(inventory_data), user_id))
             self.conn.commit()
             return True
@@ -352,7 +310,7 @@ class Database:
 
     def add_case_to_inventory(self, user_id, case_id, case_name, source="gifted"):
         cursor = self.conn.cursor()
-        cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
+        cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
         result = cursor.fetchone()
         
         if result and result[0]:
@@ -360,7 +318,6 @@ class Database:
         else:
             inventory = {"cases": {}, "items": {}}
         
-        # Добавляем кейс в инвентарь
         if "cases" not in inventory:
             inventory["cases"] = {}
         
@@ -374,12 +331,12 @@ class Database:
                 "source": source
             }
         
-        cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), user_id))
+        cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', (json.dumps(inventory), user_id))
         self.conn.commit()
     
     def get_user_inventory(self, user_id):
         cursor = self.conn.cursor()
-        cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
+        cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
         result = cursor.fetchone()
         
         if result and result[0]:
@@ -391,7 +348,7 @@ class Database:
     
     def remove_case_from_inventory(self, user_id, case_id):
         cursor = self.conn.cursor()
-        cursor.execute('SELECT inventory FROM users WHERE user_id = ?', (user_id,))
+        cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
         result = cursor.fetchone()
         
         if not result or not result[0]:
@@ -406,20 +363,19 @@ class Database:
             else:
                 del inventory["cases"][case_key]
             
-            cursor.execute('UPDATE users SET inventory = ? WHERE user_id = ?', (json.dumps(inventory), user_id))
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', (json.dumps(inventory), user_id))
             self.conn.commit()
             return True
         return False
 
-    # Методы для просмотра базы данных
     def get_all_users(self):
         cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM users')
+        cursor.execute('SELECT * FROM users ORDER BY balance DESC')
         return cursor.fetchall()
     
     def get_all_transactions(self, limit=50):
         cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ?', (limit,))
+        cursor.execute('SELECT * FROM transactions ORDER BY timestamp DESC LIMIT %s', (limit,))
         return cursor.fetchall()
     
     def get_all_items(self):
@@ -1669,3 +1625,4 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(BOT_TOKEN)
+

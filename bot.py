@@ -1903,6 +1903,16 @@ async def slots(interaction: discord.Interaction, bet: int):
             await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
             return
     
+    except Exception as e:
+        print(f"❌ Ошибка в команде slots при проверке баланса: {e}")
+        error_embed = discord.Embed(
+            title="🎰 Ошибка слотов",
+            description="Произошла ошибка при проверке баланса. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
+        return
+
     # Символы для слотов
     symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '💎', '7️⃣']
     
@@ -1977,14 +1987,7 @@ async def slots(interaction: discord.Interaction, bet: int):
     embed.add_field(name="Ставка", value=f"{bet} {EMOJIS['coin']}", inline=True)
     embed.color = color
     
-    except Exception as e:
-        print(f"❌ Ошибка в команде slots: {e}")
-        error_embed = discord.Embed(
-            title="🎰 Ошибка слотов",
-            description="Произошла ошибка при запуске игры. Попробуйте позже.",
-            color=0xff0000
-        )
-        await interaction.response.send_message(embed=error_embed, ephemeral=True)
+    await interaction.edit_original_response(embed=embed)
 
 # ДУЭЛЬ С УЧЕТОМ БАФОВ
 @bot.tree.command(name="duel", description="Вызвать пользователя на дуэль")
@@ -3154,21 +3157,18 @@ async def ping(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 def get_user_safe(self, user_id):
-    """Безопасный метод получения данных пользователя с обработкой ошибок"""
+    """Безопасный метод получения пользователя с обработкой ошибок"""
     try:
         cursor = self.conn.cursor()
-        cursor.execute('''
-            SELECT user_id, balance, daily_streak, last_daily, inventory, created_at 
-            FROM users WHERE user_id = %s
-        ''', (user_id,))
+        cursor.execute('SELECT * FROM users WHERE user_id = %s', (user_id,))
         user = cursor.fetchone()
         
         if not user:
-            # Создаем нового пользователя с безопасными значениями по умолчанию
+            # Создаем нового пользователя
             cursor.execute('''
-                INSERT INTO users (user_id, balance, daily_streak, inventory) 
-                VALUES (%s, %s, %s, %s)
-            ''', (user_id, 100, 0, json.dumps({"cases": {}, "items": {}})))
+                INSERT INTO users (user_id, balance, inventory) 
+                VALUES (%s, %s, %s)
+            ''', (user_id, 100, json.dumps({"cases": {}, "items": {}})))
             self.conn.commit()
             
             # Получаем созданного пользователя
@@ -3313,5 +3313,6 @@ if __name__ == "__main__":
         import time
         time.sleep(5)
         bot.run(BOT_TOKEN)
+
 
 

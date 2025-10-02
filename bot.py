@@ -2131,7 +2131,9 @@ async def blackjack(interaction: discord.Interaction, bet: int):
         return
     
     view = BlackjackView(interaction.user.id, bet)
-    await view.update_game(interaction)
+    embed = view.create_embed()
+    
+    await interaction.response.send_message(embed=embed, view=view)
 
 @bot.tree.command(name="slots", description="Играть в игровые автоматы")
 @app_commands.describe(bet="Ставка в монетах")
@@ -3419,5 +3421,6 @@ if __name__ == "__main__":
         except Exception as e2:
             print(f"💥 Повторная критическая ошибка: {e2}")
             traceback.print_exc()
+
 
 

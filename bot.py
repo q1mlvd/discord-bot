@@ -95,7 +95,7 @@ ITEM_BUFFS = {
     'Золотой амулет': {'type': 'daily_bonus', 'value': 1.2, 'description': '+20% к ежедневной награде'},
     'Серебряный амулет': {'type': 'daily_bonus', 'value': 1.1, 'description': '+10% к ежедневной награде'},
     'Кольцо удачи': {'type': 'case_bonus', 'value': 1.15, 'description': '+15% к наградам из кейсов'},
-    'Браслет везения': {'type': 'game_bonus', 'value': 1.1, 'description': '+10% к выигрышам в играх'},
+    'Браслет везения': {'type': 'game_bonus', 'value': 1.1, 'description': '+10% к выигрышам в игран'},
     'Защитный талисман': {'type': 'steal_protection', 'value': 0.5, 'description': '-50% к шансу кражи у вас'},
     'Перчатка вора': {'type': 'steal_bonus', 'value': 1.2, 'description': '+20% к шансу успешной кражи'},
     'Магический свиток': {'type': 'roulette_bonus', 'value': 1.25, 'description': '+25% к выигрышу в рулетке'},
@@ -470,7 +470,7 @@ class Database:
             
             # Получаем баланс пользователя
             user_data = self.get_user(user_id)
-            balance = user_data[1]
+            balance = user_data[1] if len(user_data) > 1 else 0
             
             # Получаем инвентарь для проверки уникальных предметов
             inventory = self.get_user_inventory(user_id)
@@ -549,10 +549,6 @@ class Database:
             return f"Предмет ID:{item_id}"
         except:
             return f"Предмет ID:{item_id}"
-
-    def create_tables(self):
-        """Создание таблиц с улучшенной обработкой ошибок"""
-        try:
 
     def update_consecutive_wins(self, user_id, win=True):
         """Обновляет счетчик последовательных побед"""
@@ -654,7 +650,7 @@ class Database:
                 INSERT INTO quests (user_id, quest_id, progress, completed) 
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT (user_id, quest_id) DO NOTHING
-            ''', (user_id, quest_id, 0, 0))
+            ''', (user_id, quest_id, 0, False))
             self.conn.commit()
             return True
         except Exception as e:
@@ -745,7 +741,7 @@ class Database:
                     user_id BIGINT,
                     quest_id TEXT,
                     progress INTEGER DEFAULT 0,
-                    completed INTEGER DEFAULT 0,
+                    completed BOOLEAN DEFAULT FALSE,
                     last_quest TEXT,
                     PRIMARY KEY (user_id, quest_id)
                 )
@@ -1635,7 +1631,6 @@ async def daily(interaction: discord.Interaction):
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
-
 @bot.tree.command(name="items", description="Показать все доступные предметы")
 async def items_list(interaction: discord.Interaction):
     try:
@@ -1712,6 +1707,7 @@ async def my_items(interaction: discord.Interaction):
     except Exception as e:
         print(f"❌ Ошибка в команде myitems: {e}")
         await interaction.response.send_message("❌ Произошла ошибка при загрузке предметов!", ephemeral=True)
+
 @bot.tree.command(name="admin_giveitem", description="Выдать предмет пользователю (админ)")
 @app_commands.describe(user="Пользователь", item_name="Название предмета")
 @is_admin()
@@ -1741,7 +1737,8 @@ async def admin_giveitem(interaction: discord.Interaction, user: discord.Member,
             description=f"Предмет '{item_name}' выдан пользователю {user.mention}",
             color=0x00ff00
         )
-        embed.add_field(name="Эффект", value=item_data[7] if item_data[7] else "Нет бафа")
+        buff_description = item_data[7] if len(item_data) > 7 and item_data[7] else "Нет бафа"
+        embed.add_field(name="Эффект", value=buff_description)
         await interaction.response.send_message(embed=embed)
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
@@ -1811,7 +1808,7 @@ async def cases_list(interaction: discord.Interaction):
     except Exception as e:
         print(f"❌ Ошибка в команде cases: {e}")
         await interaction.response.send_message("❌ Произошла ошибка при загрузке кейсов!", ephemeral=True)
-    
+
 class CasesView(View):
     def __init__(self, pages, author_id):
         super().__init__(timeout=120)
@@ -2231,7 +2228,7 @@ async def roulette(interaction: discord.Interaction, bet: int):
             db.update_user_stat(interaction.user.id, 'roulette_wins')
             db.update_consecutive_wins(interaction.user.id, True)
             
-            result = f"🎉 ДЖЕКПОТ! Ваше число: {user_number}\nВыпало: {winning_number}\nВыигрыш: {winnings} {EMOJIS['coin']} (x{multiplier})"
+            result_text = f"🎉 ДЖЕКПОТ! Ваше число: {user_number}\nВыпало: {winning_number}\nВыигрыш: {winnings} {EMOJIS['coin']} (x{multiplier})"
             color = 0x00ff00
         else:
             loss = db.apply_buff_to_amount(interaction.user.id, bet, 'loss_protection')
@@ -2239,12 +2236,12 @@ async def roulette(interaction: discord.Interaction, bet: int):
             db.log_transaction(interaction.user.id, 'roulette_loss', -loss, description="Проигрыш в рулетке")
             db.update_consecutive_wins(interaction.user.id, False)
             
-            result = f"💀 Проигрыш! Ваше число: {user_number}\nВыпало: {winning_number}\nПотеряно: {loss} {EMOJIS['coin']}"
+            result_text = f"💀 Проигрыш! Ваше число: {user_number}\nВыпало: {winning_number}\nПотеряно: {loss} {EMOJIS['coin']}"
             color = 0xff0000
         
         embed = discord.Embed(
             title=f"🎰 Рулетка - Ставка: {bet} {EMOJIS['coin']}",
-            description=result,
+            description=result_text,
             color=color
         )
         await interaction.edit_original_response(embed=embed)
@@ -3690,10 +3687,3 @@ if __name__ == "__main__":
         except Exception as e2:
             print(f"💥 Повторная критическая ошибка: {e2}")
             traceback.print_exc()
-
-
-
-
-
-
-

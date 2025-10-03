@@ -230,41 +230,6 @@ class Database:
         case_id = cursor.fetchone()[0]
         self.conn.commit()
         return case_id
-
-        def get_user_inventory_safe(self, user_id):
-        """Безопасное получение инвентаря с обработкой ошибок"""
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
-            result = cursor.fetchone()
-            
-            if result and result[0]:
-                try:
-                    inventory_data = json.loads(result[0])
-                    # Проверяем структуру инвентаря
-                    if not isinstance(inventory_data, dict):
-                        inventory_data = {"cases": {}, "items": {}}
-                    if "cases" not in inventory_data:
-                        inventory_data["cases"] = {}
-                    if "items" not in inventory_data:
-                        inventory_data["items"] = {}
-                    return inventory_data
-                except json.JSONDecodeError:
-                    return {"cases": {}, "items": {}}
-            return {"cases": {}, "items": {}}
-        except Exception as e:
-            print(f"❌ Ошибка в get_user_inventory_safe: {e}")
-            return {"cases": {}, "items": {}}
-
-        def get_all_items_safe(self):
-        """Безопасное получение всех предметов"""
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('SELECT * FROM items')
-            return cursor.fetchall()
-        except Exception as e:
-            print(f"❌ Ошибка в get_all_items_safe: {e}")
-            return []
     
     def update_case(self, case_id, name, price, rewards):
         cursor = self.conn.cursor()
@@ -335,45 +300,6 @@ class Database:
         
         # Обновляем статистику собранных предметов
         self.update_user_stat(user_id, 'items_collected')
-
-        def get_user_quests(self, user_id):
-        """Получить квесты пользователя"""
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('SELECT quest_id, progress, completed FROM quests WHERE user_id = %s', (user_id,))
-            return cursor.fetchall()
-        except Exception as e:
-            print(f"❌ Ошибка в get_user_quests: {e}")
-            return []
-
-        def add_user_quest(self, user_id, quest_id):
-        """Добавить квест пользователю"""
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                INSERT INTO quests (user_id, quest_id, progress, completed) 
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (user_id, quest_id) DO NOTHING
-            ''', (user_id, quest_id, 0, 0))
-            db.conn.commit()
-            return True
-        except Exception as e:
-            print(f"❌ Ошибка в add_user_quest: {e}")
-            return False
-
-        def update_quest_progress(self, user_id, quest_id, progress, completed=False):
-        """Обновить прогресс квеста"""
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                UPDATE quests SET progress = %s, completed = %s 
-                WHERE user_id = %s AND quest_id = %s
-            ''', (progress, completed, user_id, quest_id))
-            db.conn.commit()
-            return True
-        except Exception as e:
-            print(f"❌ Ошибка в update_quest_progress: {e}")
-            return False
     
     def remove_item_from_inventory(self, user_id, item_name):
         cursor = self.conn.cursor()
@@ -448,6 +374,41 @@ class Database:
         except Exception as e:
             print(f"❌ Ошибка в get_user_inventory для {user_id}: {e}")
             return {"cases": {}, "items": {}}
+
+    def get_user_inventory_safe(self, user_id):
+        """Безопасное получение инвентаря с обработкой ошибок"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT inventory FROM users WHERE user_id = %s', (user_id,))
+            result = cursor.fetchone()
+            
+            if result and result[0]:
+                try:
+                    inventory_data = json.loads(result[0])
+                    # Проверяем структуру инвентаря
+                    if not isinstance(inventory_data, dict):
+                        inventory_data = {"cases": {}, "items": {}}
+                    if "cases" not in inventory_data:
+                        inventory_data["cases"] = {}
+                    if "items" not in inventory_data:
+                        inventory_data["items"] = {}
+                    return inventory_data
+                except json.JSONDecodeError:
+                    return {"cases": {}, "items": {}}
+            return {"cases": {}, "items": {}}
+        except Exception as e:
+            print(f"❌ Ошибка в get_user_inventory_safe: {e}")
+            return {"cases": {}, "items": {}}
+    
+    def get_all_items_safe(self):
+        """Безопасное получение всех предметов"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT * FROM items')
+            return cursor.fetchall()
+        except Exception as e:
+            print(f"❌ Ошибка в get_all_items_safe: {e}")
+            return []
     
     def remove_case_from_inventory(self, user_id, case_id):
         cursor = self.conn.cursor()
@@ -476,12 +437,10 @@ class Database:
         try:
             cursor = self.conn.cursor()
             
-            # Создаем запись если её нет
-            cursor.execute('''
-                INSERT INTO user_stats (user_id) 
-                VALUES (%s) 
-                ON CONFLICT (user_id) DO NOTHING
-            ''', (user_id,))
+            # Проверяем существование записи статистики
+            cursor.execute('SELECT 1 FROM user_stats WHERE user_id = %s', (user_id,))
+            if not cursor.fetchone():
+                cursor.execute('INSERT INTO user_stats (user_id) VALUES (%s)', (user_id,))
             
             # Обновляем статистику
             cursor.execute(f'''
@@ -662,6 +621,45 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM items')
         return cursor.fetchall()
+
+    def get_user_quests(self, user_id):
+        """Получить квесты пользователя"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT quest_id, progress, completed FROM quests WHERE user_id = %s', (user_id,))
+            return cursor.fetchall()
+        except Exception as e:
+            print(f"❌ Ошибка в get_user_quests: {e}")
+            return []
+    
+    def add_user_quest(self, user_id, quest_id):
+        """Добавить квест пользователю"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO quests (user_id, quest_id, progress, completed) 
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id, quest_id) DO NOTHING
+            ''', (user_id, quest_id, 0, 0))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка в add_user_quest: {e}")
+            return False
+    
+    def update_quest_progress(self, user_id, quest_id, progress, completed=False):
+        """Обновить прогресс квеста"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                UPDATE quests SET progress = %s, completed = %s 
+                WHERE user_id = %s AND quest_id = %s
+            ''', (progress, completed, user_id, quest_id))
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка в update_quest_progress: {e}")
+            return False
 
     def create_tables(self):
         """Создание таблиц с улучшенной обработкой ошибок"""
@@ -3581,6 +3579,7 @@ if __name__ == "__main__":
         except Exception as e2:
             print(f"💥 Повторная критическая ошибка: {e2}")
             traceback.print_exc()
+
 
 
 

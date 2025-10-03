@@ -541,16 +541,6 @@ class Database:
             return []
 
     def get_item_name_by_id(self, item_id):
-    """Получить название предмета по ID"""
-    try:
-        item_data = self.get_item(int(item_id))
-        if item_data and len(item_data) > 1:
-            return item_data[1]  # название предмета
-        return f"Предмет ID:{item_id}"
-    except:
-        return f"Предмет ID:{item_id}"
-
-        def get_item_name_by_id(self, item_id):
         """Получить название предмета по ID"""
         try:
             item_data = self.get_item(int(item_id))
@@ -559,7 +549,11 @@ class Database:
             return f"Предмет ID:{item_id}"
         except:
             return f"Предмет ID:{item_id}"
-    
+
+    def create_tables(self):
+        """Создание таблиц с улучшенной обработкой ошибок"""
+        try:
+
     def update_consecutive_wins(self, user_id, win=True):
         """Обновляет счетчик последовательных побед"""
         cursor = self.conn.cursor()
@@ -1829,8 +1823,13 @@ class CasesView(View):
 
     def update_buttons(self):
         """Обновляет состояние кнопок"""
-        self.previous_button.disabled = (self.current_page == 0)
-        self.next_button.disabled = (self.current_page >= self.total_pages - 1)
+        # Находим кнопки по их custom_id
+        for item in self.children:
+            if hasattr(item, 'custom_id'):
+                if item.custom_id == 'previous':
+                    item.disabled = (self.current_page == 0)
+                elif item.custom_id == 'next':
+                    item.disabled = (self.current_page >= self.total_pages - 1)
 
     @discord.ui.button(label='⬅️ Назад', style=discord.ButtonStyle.secondary, custom_id='previous')
     async def previous_button(self, interaction: discord.Interaction, button: Button):
@@ -1878,26 +1877,6 @@ class CasesView(View):
             except Exception as e:
                 print(f"⚠️ Ошибка обработки кейса {case[0]}: {e}")
                 continue
-        
-        return embed
-
-    def create_embed(self):
-        page_cases = self.pages[self.current_page]
-        embed = discord.Embed(
-            title=f"🎁 Доступные кейсы (Страница {self.current_page + 1}/{self.total_pages})", 
-            color=0xff69b4
-        )
-        
-        for case in page_cases:
-            rewards = json.loads(case[3])
-            rewards_desc = "\n".join([f"• {r['type']} ({r['chance']*100:.1f}%)" for r in rewards[:3]])
-            if len(rewards) > 3:
-                rewards_desc += f"\n• ... и ещё {len(rewards) - 3} наград"
-            embed.add_field(
-                name=f"{case[1]} - {case[2]} {EMOJIS['coin']} (ID: {case[0]})",
-                value=rewards_desc,
-                inline=False
-            )
         
         return embed
 
@@ -1970,19 +1949,9 @@ async def inventory(interaction: discord.Interaction):
             items_text = ""
             for item_id, count in items.items():
                 try:
-                    # Получаем информацию о предмете из базы данных
-                    if item_id.isdigit():
-                        item_data = db.get_item(int(item_id))
-                        if item_data:
-                            item_name = item_data[1]  # название предмета
-                            buff_desc = f" - {item_data[7]}" if len(item_data) > 7 and item_data[7] else ""
-                            items_text += f"• {item_name}{buff_desc} ×{count}\n"
-                        else:
-                            # Если предмет не найден, показываем ID
-                            items_text += f"• Предмет ID:{item_id} ×{count}\n"
-                    else:
-                        # Если ID не числовой (старая система)
-                        items_text += f"• {item_id} ×{count}\n"
+                    # Используем новый метод для получения названия предмета
+                    item_name = db.get_item_name_by_id(item_id)
+                    items_text += f"• {item_name} ×{count}\n"
                 except Exception as e:
                     print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
                     items_text += f"• Предмет ID:{item_id} ×{count}\n"
@@ -3721,6 +3690,7 @@ if __name__ == "__main__":
         except Exception as e2:
             print(f"💥 Повторная критическая ошибка: {e2}")
             traceback.print_exc()
+
 
 
 

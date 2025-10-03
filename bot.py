@@ -539,6 +539,26 @@ class Database:
         except Exception as e:
             print(f"❌ Ошибка в check_achievements: {e}")
             return []
+
+    def get_item_name_by_id(self, item_id):
+    """Получить название предмета по ID"""
+    try:
+        item_data = self.get_item(int(item_id))
+        if item_data and len(item_data) > 1:
+            return item_data[1]  # название предмета
+        return f"Предмет ID:{item_id}"
+    except:
+        return f"Предмет ID:{item_id}"
+
+        def get_item_name_by_id(self, item_id):
+        """Получить название предмета по ID"""
+        try:
+            item_data = self.get_item(int(item_id))
+            if item_data and len(item_data) > 1:
+                return item_data[1]  # название предмета
+            return f"Предмет ID:{item_id}"
+        except:
+            return f"Предмет ID:{item_id}"
     
     def update_consecutive_wins(self, user_id, win=True):
         """Обновляет счетчик последовательных побед"""
@@ -1800,33 +1820,66 @@ async def cases_list(interaction: discord.Interaction):
     
 class CasesView(View):
     def __init__(self, pages, author_id):
-        super().__init__(timeout=60)
+        super().__init__(timeout=120)
         self.pages = pages
         self.current_page = 0
         self.total_pages = len(pages)
         self.author_id = author_id
+        self.update_buttons()
 
-    @discord.ui.button(label='⬅️ Назад', style=discord.ButtonStyle.secondary)
-    async def previous(self, interaction: discord.Interaction, button: Button):
+    def update_buttons(self):
+        """Обновляет состояние кнопок"""
+        self.previous_button.disabled = (self.current_page == 0)
+        self.next_button.disabled = (self.current_page >= self.total_pages - 1)
+
+    @discord.ui.button(label='⬅️ Назад', style=discord.ButtonStyle.secondary, custom_id='previous')
+    async def previous_button(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.author_id:
-            await interaction.response.send_message("Это не ваша пагинация!", ephemeral=True)
+            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
             return
         
         if self.current_page > 0:
             self.current_page -= 1
+            self.update_buttons()
             embed = self.create_embed()
             await interaction.response.edit_message(embed=embed, view=self)
 
-    @discord.ui.button(label='➡️ Вперед', style=discord.ButtonStyle.secondary)
-    async def next(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(label='➡️ Вперед', style=discord.ButtonStyle.secondary, custom_id='next')
+    async def next_button(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.author_id:
-            await interaction.response.send_message("Это не ваша пагинация!", ephemeral=True)
+            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
             return
         
         if self.current_page < self.total_pages - 1:
             self.current_page += 1
+            self.update_buttons()
             embed = self.create_embed()
             await interaction.response.edit_message(embed=embed, view=self)
+
+    def create_embed(self):
+        page_cases = self.pages[self.current_page]
+        embed = discord.Embed(
+            title=f"🎁 Доступные кейсы (Страница {self.current_page + 1}/{self.total_pages})", 
+            color=0xff69b4
+        )
+        
+        for case in page_cases:
+            try:
+                rewards = json.loads(case[3])
+                rewards_desc = "\n".join([f"• {r['type']} ({r['chance']*100:.1f}%)" for r in rewards[:3]])
+                if len(rewards) > 3:
+                    rewards_desc += f"\n• ... и ещё {len(rewards) - 3} наград"
+                
+                embed.add_field(
+                    name=f"{case[1]} - {case[2]} {EMOJIS['coin']} (ID: {case[0]})",
+                    value=rewards_desc,
+                    inline=False
+                )
+            except Exception as e:
+                print(f"⚠️ Ошибка обработки кейса {case[0]}: {e}")
+                continue
+        
+        return embed
 
     def create_embed(self):
         page_cases = self.pages[self.current_page]
@@ -1911,42 +1964,47 @@ async def inventory(interaction: discord.Interaction):
         else:
             embed.add_field(name="🎁 Кейсы", value="Пусто", inline=False)
         
-        # Показываем предметы
+        # Показываем предметы с правильными названиями
         items = inventory_data.get("items", {})
         if items:
             items_text = ""
             for item_id, count in items.items():
                 try:
+                    # Получаем информацию о предмете из базы данных
                     if item_id.isdigit():
                         item_data = db.get_item(int(item_id))
                         if item_data:
-                            item_name = item_data[1]
+                            item_name = item_data[1]  # название предмета
                             buff_desc = f" - {item_data[7]}" if len(item_data) > 7 and item_data[7] else ""
                             items_text += f"• {item_name}{buff_desc} ×{count}\n"
                         else:
+                            # Если предмет не найден, показываем ID
                             items_text += f"• Предмет ID:{item_id} ×{count}\n"
                     else:
+                        # Если ID не числовой (старая система)
                         items_text += f"• {item_id} ×{count}\n"
                 except Exception as e:
                     print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
                     items_text += f"• Предмет ID:{item_id} ×{count}\n"
-            embed.add_field(name="📦 Предметы", value=items_text, inline=False)
+            
+            if items_text:
+                embed.add_field(name="📦 Предметы", value=items_text, inline=False)
+            else:
+                embed.add_field(name="📦 Предметы", value="Пусто", inline=False)
         else:
             embed.add_field(name="📦 Предметы", value="Пусто", inline=False)
+        
+        # Показываем активные бафы
+        buffs = db.get_user_buffs(interaction.user.id)
+        if buffs:
+            buffs_text = "\n".join([f"• **{buff['item_name']}**: {buff['description']}" for buff in buffs.values()])
+            embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
         
         await interaction.response.send_message(embed=embed)
         
     except Exception as e:
         print(f"❌ Ошибка в команде inventory: {e}")
         await interaction.response.send_message("❌ Произошла ошибка при загрузке инвентаря!", ephemeral=True)
-    
-    # Показываем активные бафы
-    buffs = db.get_user_buffs(interaction.user.id)
-    if buffs:
-        buffs_text = "\n".join([f"• **{buff['item_name']}**: {buff['description']}" for buff in buffs.values()])
-        embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
-    
-    await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="openmycase", description="Открыть кейс из вашего инвентаря")
 @app_commands.describe(case_id="ID кейса из инвентаря")
@@ -2266,7 +2324,6 @@ async def blackjack(interaction: discord.Interaction, bet: int):
 @app_commands.describe(bet="Ставка в монетах")
 async def slots(interaction: discord.Interaction, bet: int):
     try:
-        # ИСПОЛЬЗУЕМ БЕЗОПАСНЫЙ МЕТОД ПОЛУЧЕНИЯ ПОЛЬЗОВАТЕЛЯ
         user_data = db.get_user(interaction.user.id)
         balance = user_data[1] if len(user_data) > 1 else 100
         
@@ -2274,91 +2331,100 @@ async def slots(interaction: discord.Interaction, bet: int):
             await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
             return
     
-    except Exception as e:
-        print(f"❌ Ошибка в команде slots при проверке баланса: {e}")
-        error_embed = discord.Embed(
-            title="🎰 Ошибка слотов",
-            description="Произошла ошибка при проверке баланса. Попробуйте позже.",
-            color=0xff0000
-        )
-        await interaction.response.send_message(embed=error_embed, ephemeral=True)
-        return
-
-    # Символы для слотов
-    symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '💎', '7️⃣']
-    
-    # Анимация вращения
-    embed = discord.Embed(title="🎰 Игровые автоматы", description="Вращение...", color=0xff69b4)
-    message = await interaction.response.send_message(embed=embed)
-    
-    for i in range(3):
-        await asyncio.sleep(0.5)
-        slot_result = [random.choice(symbols) for _ in range(3)]
-        embed.description = f"🎰 | {' | '.join(slot_result)} | 🎰"
-        await interaction.edit_original_response(embed=embed)
-    
-    await asyncio.sleep(1)
-    
-    # Финальный результат
-    final_result = [random.choice(symbols) for _ in range(3)]
-    embed.description = f"🎰 | {' | '.join(final_result)} | 🎰"
-    
-    # Проверка выигрыша
-    if final_result[0] == final_result[1] == final_result[2]:
-        if final_result[0] == '💎':
-            # Джекпот
-            multiplier = 100
-            db.update_user_stat(interaction.user.id, 'slot_wins')
-        elif final_result[0] == '7️⃣':
-            multiplier = 50
-        elif final_result[0] == '🔔':
-            multiplier = 20
+        # Символы для слотов с улучшенными шансами
+        symbols = ['🍒', '🍋', '🍊', '🍇', '🔔', '💎', '7️⃣']
+        
+        # Анимация вращения
+        embed = discord.Embed(title="🎰 Игровые автоматы", description="Вращение...", color=0xff69b4)
+        await interaction.response.send_message(embed=embed)
+        
+        for i in range(3):
+            await asyncio.sleep(0.5)
+            slot_result = [random.choice(symbols) for _ in range(3)]
+            embed.description = f"🎰 | {' | '.join(slot_result)} | 🎰"
+            await interaction.edit_original_response(embed=embed)
+        
+        await asyncio.sleep(1)
+        
+        # Финальный результат с улучшенными шансами
+        # Увеличиваем шансы на выигрышные комбинации
+        final_result = []
+        if random.random() < 0.4:  # 40% шанс на выигрышную комбинацию
+            # Создаем выигрышную комбинацию
+            winning_symbol = random.choice(symbols)
+            if random.random() < 0.1:  # 10% шанс на джекпот
+                final_result = [winning_symbol, winning_symbol, winning_symbol]
+            else:  # 30% шанс на два одинаковых
+                final_result = [winning_symbol, winning_symbol, random.choice(symbols)]
+                # Случайно меняем порядок
+                random.shuffle(final_result)
         else:
-            multiplier = 5
+            # Случайная комбинация
+            final_result = [random.choice(symbols) for _ in range(3)]
         
-        base_winnings = bet * multiplier
-        # Применяем бафы к выигрышу
-        winnings = db.apply_buff_to_amount(interaction.user.id, base_winnings, 'slot_bonus')
-        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'game_bonus')
-        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'multiplier')
-        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'all_bonus')
+        embed.description = f"🎰 | {' | '.join(final_result)} | 🎰"
         
-        db.update_balance(interaction.user.id, winnings)
-        db.log_transaction(interaction.user.id, 'slots_win', winnings, description=f"Победа в слотах x{multiplier}")
-        db.update_consecutive_wins(interaction.user.id, True)
+        # Проверка выигрыша с улучшенными шансами
+        if final_result[0] == final_result[1] == final_result[2]:
+            if final_result[0] == '💎':
+                # Джекпот
+                multiplier = 50  # Уменьшен множитель но увеличен шанс
+                db.update_user_stat(interaction.user.id, 'slot_wins')
+            elif final_result[0] == '7️⃣':
+                multiplier = 25
+            elif final_result[0] == '🔔':
+                multiplier = 15
+            else:
+                multiplier = 8  # Увеличен множитель для обычных символов
+            
+            base_winnings = bet * multiplier
+            # Применяем бафы к выигрышу
+            winnings = db.apply_buff_to_amount(interaction.user.id, base_winnings, 'slot_bonus')
+            winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'game_bonus')
+            winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'multiplier')
+            winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'all_bonus')
+            
+            db.update_balance(interaction.user.id, winnings)
+            db.log_transaction(interaction.user.id, 'slots_win', winnings, description=f"ДЖЕКПОТ в слотах x{multiplier}")
+            db.update_consecutive_wins(interaction.user.id, True)
+            
+            result_text = f"🎉 ДЖЕКПОТ! x{multiplier}\nВыигрыш: {winnings} {EMOJIS['coin']}"
+            color = 0x00ff00
+        elif final_result[0] == final_result[1] or final_result[1] == final_result[2]:
+            # Два одинаковых символа - увеличенный множитель
+            multiplier = 3  # Увеличено с 2 до 3
+            base_winnings = bet * multiplier
+            # Применяем бафы к выигрышу
+            winnings = db.apply_buff_to_amount(interaction.user.id, base_winnings, 'slot_bonus')
+            winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'game_bonus')
+            winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'multiplier')
+            winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'all_bonus')
+            
+            db.update_balance(interaction.user.id, winnings)
+            db.log_transaction(interaction.user.id, 'slots_win', winnings, description=f"Победа в слотах x{multiplier}")
+            db.update_consecutive_wins(interaction.user.id, True)
+            
+            result_text = f"✅ Два в ряд! x{multiplier}\nВыигрыш: {winnings} {EMOJIS['coin']}"
+            color = 0x00ff00
+        else:
+            # Применяем баф защиты от проигрышей
+            loss = db.apply_buff_to_amount(interaction.user.id, bet, 'loss_protection')
+            db.update_balance(interaction.user.id, -loss)
+            db.log_transaction(interaction.user.id, 'slots_loss', -loss, description="Проигрыш в слотах")
+            db.update_consecutive_wins(interaction.user.id, False)
+            
+            result_text = f"❌ Повезет в следующий раз!\nПотеряно: {loss} {EMOJIS['coin']}"
+            color = 0xff0000
         
-        result_text = f"ДЖЕКПОТ! x{multiplier}\nВыигрыш: {winnings} {EMOJIS['coin']}"
-        color = 0x00ff00
-    elif final_result[0] == final_result[1] or final_result[1] == final_result[2]:
-        # Два одинаковых символа
-        base_winnings = bet * 2
-        # Применяем бафы к выигрышу
-        winnings = db.apply_buff_to_amount(interaction.user.id, base_winnings, 'slot_bonus')
-        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'game_bonus')
-        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'multiplier')
-        winnings = db.apply_buff_to_amount(interaction.user.id, winnings, 'all_bonus')
+        embed.add_field(name="Результат", value=result_text, inline=False)
+        embed.add_field(name="Ставка", value=f"{bet} {EMOJIS['coin']}", inline=True)
+        embed.color = color
         
-        db.update_balance(interaction.user.id, winnings)
-        db.log_transaction(interaction.user.id, 'slots_win', winnings, description="Победа в слотах x2")
-        db.update_consecutive_wins(interaction.user.id, True)
+        await interaction.edit_original_response(embed=embed)
         
-        result_text = f"Два в ряд! x2\nВыигрыш: {winnings} {EMOJIS['coin']}"
-        color = 0x00ff00
-    else:
-        # Применяем баф защиты от проигрышей
-        loss = db.apply_buff_to_amount(interaction.user.id, bet, 'loss_protection')
-        db.update_balance(interaction.user.id, -loss)
-        db.log_transaction(interaction.user.id, 'slots_loss', -loss, description="Проигрыш в слотах")
-        db.update_consecutive_wins(interaction.user.id, False)
-        
-        result_text = f"Повезет в следующий раз!\nПотеряно: {loss} {EMOJIS['coin']}"
-        color = 0xff0000
-    
-    embed.add_field(name="Результат", value=result_text, inline=False)
-    embed.add_field(name="Ставка", value=f"{bet} {EMOJIS['coin']}", inline=True)
-    embed.color = color
-    
-    await interaction.edit_original_response(embed=embed)
+    except Exception as e:
+        print(f"❌ Ошибка в команде slots: {e}")
+        await interaction.response.send_message("❌ Произошла ошибка в слотах!", ephemeral=True)
 
 # ДУЭЛЬ С УЧЕТОМ БАФОВ
 @bot.tree.command(name="duel", description="Вызвать пользователя на дуэль")
@@ -2525,29 +2591,105 @@ async def quest(interaction: discord.Interaction):
     except Exception as e:
         print(f"❌ Ошибка в команде quest: {e}")
         await interaction.response.send_message("❌ Произошла ошибка при получении квеста!", ephemeral=True)
+
 @bot.tree.command(name="achievements", description="Показать ваши достижения")
 async def achievements(interaction: discord.Interaction):
-    cursor = db.conn.cursor()
-    cursor.execute('SELECT achievement_id FROM achievements WHERE user_id = %s', (interaction.user.id,))
-    user_achievements = [row[0] for row in cursor.fetchall()]
-    
-    embed = discord.Embed(title="🏅 Ваши достижения", color=0xffd700)
-    
-    unlocked_count = 0
-    for achievement_id, achievement in ACHIEVEMENTS.items():
-        status = "✅" if achievement_id in user_achievements else "❌"
-        if achievement_id in user_achievements:
-            unlocked_count += 1
+    try:
+        cursor = db.conn.cursor()
+        cursor.execute('SELECT achievement_id FROM achievements WHERE user_id = %s', (interaction.user.id,))
+        user_achievements = [row[0] for row in cursor.fetchall()]
+        
+        embed = discord.Embed(title="🏅 Ваши достижения", color=0xffd700)
+        
+        unlocked_count = 0
+        achievements_list = []
+        
+        for achievement_id, achievement in ACHIEVEMENTS.items():
+            status = "✅" if achievement_id in user_achievements else "❌"
+            if achievement_id in user_achievements:
+                unlocked_count += 1
+                
+            achievements_list.append(
+                f"{status} **{achievement['name']}**\n{achievement['description']}\nНаграда: {achievement['reward']} {EMOJIS['coin']}\n"
+            )
+        
+        if achievements_list:
+            # Разбиваем на страницы если достижений много
+            pages = []
+            current_page = ""
             
-        embed.add_field(
-            name=f"{status} {achievement['name']}",
-            value=f"{achievement['description']}\nНаграда: {achievement['reward']} {EMOJIS['coin']}",
-            inline=False
-        )
-    
-    embed.set_footer(text=f"Разблокировано: {unlocked_count}/{len(ACHIEVEMENTS)}")
-    
-    await interaction.response.send_message(embed=embed)
+            for achievement in achievements_list:
+                if len(current_page) + len(achievement) > 2000:
+                    pages.append(current_page)
+                    current_page = achievement
+                else:
+                    current_page += achievement
+            
+            if current_page:
+                pages.append(current_page)
+            
+            if len(pages) == 1:
+                embed.description = pages[0]
+                await interaction.response.send_message(embed=embed)
+            else:
+                # Создаем пагинацию для достижений
+                class AchievementsView(View):
+                    def __init__(self, pages, author_id):
+                        super().__init__(timeout=120)
+                        self.pages = pages
+                        self.current_page = 0
+                        self.total_pages = len(pages)
+                        self.author_id = author_id
+                        self.update_buttons()
+
+                    def update_buttons(self):
+                        self.previous_button.disabled = (self.current_page == 0)
+                        self.next_button.disabled = (self.current_page >= self.total_pages - 1)
+
+                    @discord.ui.button(label='⬅️ Назад', style=discord.ButtonStyle.secondary)
+                    async def previous_button(self, interaction: discord.Interaction, button: Button):
+                        if interaction.user.id != self.author_id:
+                            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
+                            return
+                        
+                        if self.current_page > 0:
+                            self.current_page -= 1
+                            self.update_buttons()
+                            embed = self.create_embed()
+                            await interaction.response.edit_message(embed=embed, view=self)
+
+                    @discord.ui.button(label='➡️ Вперед', style=discord.ButtonStyle.secondary)
+                    async def next_button(self, interaction: discord.Interaction, button: Button):
+                        if interaction.user.id != self.author_id:
+                            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
+                            return
+                        
+                        if self.current_page < self.total_pages - 1:
+                            self.current_page += 1
+                            self.update_buttons()
+                            embed = self.create_embed()
+                            await interaction.response.edit_message(embed=embed, view=self)
+
+                    def create_embed(self):
+                        embed = discord.Embed(
+                            title=f"🏅 Ваши достижения (Страница {self.current_page + 1}/{self.total_pages})",
+                            description=self.pages[self.current_page],
+                            color=0xffd700
+                        )
+                        embed.set_footer(text=f"Разблокировано: {unlocked_count}/{len(ACHIEVEMENTS)}")
+                        return embed
+                
+                view = AchievementsView(pages, interaction.user.id)
+                embed = view.create_embed()
+                await interaction.response.send_message(embed=embed, view=view)
+        else:
+            embed.description = "У вас пока нет достижений. Продолжайте играть, чтобы их получить!"
+            embed.set_footer(text="Используйте команды бота для получения достижений")
+            await interaction.response.send_message(embed=embed)
+            
+    except Exception as e:
+        print(f"❌ Ошибка в команде achievements: {e}")
+        await interaction.response.send_message("❌ Произошла ошибка при загрузке достижений!", ephemeral=True)
 
 @bot.tree.command(name="stats", description="Показать вашу статистику")
 async def stats(interaction: discord.Interaction):
@@ -3579,6 +3721,7 @@ if __name__ == "__main__":
         except Exception as e2:
             print(f"💥 Повторная критическая ошибка: {e2}")
             traceback.print_exc()
+
 
 
 

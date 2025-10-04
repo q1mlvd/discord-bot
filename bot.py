@@ -787,144 +787,144 @@ class Database:
             print(f"❌ Ошибка в can_get_new_quest: {e}")
             return True
 
-    def create_tables(self):
-        """Создание таблиц с улучшенной обработкой ошибок"""
-        try:
-            cursor = self.conn.cursor()
-            
-            print("🔄 Создание таблиц...")
-            
-            # Таблица пользователей
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id BIGINT PRIMARY KEY,
-                    balance INTEGER DEFAULT 100,
-                    daily_streak INTEGER DEFAULT 0,
-                    last_daily TEXT,
-                    inventory TEXT DEFAULT '{}',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Таблица транзакций
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS transactions (
-                    id SERIAL PRIMARY KEY,
-                    user_id BIGINT,
-                    type TEXT,
-                    amount INTEGER,
-                    target_user_id BIGINT,
-                    description TEXT,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Таблица кейсов
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS cases (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT,
-                    price INTEGER,
-                    rewards TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Таблица маркета
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS market (
-                    id SERIAL PRIMARY KEY,
-                    seller_id BIGINT,
-                    item_name TEXT,
-                    price INTEGER,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Таблица достижений
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS achievements (
-                    user_id BIGINT,
-                    achievement_id TEXT,
-                    unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (user_id, achievement_id)
-                )
-            ''')
-            
-            # Таблица квестов - ИСПРАВЛЕНО: используем INTEGER вместо BOOLEAN
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS quests (
-                    user_id BIGINT,
-                    quest_id TEXT,
-                    progress INTEGER DEFAULT 0,
-                    completed INTEGER DEFAULT 0,
-                    assigned_at TIMESTAMP,
-                    PRIMARY KEY (user_id, quest_id)
-                )
-            ''')
-            
-            # Таблица дуэлей
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS duels (
-                    id SERIAL PRIMARY KEY,
-                    challenger_id BIGINT,
-                    target_id BIGINT,
-                    bet INTEGER,
-                    status TEXT DEFAULT 'pending',
-                    winner_id BIGINT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Таблица предметов
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS items (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT,
-                    description TEXT,
-                    value INTEGER,
-                    rarity TEXT,
-                    buff_type TEXT,
-                    buff_value REAL,
-                    buff_description TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Таблица статистики пользователей
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS user_stats (
-                    user_id BIGINT PRIMARY KEY,
-                    cases_opened INTEGER DEFAULT 0,
-                    duels_won INTEGER DEFAULT 0,
-                    steals_successful INTEGER DEFAULT 0,
-                    steals_failed INTEGER DEFAULT 0,
-                    roulette_wins INTEGER DEFAULT 0,
-                    slot_wins INTEGER DEFAULT 0,
-                    blackjack_wins INTEGER DEFAULT 0,
-                    coinflip_wins INTEGER DEFAULT 0,
-                    daily_claimed INTEGER DEFAULT 0,
-                    total_earned INTEGER DEFAULT 0,
-                    market_sales INTEGER DEFAULT 0,
-                    gifts_sent INTEGER DEFAULT 0,
-                    consecutive_wins INTEGER DEFAULT 0,
-                    items_collected INTEGER DEFAULT 0,
-                    last_win_time TIMESTAMP
-                )
-            ''')
-            
-            self.conn.commit()
-            print("✅ Все таблицы успешно созданы!")
-            
-            # Инициализация начальных данных
-            self.initialize_default_data()
-            
-        except Exception as e:
-            print(f"❌ Ошибка при создании таблиц: {e}")
-            self.conn.rollback()
-            raise
+def create_tables(self):
+    """Создание таблиц с улучшенной обработкой ошибок"""
+    try:
+        cursor = self.conn.cursor()
+        
+        print("🔄 Создание таблиц...")
+        
+        # Таблица пользователей
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                user_id BIGINT PRIMARY KEY,
+                balance INTEGER DEFAULT 100,
+                daily_streak INTEGER DEFAULT 0,
+                last_daily TEXT,
+                inventory TEXT DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица транзакций
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS transactions (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                type TEXT,
+                amount INTEGER,
+                target_user_id BIGINT,
+                description TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица кейсов
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS cases (
+                id SERIAL PRIMARY KEY,
+                name TEXT,
+                price INTEGER,
+                rewards TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица маркета
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS market (
+                id SERIAL PRIMARY KEY,
+                seller_id BIGINT,
+                item_name TEXT,
+                price INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица достижений
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS achievements (
+                user_id BIGINT,
+                achievement_id TEXT,
+                unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, achievement_id)
+            )
+        ''')
+        
+        # Таблица квестов - ИСПРАВЛЕНО: используем INTEGER вместо BOOLEAN
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS quests (
+                user_id BIGINT,
+                quest_id TEXT,
+                progress INTEGER DEFAULT 0,
+                completed INTEGER DEFAULT 0,
+                assigned_at TIMESTAMP,
+                PRIMARY KEY (user_id, quest_id)
+            )
+        ''')
+        
+        # Таблица дуэлей
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS duels (
+                id SERIAL PRIMARY KEY,
+                challenger_id BIGINT,
+                target_id BIGINT,
+                bet INTEGER,
+                status TEXT DEFAULT 'pending',
+                winner_id BIGINT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица предметов
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS items (
+                id SERIAL PRIMARY KEY,
+                name TEXT,
+                description TEXT,
+                value INTEGER,
+                rarity TEXT,
+                buff_type TEXT,
+                buff_value REAL,
+                buff_description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица статистики пользователей
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_stats (
+                user_id BIGINT PRIMARY KEY,
+                cases_opened INTEGER DEFAULT 0,
+                duels_won INTEGER DEFAULT 0,
+                steals_successful INTEGER DEFAULT 0,
+                steals_failed INTEGER DEFAULT 0,
+                roulette_wins INTEGER DEFAULT 0,
+                slot_wins INTEGER DEFAULT 0,
+                blackjack_wins INTEGER DEFAULT 0,
+                coinflip_wins INTEGER DEFAULT 0,
+                daily_claimed INTEGER DEFAULT 0,
+                total_earned INTEGER DEFAULT 0,
+                market_sales INTEGER DEFAULT 0,
+                gifts_sent INTEGER DEFAULT 0,
+                consecutive_wins INTEGER DEFAULT 0,
+                items_collected INTEGER DEFAULT 0,
+                last_win_time TIMESTAMP
+            )
+        ''')
+        
+        self.conn.commit()
+        print("✅ Все таблицы успешно созданы!")
+        
+        # Инициализация начальных данных - ВЫЗЫВАЕМ ПРАВИЛЬНЫЙ МЕТОД
+        self._initialize_default_data()
+        
+    except Exception as e:
+        print(f"❌ Ошибка при создании таблиц: {e}")
+        self.conn.rollback()
+        raise
 
-def initialize_default_data(self):
+def _initialize_default_data(self):
     """Инициализация начальных данных с УЛУЧШЕННЫМИ КЕЙСАМИ"""
     try:
         cursor = self.conn.cursor()
@@ -933,9 +933,8 @@ def initialize_default_data(self):
         print("🔄 Очистка и добавление улучшенных кейсов...")
         cursor.execute('DELETE FROM cases')  # Очищаем таблицу
         
-        # УЛУЧШЕННЫЕ КЕЙСЫ (16 кейсов, отсортированы по цене)
+        # УЛУЧШЕННЫЕ КЕЙСЫ (16 кейсов)
         improved_cases = [
-            # Базовые кейсы (дешевые)
             ('📦 Начинающий кейс', 25, json.dumps([
                 {'type': 'coins', 'amount': [10, 30], 'chance': 0.6, 'description': 'Небольшая сумма монет'},
                 {'type': 'coins', 'amount': [31, 80], 'chance': 0.3, 'description': 'Средняя сумма монет'},
@@ -952,8 +951,6 @@ def initialize_default_data(self):
                 {'type': 'coins', 'amount': [81, 180], 'chance': 0.2, 'description': 'Быстрая хорошая сумма'},
                 {'type': 'special_item', 'name': 'Перчатка вора', 'chance': 0.1, 'description': 'Увеличивает шанс кражи на 20%'}
             ])),
-            
-            # Средние кейсы
             ('📦 Средний кейс', 150, json.dumps([
                 {'type': 'coins', 'amount': [50, 100], 'chance': 0.4, 'description': 'Надежная сумма монет'},
                 {'type': 'coins', 'amount': [101, 250], 'chance': 0.3, 'description': 'Отличная сумма монет'},
@@ -993,8 +990,6 @@ def initialize_default_data(self):
                 {'type': 'special_item', 'name': 'Ожерелье мудрости', 'chance': 0.2, 'description': '+15% к получаемому опыту'},
                 {'type': 'bonus', 'multiplier': 1.6, 'duration': 20, 'chance': 0.15, 'description': 'Временный бонус x1.6 на 20 часов'}
             ])),
-            
-            # Дорогие кейсы
             ('💎 Большой кейс', 750, json.dumps([
                 {'type': 'coins', 'amount': [200, 450], 'chance': 0.35, 'description': 'Солидная сумма'},
                 {'type': 'coins', 'amount': [451, 900], 'chance': 0.25, 'description': 'Очень хорошая сумма'},
@@ -1028,8 +1023,6 @@ def initialize_default_data(self):
                 {'type': 'special_item', 'name': 'Щит богатства', 'chance': 0.1, 'description': '-20% к проигрышам'},
                 {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.05, 'description': 'x1.5 к любым наградам'}
             ])),
-            
-            # Элитные кейсы
             ('👑 Элитный кейс', 3000, json.dumps([
                 {'type': 'coins', 'amount': [750, 1500], 'chance': 0.25, 'description': 'Элитные монеты'},
                 {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.2, 'description': 'Элитная удача'},
@@ -1085,14 +1078,6 @@ def initialize_default_data(self):
     except Exception as e:
         print(f"❌ Ошибка при инициализации данных: {e}")
         self.conn.rollback()
-# Создаем экземпляр базы данных
-try:
-    db = Database()
-    print("✅ База данных успешно инициализирована!")
-except Exception as e:
-    print(f"💥 Критическая ошибка при инициализации базы данных: {e}")
-    exit(1)
-
 # Вспомогательные функции для работы с наградами
 def get_reward(case):
     rand = random.random()
@@ -1905,4 +1890,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 

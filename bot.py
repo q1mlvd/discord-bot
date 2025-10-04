@@ -188,6 +188,17 @@ class Database:
                     print("💥 Не удалось подключиться к базе данных после нескольких попыток")
                     raise
 
+    def get_cases(self):
+    try:
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM cases ORDER BY price ASC')
+        cases = cursor.fetchall()
+        print(f"🔍 Загружено {len(cases)} кейсов из базы данных")
+        return cases
+    except Exception as e:
+        print(f"❌ Ошибка в get_cases: {e}")
+        return []
+
     def get_user(self, user_id):
         """Безопасное получение пользователя"""
         try:
@@ -1327,6 +1338,29 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
             except:
                 pass
 
+@bot.tree.command(name="debug_cases", description="Отладочная информация о кейсах")
+async def debug_cases(interaction: discord.Interaction):
+    global db
+    try:
+        cases = db.get_cases()
+        embed = discord.Embed(title="🔧 Отладочная информация о кейсах", color=0xff9900)
+        embed.add_field(name="Всего кейсов в базе", value=len(cases), inline=False)
+        embed.add_field(name="Тип db", value=str(type(db)), inline=False)
+        
+        case_details = []
+        for i, case in enumerate(cases[:10]):  # Показываем первые 10 кейсов
+            case_details.append(f"{i+1}. ID: {case[0]}, Name: {case[1]}, Price: {case[2]}")
+        
+        if case_details:
+            embed.add_field(name="Кейсы (первые 10)", value="\n".join(case_details), inline=False)
+        else:
+            embed.add_field(name="Кейсы", value="Нет кейсов в базе", inline=False)
+            
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка отладки: {e}", ephemeral=True)
+
 # КОМАНДЫ БОТА
 
 # Экономические команды
@@ -1381,10 +1415,12 @@ async def balance(interaction: discord.Interaction, user: discord.Member = None)
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 # УЛУЧШЕННАЯ КОМАНДА CASES С ПАГИНАЦИЕЙ И ПОЛНЫМ ОПИСАНИЕМ
+# Добавьте это в начало команды cases
 @bot.tree.command(name="cases", description="Показать список доступных кейсов с полным описанием")
 async def cases_list(interaction: discord.Interaction):
+    global db  # Добавляем глобальное объявление
     try:
-        cases = db.get_cases()  # Уже отсортированы по цене
+        cases = db.get_cases()  # Теперь db должна быть доступна
         
         if not cases:
             await interaction.response.send_message("Кейсы не найдены!", ephemeral=True)
@@ -1694,6 +1730,29 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
+# Создаем экземпляр базы данных с улучшенной обработкой ошибок
+try:
+    db = Database()
+    print("✅ База данных успешно инициализирована!")
+    
+    # Принудительно вызываем инициализацию данных
+    try:
+        db._initialize_default_data()
+        print("✅ Данные кейсов успешно инициализированы!")
+    except Exception as e:
+        print(f"⚠️ Предупреждение при инициализации данных: {e}")
+        
+except Exception as e:
+    print(f"💥 Критическая ошибка при инициализации базы данных: {e}")
+    # Создаем заглушку для db чтобы избежать ошибок
+    class DummyDB:
+        def get_cases(self):
+            return []
+        def get_user(self, user_id):
+            return (user_id, 100, 0, None, '{"cases": {}, "items": {}}', datetime.datetime.now())
+        # Добавьте другие методы по мере необходимости
+    db = DummyDB()
+
 # AUTОCOMPLETE ДЛЯ ПРЕДМЕТОВ В МАРКЕТЕ
 @market.autocomplete('item_name')
 async def market_item_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
@@ -1890,5 +1949,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 

@@ -145,6 +145,18 @@ QUESTS = {
     'item_collector_quest': {'name': 'Коллекционер', 'description': 'Соберите 5 разных магических предметов', 'reward': 2000}
 }
 
+# Безопасный доступ к данным пользователя
+def get_user_data_safe(user_data):
+    """Безопасное извлечение данных пользователя из кортежа"""
+    return {
+        'user_id': user_data[0] if len(user_data) > 0 else 0,
+        'balance': user_data[1] if len(user_data) > 1 else 100,
+        'daily_streak': user_data[2] if len(user_data) > 2 else 0,
+        'last_daily': user_data[3] if len(user_data) > 3 else None,
+        'inventory': user_data[4] if len(user_data) > 4 else '{"cases": {}, "items": {}}',
+        'created_at': user_data[5] if len(user_data) > 5 else datetime.datetime.now()
+    }
+
 # Исправленный класс Database для PostgreSQL
 class Database:
     def __init__(self):
@@ -543,11 +555,15 @@ class Database:
     def get_item_name_by_id(self, item_id):
         """Получить название предмета по ID"""
         try:
+            if not item_id or not str(item_id).isdigit():
+                return f"Предмет ID:{item_id}"
+                
             item_data = self.get_item(int(item_id))
-            if item_data and len(item_data) > 1:
+            if item_data and len(item_data) > 1 and item_data[1]:
                 return item_data[1]  # название предмета
             return f"Предмет ID:{item_id}"
-        except:
+        except Exception as e:
+            print(f"❌ Ошибка получения названия предмета {item_id}: {e}")
             return f"Предмет ID:{item_id}"
 
     def update_consecutive_wins(self, user_id, win=True):
@@ -577,6 +593,9 @@ class Database:
             
             for item_id, count in inventory.get("items", {}).items():
                 try:
+                    if not item_id.isdigit():
+                        continue
+                        
                     item_data = self.get_item(int(item_id))
                     if item_data and len(item_data) > 6 and item_data[5]:  # buff_type
                         buff_type = item_data[5]
@@ -646,11 +665,12 @@ class Database:
         """Добавить квест пользователю"""
         try:
             cursor = self.conn.cursor()
+            # Используем 0 вместо False для совместимости с типом integer
             cursor.execute('''
                 INSERT INTO quests (user_id, quest_id, progress, completed) 
                 VALUES (%s, %s, %s, %s)
                 ON CONFLICT (user_id, quest_id) DO NOTHING
-            ''', (user_id, quest_id, 0, False))
+            ''', (user_id, quest_id, 0, 0))
             self.conn.commit()
             return True
         except Exception as e:
@@ -661,10 +681,12 @@ class Database:
         """Обновить прогресс квеста"""
         try:
             cursor = self.conn.cursor()
+            # Преобразуем boolean в integer для совместимости
+            completed_int = 1 if completed else 0
             cursor.execute('''
                 UPDATE quests SET progress = %s, completed = %s 
                 WHERE user_id = %s AND quest_id = %s
-            ''', (progress, completed, user_id, quest_id))
+            ''', (progress, completed_int, user_id, quest_id))
             self.conn.commit()
             return True
         except Exception as e:
@@ -735,13 +757,13 @@ class Database:
                 )
             ''')
             
-            # Таблица квестов
+            # Таблица квестов - ИСПРАВЛЕНО: используем INTEGER вместо BOOLEAN
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS quests (
                     user_id BIGINT,
                     quest_id TEXT,
                     progress INTEGER DEFAULT 0,
-                    completed BOOLEAN DEFAULT FALSE,
+                    completed INTEGER DEFAULT 0,
                     last_quest TEXT,
                     PRIMARY KEY (user_id, quest_id)
                 )
@@ -1517,11 +1539,7 @@ async def balance(interaction: discord.Interaction, user: discord.Member = None)
     try:
         user = user or interaction.user
         user_data = db.get_user(user.id)
-        
-        # БЕЗОПАСНОЕ ПОЛУЧЕНИЕ ДАННЫХ С ПРОВЕРКОЙ ИНДЕКСОВ
-        balance_amount = user_data[1] if len(user_data) > 1 else 100
-        daily_streak = user_data[2] if len(user_data) > 2 else 0
-        inventory_json = user_data[4] if len(user_data) > 4 else '{"cases": {}, "items": {}}'
+        user_safe = get_user_data_safe(user_data)
         
         # Получаем статистику достижений
         cursor = db.conn.cursor()
@@ -1540,8 +1558,8 @@ async def balance(interaction: discord.Interaction, user: discord.Member = None)
             title=f"{EMOJIS['coin']} Баланс {user.display_name}",
             color=0xffd700
         )
-        embed.add_field(name="Баланс", value=f"{balance_amount} {EMOJIS['coin']}", inline=True)
-        embed.add_field(name="Ежедневная серия", value=f"{daily_streak} дней", inline=True)
+        embed.add_field(name="Баланс", value=f"{user_safe['balance']} {EMOJIS['coin']}", inline=True)
+        embed.add_field(name="Ежедневная серия", value=f"{user_safe['daily_streak']} дней", inline=True)
         embed.add_field(name="Достижения", value=f"{achievements_count}/{len(ACHIEVEMENTS)}", inline=True)
         
         # Показываем активные бафы
@@ -1569,10 +1587,10 @@ async def balance(interaction: discord.Interaction, user: discord.Member = None)
 async def daily(interaction: discord.Interaction):
     try:
         user_data = db.get_user_safe(interaction.user.id)
+        user_safe = get_user_data_safe(user_data)
         
-        # БЕЗОПАСНЫЙ ДОСТУП К ДАННЫМ
-        last_daily_str = user_data[3] if len(user_data) > 3 else None
-        daily_streak = user_data[2] if len(user_data) > 2 else 0
+        last_daily_str = user_safe['last_daily']
+        daily_streak = user_safe['daily_streak']
         
         last_daily = None
         if last_daily_str:
@@ -1743,6 +1761,23 @@ async def admin_giveitem(interaction: discord.Interaction, user: discord.Member,
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка при выполнении команды: {e}", ephemeral=True)
 
+@bot.tree.command(name="admin_removeitem", description="Забрать предмет у пользователя (админ)")
+@app_commands.describe(user="Пользователь", item_name="Название предмета")
+@is_admin()
+async def admin_removeitem(interaction: discord.Interaction, user: discord.Member, item_name: str):
+    try:
+        if db.remove_item_from_inventory(user.id, item_name):
+            embed = discord.Embed(
+                title="⚙️ Админ действие",
+                description=f"Предмет '{item_name}' забран у пользователя {user.mention}",
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed)
+        else:
+            await interaction.response.send_message("❌ Предмет не найден у пользователя!", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+
 @bot.tree.command(name="pay", description="Перевести монеты другому пользователю")
 @app_commands.describe(user="Пользователь, которому переводим", amount="Сумма перевода")
 async def pay(interaction: discord.Interaction, user: discord.Member, amount: int):
@@ -1755,7 +1790,9 @@ async def pay(interaction: discord.Interaction, user: discord.Member, amount: in
         return
     
     sender_data = db.get_user(interaction.user.id)
-    if sender_data[1] < amount:
+    sender_safe = get_user_data_safe(sender_data)
+    
+    if sender_safe['balance'] < amount:
         await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
         return
     
@@ -1877,6 +1914,24 @@ class CasesView(View):
         
         return embed
 
+@bot.tree.command(name="opencase", description="Купить и открыть кейс")
+@app_commands.describe(case_id="ID кейса")
+async def opencase(interaction: discord.Interaction, case_id: int):
+    case_data = db.get_case(case_id)
+    if not case_data:
+        await interaction.response.send_message("Кейс не найден!", ephemeral=True)
+        return
+    
+    view = CaseView(case_id, interaction.user.id)
+    
+    embed = discord.Embed(
+        title=f"🎁 {case_data[1]}",
+        description=f"Цена: {case_data[2]} {EMOJIS['coin']}\nНажмите кнопку ниже чтобы открыть!",
+        color=0xff69b4
+    )
+    
+    await interaction.response.send_message(embed=embed, view=view)
+
 @bot.tree.command(name="giftcase", description="Подарить кейс другому пользователю")
 @app_commands.describe(user="Пользователь, которому дарим кейс", case_id="ID кейса")
 async def giftcase(interaction: discord.Interaction, user: discord.Member, case_id: int):
@@ -1890,8 +1945,9 @@ async def giftcase(interaction: discord.Interaction, user: discord.Member, case_
         return
     
     user_data = db.get_user(interaction.user.id)
+    user_safe = get_user_data_safe(user_data)
     
-    if user_data[1] < case_data[2]:
+    if user_safe['balance'] < case_data[2]:
         await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
         return
     
@@ -2145,9 +2201,9 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
                 return
             
             user_data = db.get_user(interaction.user.id)
-            user_balance = user_data[1] if len(user_data) > 1 else 0
+            user_safe = get_user_data_safe(user_data)
             
-            if user_balance < item_price:
+            if user_safe['balance'] < item_price:
                 await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
                 return
             
@@ -2196,8 +2252,9 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
 async def roulette(interaction: discord.Interaction, bet: int):
     try:
         user_data = db.get_user(interaction.user.id)
+        user_safe = get_user_data_safe(user_data)
         
-        if user_data[1] < bet:
+        if user_safe['balance'] < bet:
             await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
             return
         
@@ -2254,8 +2311,9 @@ async def roulette(interaction: discord.Interaction, bet: int):
 @app_commands.describe(bet="Ставка в монетах")
 async def coinflip(interaction: discord.Interaction, bet: int):
     user_data = db.get_user(interaction.user.id)
+    user_safe = get_user_data_safe(user_data)
     
-    if user_data[1] < bet:
+    if user_safe['balance'] < bet:
         await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
         return
     
@@ -2272,8 +2330,9 @@ async def coinflip(interaction: discord.Interaction, bet: int):
 @app_commands.describe(bet="Ставка в монетах")
 async def blackjack(interaction: discord.Interaction, bet: int):
     user_data = db.get_user(interaction.user.id)
+    user_safe = get_user_data_safe(user_data)
     
-    if user_data[1] < bet:
+    if user_safe['balance'] < bet:
         await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
         return
     
@@ -2291,9 +2350,9 @@ async def blackjack(interaction: discord.Interaction, bet: int):
 async def slots(interaction: discord.Interaction, bet: int):
     try:
         user_data = db.get_user(interaction.user.id)
-        balance = user_data[1] if len(user_data) > 1 else 100
+        user_safe = get_user_data_safe(user_data)
         
-        if balance < bet:
+        if user_safe['balance'] < bet:
             await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
             return
     
@@ -2405,12 +2464,16 @@ async def duel(interaction: discord.Interaction, user: discord.Member, bet: int)
         return
     
     user_data = db.get_user(interaction.user.id)
-    if user_data[1] < bet:
+    user_safe = get_user_data_safe(user_data)
+    
+    if user_safe['balance'] < bet:
         await interaction.response.send_message("У вас недостаточно монет для дуэли!", ephemeral=True)
         return
     
     target_data = db.get_user(user.id)
-    if target_data[1] < bet:
+    target_safe = get_user_data_safe(target_data)
+    
+    if target_safe['balance'] < bet:
         await interaction.response.send_message(f"У {user.mention} недостаточно монет для дуэли!", ephemeral=True)
         return
     
@@ -2449,19 +2512,22 @@ async def steal(interaction: discord.Interaction, user: discord.Member):
         return
     
     thief_data = db.get_user(interaction.user.id)
-    target_data = db.get_user(user.id)
+    thief_safe = get_user_data_safe(thief_data)
     
-    if thief_data[1] < 10:
+    target_data = db.get_user(user.id)
+    target_safe = get_user_data_safe(target_data)
+    
+    if thief_safe['balance'] < 10:
         await interaction.response.send_message("Нужно минимум 10 монет для кражи!", ephemeral=True)
         return
     
-    if target_data[1] < 10:
+    if target_safe['balance'] < 10:
         await interaction.response.send_message("У цели недостаточно монет для кражи!", ephemeral=True)
         return
     
     # Вычисляем случайную сумму для кражи (от 5% до 20% от баланса цели, но не более 1000)
-    max_steal = min(int(target_data[1] * 0.2), 1000)
-    min_steal = max(int(target_data[1] * 0.05), 10)
+    max_steal = min(int(target_safe['balance'] * 0.2), 1000)
+    min_steal = max(int(target_safe['balance'] * 0.05), 10)
     
     if max_steal < min_steal:
         amount = min_steal
@@ -3214,13 +3280,14 @@ async def quests(interaction: discord.Interaction):
             quest_id, progress, completed = quest_row
             if quest_id in QUESTS:
                 quest_data = QUESTS[quest_id]
-                status = "✅" if completed else f"📊 Прогресс: {progress}%"
+                # Используем completed как integer (0 или 1)
+                status = "✅" if completed == 1 else f"📊 Прогресс: {progress}%"
                 embed.add_field(
                     name=f"{status} {quest_data['name']}",
                     value=f"{quest_data['description']}\nНаграда: {quest_data['reward']} {EMOJIS['coin']}",
                     inline=False
                 )
-                if completed:
+                if completed == 1:
                     completed_quests += 1
         
         embed.set_footer(text=f"Завершено: {completed_quests}/{len(user_quests)}")
@@ -3429,13 +3496,15 @@ async def recover_data(interaction: discord.Interaction):
                       (json.dumps({"cases": {}, "items": {}}), interaction.user.id))
         db.conn.commit()
     
+    user_safe = get_user_data_safe(user_data)
+    
     embed = discord.Embed(
         title="🔧 Восстановление данных",
         description="Ваши данные были проверены и восстановлены при необходимости!",
         color=0x00ff00
     )
-    embed.add_field(name="Баланс", value=f"{user_data[1]} {EMOJIS['coin']}", inline=True)
-    embed.add_field(name="Ежедневная серия", value=f"{user_data[2]} дней", inline=True)
+    embed.add_field(name="Баланс", value=f"{user_safe['balance']} {EMOJIS['coin']}", inline=True)
+    embed.add_field(name="Ежедневная серия", value=f"{user_safe['daily_streak']} дней", inline=True)
     
     await interaction.response.send_message(embed=embed)
 
@@ -3607,9 +3676,10 @@ async def debug_db(interaction: discord.Interaction):
         
         # Проверяем текущего пользователя
         user_data = db.get_user_safe(interaction.user.id)
+        user_safe = get_user_data_safe(user_data)
         embed.add_field(
             name="🔍 Ваши данные", 
-            value=f"Баланс: {user_data[1]}\nСерия: {user_data[2]}\nДлина кортежа: {len(user_data)}",
+            value=f"Баланс: {user_safe['balance']}\nСерия: {user_safe['daily_streak']}\nДлина кортежа: {len(user_data)}",
             inline=False
         )
         

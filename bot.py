@@ -8,6 +8,26 @@ import random
 import asyncio
 import datetime
 import traceback
+import asyncio
+import time
+from discord import HTTPException
+
+class CustomBot(commands.Bot):
+    async def setup_hook(self):
+        # Задержка перед началом работы
+        await asyncio.sleep(5)
+        
+    async def on_ready(self):
+        print(f'✅ Бот {self.user.name} успешно запущен!')
+        print(f'🔗 ID бота: {self.user.id}')
+        
+        # Медленная синхронизация команд
+        try:
+            await asyncio.sleep(2)
+            synced = await self.tree.sync()
+            print(f"✅ Успешно синхронизировано {len(synced)} команд")
+        except Exception as e:
+            print(f"❌ Ошибка синхронизации: {e}")
 
 # Импорт PostgreSQL
 try:
@@ -54,8 +74,9 @@ def get_database_url():
 DATABASE_URL = get_database_url()
 BOT_TOKEN = os.environ.get('DISCORD_BOT_TOKEN')
 
-if not BOT_TOKEN:
-    print("❌ КРИТИЧЕСКАЯ ОШИБКА: DISCORD_BOT_TOKEN не установлен!")
+# Проверка токена
+if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
+    print("❌ КРИТИЧЕСКАЯ ОШИБКА: Неверный токен бота!")
     exit(1)
 
 if not DATABASE_URL:
@@ -64,7 +85,7 @@ if not DATABASE_URL:
 
 # Настройки бота
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+bot = CustomBot(command_prefix='!', intents=intents, help_command=None)
 
 # Конфигурация
 LOG_CHANNEL_ID = 1423377881047896207
@@ -3302,5 +3323,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 

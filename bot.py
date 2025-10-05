@@ -2546,49 +2546,6 @@ class MyItemsPaginatedView(View):
         
         return embed
 
-@bot.tree.command(name="myitems", description="Показать ваши предметы")
-async def my_items(interaction: discord.Interaction):
-    try:
-        inventory = db.get_user_inventory_safe(interaction.user.id)
-        
-        embed = discord.Embed(title=f"📦 Предметы {interaction.user.display_name}", color=0x3498db)
-        
-        items = inventory.get("items", {})
-        if not items:
-            embed.description = "У вас пока нет предметов. Открывайте кейсы или покупайте на маркетплейсе!"
-            await interaction.response.send_message(embed=embed)
-            return
-        
-        for item_id, count in items.items():
-            try:
-                if item_id.isdigit():
-                    item_data = db.get_item(int(item_id))
-                    if item_data:
-                        rarity_emoji = {
-                            'common': '⚪',
-                            'uncommon': '🟢', 
-                            'rare': '🔵',
-                            'epic': '🟣',
-                            'legendary': '🟠',
-                            'mythic': '🟡'
-                        }.get(item_data[4] if len(item_data) > 4 else 'common', '⚪')
-                        
-                        buff_info = f"\n**Эффект:** {item_data[7]}" if len(item_data) > 7 and item_data[7] else ""
-                        embed.add_field(
-                            name=f"{rarity_emoji} {item_data[1]} ×{count}",
-                            value=f"{item_data[2]}{buff_info}",
-                            inline=True
-                        )
-            except Exception as e:
-                print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
-                continue
-        
-        await interaction.response.send_message(embed=embed)
-        
-    except Exception as e:
-        print(f"❌ Ошибка в команде myitems: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка при загрузке предметов!", ephemeral=True)
-
 @bot.tree.command(name="pay", description="Перевести монеты другому пользователю")
 @app_commands.describe(user="Пользователь, которому переводим", amount="Сумма перевода")
 async def pay(interaction: discord.Interaction, user: discord.Member, amount: int):
@@ -3706,6 +3663,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

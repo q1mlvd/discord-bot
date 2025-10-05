@@ -5,10 +5,23 @@ from discord.ext import commands, tasks
 from discord.ui import Button, View, Select
 import json
 import random
-import asyncio
 import datetime
 import traceback
+import asyncio
 
+# Импорт PostgreSQL
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    print("✅ psycopg2 импортирован успешно")
+except ImportError:
+    print("❌ psycopg2 не установлен, устанавливаем...")
+    import subprocess
+    subprocess.check_call(["pip", "install", "psycopg2-binary"])
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
+# Класс CustomBot должен быть определен ПЕРВЫМ
 class CustomBot(commands.Bot):
     async def setup_hook(self):
         # Задержка перед началом работы
@@ -49,42 +62,6 @@ class CustomBot(commands.Bot):
         except Exception as e:
             print(f"❌ Ошибка синхронизации: {e}")
             traceback.print_exc()
-
-@bot.tree.command(name="test", description="Тестовая команда для проверки работы")
-async def test(interaction: discord.Interaction):
-    """Простая тестовая команда для проверки синхронизации"""
-    embed = discord.Embed(
-        title="✅ Тестовая команда работает!",
-        description="Если вы видите это сообщение, значит команды синхронизированы правильно!",
-        color=0x00ff00
-    )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-# Событие подключения для отладки
-@bot.event
-async def on_connect():
-    print(f"🔗 Бот подключился к Discord")
-    commands_count = len(bot.tree.get_commands())
-    print(f"📊 Зарегистрировано команд в коде: {commands_count}")
-    
-    if commands_count == 0:
-        print("❌ КРИТИЧЕСКАЯ ОШИБКА: Нет зарегистрированных команд!")
-        print("🔍 Проверьте:")
-        print("   - Декораторы @bot.tree.command")
-        print("   - Отсутствие ошибок в определении команд")
-        print("   - Правильность импортов")
-        
-# Импорт PostgreSQL
-try:
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
-    print("✅ psycopg2 импортирован успешно")
-except ImportError:
-    print("❌ psycopg2 не установлен, устанавливаем...")
-    import subprocess
-    subprocess.check_call(["pip", "install", "psycopg2-binary"])
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
 
 # Получение переменных окружения
 def get_database_url():
@@ -134,6 +111,7 @@ intents.message_content = True
 intents.members = True
 intents.guilds = True
 
+# СОЗДАЕМ ЭКЗЕМПЛЯР БОТА ЗДЕСЬ
 bot = CustomBot(command_prefix='!', intents=intents, help_command=None)
 
 # Конфигурация
@@ -862,14 +840,14 @@ class Database:
             return []
 
     def get_item_name_by_id(self, item_id):
-        """Безопасное получение названия предмета по ID"""
+        """Получить название предмета по ID"""
         try:
             if not item_id or not str(item_id).isdigit():
                 return f"Предмет ID:{item_id}"
                 
             item_data = self.get_item(int(item_id))
             if item_data and len(item_data) > 1 and item_data[1]:
-                return item_data[1]
+                return item_data[1]  # название предмета
             return f"Предмет ID:{item_id}"
         except Exception as e:
             print(f"❌ Ошибка получения названия предмета {item_id}: {e}")
@@ -961,25 +939,17 @@ class Database:
         return cursor.fetchall()
 
     def get_user_quests(self, user_id):
-        """Получить квесты пользователя - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        """Получить квесты пользователя"""
         try:
             cursor = self.conn.cursor()
             cursor.execute('SELECT quest_id, progress, completed FROM quests WHERE user_id = %s', (user_id,))
-            quests = cursor.fetchall()
-            
-            # Безопасно обрабатываем результаты
-            safe_quests = []
-            for quest in quests:
-                if quest and len(quest) >= 3:
-                    safe_quests.append(quest)
-            
-            return safe_quests
+            return cursor.fetchall()
         except Exception as e:
             print(f"❌ Ошибка в get_user_quests: {e}")
             return []
     
     def add_user_quest(self, user_id, quest_id):
-        """Добавить квест пользователю - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
+        """Добавить квест пользователю"""
         try:
             cursor = self.conn.cursor()
             cursor.execute('''
@@ -988,16 +958,9 @@ class Database:
                 ON CONFLICT (user_id, quest_id) DO NOTHING
             ''', (user_id, quest_id, 0, False))
             self.conn.commit()
-            
-            # Проверяем, была ли вставка
-            if cursor.rowcount > 0:
-                return True
-            else:
-                return False
-                
+            return True
         except Exception as e:
             print(f"❌ Ошибка в add_user_quest: {e}")
-            self.conn.rollback()
             return False
     
     def update_quest_progress(self, user_id, quest_id, progress, completed=False):
@@ -1014,564 +977,80 @@ class Database:
             print(f"❌ Ошибка в update_quest_progress: {e}")
             return False
 
-# Вспомогательные функции для работы с наградами
-def get_reward(case):
-    rand = random.random()
-    cumulative = 0
-    for reward in case['rewards']:
-        cumulative += reward['chance']
-        if rand <= cumulative:
-            return reward
-    return case['rewards'][-1]
+# Создаем экземпляр базы данных
+try:
+    db = Database()
+    print("✅ База данных успешно инициализирована!")
+    
+    # Проверяем, что кейсы загружаются
+    test_cases = db.get_cases()
+    print(f"🔍 Тест: загружено {len(test_cases)} кейсов после инициализации")
+    
+except Exception as e:
+    print(f"💥 Критическая ошибка при инициализации базы данных: {e}")
+    traceback.print_exc()
+    exit(1)
 
-async def create_custom_role_webhook(user):
+# Событие подключения для отладки
+@bot.event
+async def on_connect():
+    print(f"🔗 Бот подключился к Discord")
+    commands_count = len(bot.tree.get_commands())
+    print(f"📊 Зарегистрировано команд в коде: {commands_count}")
+    
+    if commands_count == 0:
+        print("❌ КРИТИЧЕСКАЯ ОШИБКА: Нет зарегистрированных команд!")
+        print("🔍 Проверьте:")
+        print("   - Декораторы @bot.tree.command")
+        print("   - Отсутствие ошибок в определении команд")
+        print("   - Правильность импортов")
+
+# ТЕПЕРЬ ОПРЕДЕЛЯЕМ ВСЕ КОМАНДЫ ПОСЛЕ СОЗДАНИЯ bot
+
+# Простая тестовая команда для проверки
+@bot.tree.command(name="test", description="Тестовая команда для проверки работы")
+async def test_command(interaction: discord.Interaction):
+    """Простая тестовая команда для проверки синхронизации"""
+    embed = discord.Embed(
+        title="✅ Тестовая команда работает!",
+        description="Если вы видите это сообщение, значит команды синхронизированы правильно!",
+        color=0x00ff00
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# Команда для принудительной синхронизации
+@bot.tree.command(name="sync", description="Синхронизировать команды (админ)")
+async def sync_commands(interaction: discord.Interaction):
     try:
-        channel = bot.get_channel(LOG_CHANNEL_ID)
-        if channel:
-            webhook = await channel.create_webhook(name=f"Role-{user.name}")
-            message = f"🎉 <@{user.id}> Поздравляю, вам выпала кастом роль на 2 дня, администратор <@{ADMIN_USER_ID}> скоро вам ответит и вы выберете свою роль"
-            await webhook.send(
-                content=message,
-                username="Case System",
-                avatar_url=bot.user.avatar.url if bot.user.avatar else None
-            )
-            await webhook.delete()
-            return True
-    except Exception as e:
-        print(f"Ошибка создания вебхука для роли: {e}")
-    return False
-
-async def process_reward(user, reward, case):
-    if reward['type'] == 'coins':
-        amount = random.randint(reward['amount'][0], reward['amount'][1])
-        # Применяем бафы к награде из кейса
-        amount = db.apply_buff_to_amount(user.id, amount, 'case_bonus')
-        amount = db.apply_buff_to_amount(user.id, amount, 'multiplier')
-        amount = db.apply_buff_to_amount(user.id, amount, 'all_bonus')
-        
-        db.update_balance(user.id, amount)
-        db.log_transaction(user.id, 'case_reward', amount, description=f"Награда из {case['name']}")
-        return f"💰 {amount} {EMOJIS['coin']} - {reward.get('description', 'Монеты')}"
-    
-    elif reward['type'] == 'custom_role':
-        await create_custom_role_webhook(user)
-        return "🎭 Кастомная роль! (Создан запрос в канале администрации)"
-    
-    elif reward['type'] == 'special_item':
-        db.add_item_to_inventory(user.id, reward['name'])
-        return f"📦 {reward['name']} - {reward.get('description', 'Особый предмет')}"
-    
-    elif reward['type'] == 'bonus':
-        return f"🚀 Бонус x{reward['multiplier']} на {reward['duration']}ч - {reward.get('description', 'Временный бонус')}"
-    
-    elif reward['type'] == 'role':
-        return f"👑 Роль: {reward['name']} на {reward['duration']}ч"
-    
-    return "Неизвестная награда"
-
-# КЛАССЫ ДЛЯ МИНИ-ИГР (из второго кода)
-
-class CaseView(View):
-    def __init__(self, case_id, user_id):
-        super().__init__(timeout=60)
-        self.case_id = case_id
-        self.user_id = user_id
-        self.opened = False
-    
-    @discord.ui.button(label='Открыть кейс', style=discord.ButtonStyle.primary, emoji='🎁')
-    async def open_case(self, interaction: discord.Interaction, button: Button):
-        if self.opened:
+        # Проверка прав администратора
+        if interaction.user.id not in ADMIN_IDS:
+            await interaction.response.send_message("❌ У вас нет прав для использования этой команды!", ephemeral=True)
             return
+            
+        await interaction.response.defer(ephemeral=True)
         
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Этот кейс не для вас!", ephemeral=True)
-            return
-        
-        self.opened = True
-        case_data = db.get_case(self.case_id)
-        if not case_data:
-            await interaction.response.send_message("Кейс не найден!", ephemeral=True)
-            return
-        
-        case = {
-            'name': case_data[1],
-            'price': case_data[2],
-            'rewards': json.loads(case_data[3])
-        }
-        
-        user_data = db.get_user(self.user_id)
-        user_safe = get_user_data_safe(user_data)
-        
-        if user_safe['balance'] < case['price']:
-            await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
-            return
-        
-        # Спин анимация
-        embed = discord.Embed(title="🎰 Открытие кейса...", color=0xffd700)
-        await interaction.response.send_message(embed=embed)
-        
-        for i in range(3):
-            await asyncio.sleep(1)
-            embed.description = "🎁" * (i + 1)
-            await interaction.edit_original_response(embed=embed)
-        
-        # Определение награды
-        reward = get_reward(case)
-        db.update_balance(self.user_id, -case['price'])
-        db.log_transaction(self.user_id, 'case_purchase', -case['price'], description=f"Кейс: {case['name']}")
-        
-        # Обновляем статистику открытия кейсов
-        db.update_user_stat(self.user_id, 'cases_opened')
-        
-        # Выдача награды
-        reward_text = await process_reward(interaction.user, reward, case)
+        # Синхронизация глобальных команд
+        synced = await bot.tree.sync()
         
         embed = discord.Embed(
-            title=f"🎉 {case['name']} открыт!",
-            description=reward_text,
+            title="✅ Синхронизация завершена",
+            description=f"Синхронизировано {len(synced)} команд",
             color=0x00ff00
         )
-        embed.set_footer(text=f"Стоимость: {case['price']} {EMOJIS['coin']}")
         
-        await interaction.edit_original_response(embed=embed)
-
-class CoinFlipView(View):
-    def __init__(self, user_id, bet):
-        super().__init__(timeout=30)
-        self.user_id = user_id
-        self.bet = bet
-        self.choice_made = False
-    
-    @discord.ui.button(label='🦅 Орёл', style=discord.ButtonStyle.primary)
-    async def heads(self, interaction: discord.Interaction, button: Button):
-        await self.process_choice(interaction, 'heads')
-    
-    @discord.ui.button(label='💰 Решка', style=discord.ButtonStyle.primary)
-    async def tails(self, interaction: discord.Interaction, button: Button):
-        await self.process_choice(interaction, 'tails')
-    
-    async def process_choice(self, interaction: discord.Interaction, choice):
-        if self.choice_made:
-            return
+        if synced:
+            commands_list = "\n".join([f"• `/{cmd.name}`" for cmd in synced])
+            embed.add_field(name="Синхронизированные команды:", value=commands_list, inline=False)
         
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Эта игра не для вас!", ephemeral=True)
-            return
+        await interaction.followup.send(embed=embed, ephemeral=True)
         
-        self.choice_made = True
-        
-        # Подбрасываем монету
-        result = random.choice(['heads', 'tails'])
-        win = choice == result
-        
-        # Анимация
-        embed = discord.Embed(title="🪙 Монета в воздухе...", color=0xffd700)
-        await interaction.response.edit_message(embed=embed, view=None)
-        
-        for i in range(3):
-            await asyncio.sleep(0.5)
-            embed.description = "🌀" * (i + 1)
-            await interaction.edit_original_response(embed=embed)
-        
-        await asyncio.sleep(1)
-        
-        if win:
-            base_winnings = int(self.bet * 1.8)  # 80% прибыль
-            # Применяем бафы к выигрышу
-            winnings = db.apply_buff_to_amount(self.user_id, base_winnings, 'coinflip_bonus')
-            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'game_bonus')
-            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'multiplier')
-            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'all_bonus')
-            
-            db.update_balance(self.user_id, winnings)
-            db.log_transaction(self.user_id, 'coinflip_win', winnings, description="Победа в coinflip")
-            db.update_user_stat(self.user_id, 'coinflip_wins')
-            db.update_consecutive_wins(self.user_id, True)
-            
-            result_text = f"ПОБЕДА! Выпало: {'🦅 Орёл' if result == 'heads' else '💰 Решка'}\nВыигрыш: {winnings} {EMOJIS['coin']}"
-            color = 0x00ff00
-        else:
-            # Применяем баф защиты от проигрышей
-            loss = db.apply_buff_to_amount(self.user_id, self.bet, 'loss_protection')
-            db.update_balance(self.user_id, -loss)
-            db.log_transaction(self.user_id, 'coinflip_loss', -loss, description="Проигрыш в coinflip")
-            db.update_consecutive_wins(self.user_id, False)
-            
-            result_text = f"ПРОИГРЫШ! Выпало: {'🦅 Орёл' if result == 'heads' else '💰 Решка'}\nПотеряно: {loss} {EMOJIS['coin']}"
-            color = 0xff0000
-        
-        embed = discord.Embed(
-            title=f"🪙 Результат подбрасывания монеты",
-            description=f"Ваш выбор: {'🦅 Орёл' if choice == 'heads' else '💰 Решка'}\n{result_text}",
-            color=color
-        )
-        embed.add_field(name="Ставка", value=f"{self.bet} {EMOJIS['coin']}")
-        
-        await interaction.edit_original_response(embed=embed)
-
-class BlackjackView(View):
-    def __init__(self, user_id, bet):
-        super().__init__(timeout=60)
-        self.user_id = user_id
-        self.bet = bet
-        self.user_cards = []
-        self.dealer_cards = []
-        self.game_over = False
-        
-        # Начальная раздача
-        self.user_cards = [self.draw_card(), self.draw_card()]
-        self.dealer_cards = [self.draw_card(), self.draw_card()]
-    
-    def draw_card(self):
-        return random.randint(1, 11)  # 11 - это туз
-    
-    def calculate_score(self, cards):
-        score = sum(cards)
-        aces = cards.count(11)
-        
-        # Обработка тузов
-        while score > 21 and aces > 0:
-            score -= 10
-            aces -= 1
-        
-        return score
-    
-    def create_embed(self):
-        user_score = self.calculate_score(self.user_cards)
-        dealer_score = self.calculate_score([self.dealer_cards[0]])  # Показываем только одну карту дилера
-        
-        embed = discord.Embed(title="🃏 Блэкджек", color=0x2ecc71)
-        
-        # Отображаем карты пользователя
-        user_cards_display = ' '.join([f'`{card}`' for card in self.user_cards])
-        embed.add_field(
-            name="Ваши карты",
-            value=f"{user_cards_display} (Очки: {user_score})",
-            inline=False
-        )
-        
-        # Отображаем карты дилера (только первую видна)
-        dealer_cards_display = f'`{self.dealer_cards[0]}` ' + ' '.join(['`?`' for _ in range(len(self.dealer_cards)-1)])
-        embed.add_field(
-            name="Карты дилера", 
-            value=f"{dealer_cards_display} (Очки: {dealer_score}+)",
-            inline=False
-        )
-        
-        embed.add_field(name="Ставка", value=f"{self.bet} {EMOJIS['coin']}", inline=True)
-        
-        return embed
-    
-    @discord.ui.button(label='Взять карту', style=discord.ButtonStyle.primary)
-    async def hit(self, interaction: discord.Interaction, button: Button):
-        if self.game_over:
-            await interaction.response.send_message("Игра уже завершена!", ephemeral=True)
-            return
-        
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Эта игра не для вас!", ephemeral=True)
-            return
-        
-        # Добавляем карту
-        self.user_cards.append(self.draw_card())
-        user_score = self.calculate_score(self.user_cards)
-        
-        # Проверяем перебор
-        if user_score > 21:
-            # Отключаем кнопки перед завершением игры
-            for item in self.children:
-                item.disabled = True
-            
-            embed = self.create_embed()
-            embed.add_field(name="Результат", value="Перебор! Вы проиграли.", inline=False)
-            embed.color = 0xff0000
-            
-            await interaction.response.edit_message(embed=embed, view=self)
-            await self.end_game(interaction, "перебор")
-        else:
-            # Просто обновляем сообщение с новыми картами
-            embed = self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
-    
-    @discord.ui.button(label='Остановиться', style=discord.ButtonStyle.secondary)
-    async def stand(self, interaction: discord.Interaction, button: Button):
-        if self.game_over:
-            await interaction.response.send_message("Игра уже завершена!", ephemeral=True)
-            return
-        
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("Эта игра не для вас!", ephemeral=True)
-            return
-        
-        # Отключаем кнопки
-        for item in self.children:
-            item.disabled = True
-        
-        # Дилер берет карты пока не наберет 17 или больше
-        dealer_turn_embed = self.create_embed()
-        dealer_turn_embed.add_field(name="Действие", value="Дилер берет карты...", inline=False)
-        await interaction.response.edit_message(embed=dealer_turn_embed, view=self)
-        
-        # Даем немного времени для отображения
-        await asyncio.sleep(1)
-        
-        while self.calculate_score(self.dealer_cards) < 17:
-            self.dealer_cards.append(self.draw_card())
-            # Обновляем сообщение после каждой карты дилера
-            dealer_turn_embed = self.create_embed()
-            dealer_turn_embed.add_field(name="Действие", value="Дилер берет карты...", inline=False)
-            await interaction.edit_original_response(embed=dealer_turn_embed)
-            await asyncio.sleep(1)
-        
-        await self.end_game(interaction, "stand")
-    
-    async def end_game(self, interaction: discord.Interaction, reason):
-        self.game_over = True
-        user_score = self.calculate_score(self.user_cards)
-        dealer_score = self.calculate_score(self.dealer_cards)
-        
-        # Определяем победителя
-        if reason == "перебор":
-            result = "lose"
-            result_text = "Перебор! Вы проиграли."
-        elif user_score > dealer_score or dealer_score > 21:
-            result = "win"
-            result_text = "Вы выиграли!"
-        elif user_score == dealer_score:
-            result = "push"
-            result_text = "Ничья!"
-        else:
-            result = "lose"
-            result_text = "Дилер выиграл."
-        
-        # Обработка выигрыша
-        if result == "win":
-            base_winnings = int(self.bet * 2)
-            # Применяем бафы к выигрышу
-            winnings = db.apply_buff_to_amount(self.user_id, base_winnings, 'blackjack_bonus')
-            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'game_bonus')
-            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'multiplier')
-            winnings = db.apply_buff_to_amount(self.user_id, winnings, 'all_bonus')
-            
-            db.update_balance(self.user_id, winnings)
-            db.log_transaction(self.user_id, 'blackjack_win', winnings, description="Победа в блэкджеке")
-            db.update_user_stat(self.user_id, 'blackjack_wins')
-            db.update_consecutive_wins(self.user_id, True)
-            color = 0x00ff00
-        elif result == "push":
-            # Возвращаем ставку при ничье
-            db.update_balance(self.user_id, self.bet)
-            color = 0xffff00
-        else:
-            # Применяем баф защиты от проигрышей
-            loss = db.apply_buff_to_amount(self.user_id, self.bet, 'loss_protection')
-            db.update_balance(self.user_id, -loss)
-            db.log_transaction(self.user_id, 'blackjack_loss', -loss, description="Проигрыш в блэкджеке")
-            db.update_consecutive_wins(self.user_id, False)
-            color = 0xff0000
-        
-        # Создаем финальное embed
-        embed = discord.Embed(title="🃏 Результат блэкджека", color=color)
-        
-        # Отображаем все карты пользователя
-        user_cards_display = ' '.join([f'`{card}`' for card in self.user_cards])
-        embed.add_field(
-            name="Ваши карты",
-            value=f"{user_cards_display} (Очки: {user_score})",
-            inline=False
-        )
-        
-        # Отображаем все карты дилера
-        dealer_cards_display = ' '.join([f'`{card}`' for card in self.dealer_cards])
-        embed.add_field(
-            name="Карты дилера",
-            value=f"{dealer_cards_display} (Очки: {dealer_score})",
-            inline=False
-        )
-        
-        embed.add_field(name="Результат", value=result_text, inline=False)
-        
-        if result == "win":
-            embed.add_field(name="Выигрыш", value=f"{winnings} {EMOJIS['coin']}", inline=True)
-        elif result == "push":
-            embed.add_field(name="Результат", value="Ставка возвращена", inline=True)
-        else:
-            embed.add_field(name="Потеряно", value=f"{loss} {EMOJIS['coin']}", inline=True)
-        
-        # Обновляем сообщение с финальным результатом
-        await interaction.edit_original_response(embed=embed, view=None)
-
-class DuelView(View):
-    def __init__(self, challenger_id, target_id, bet):
-        super().__init__(timeout=30)
-        self.challenger_id = challenger_id
-        self.target_id = target_id
-        self.bet = bet
-        self.accepted = False
-    
-    @discord.ui.button(label='Принять дуэль', style=discord.ButtonStyle.success, emoji='⚔️')
-    async def accept_duel(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.target_id:
-            await interaction.response.send_message("Эта дуэль не для вас!", ephemeral=True)
-            return
-        
-        if self.accepted:
-            await interaction.response.send_message("Дуэль уже принята!", ephemeral=True)
-            return
-        
-        # Проверяем баланс
-        target_data = db.get_user(self.target_id)
-        if target_data[1] < self.bet:
-            await interaction.response.send_message("У вас недостаточно монет для принятия дуэли!", ephemeral=True)
-            return
-        
-        self.accepted = True
-        
-        # Снимаем ставки
-        db.update_balance(self.challenger_id, -self.bet)
-        db.update_balance(self.target_id, -self.bet)
-        
-        # Анимация дуэли
-        embed = discord.Embed(
-            title=f"{EMOJIS['duel']} Дуэль начинается!",
-            description="⚔️ Противники готовятся к бою...",
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Ошибка синхронизации",
+            description=f"```{e}```",
             color=0xff0000
         )
-        await interaction.response.edit_message(embed=embed, view=None)
-        
-        # Анимация обратного отсчета
-        for i in range(3, 0, -1):
-            await asyncio.sleep(1)
-            embed.description = f"⚔️ Дуэль начнется через {i}..."
-            await interaction.edit_original_response(embed=embed)
-        
-        await asyncio.sleep(1)
-        
-        # Определяем победителя с учетом бафов
-        base_challenger_chance = 0.5
-        base_target_chance = 0.5
-        
-        # Применяем бафы к шансам
-        challenger_buff = db.apply_buff_to_chance(self.challenger_id, 1.0, 'duel_bonus')
-        target_buff = db.apply_buff_to_chance(self.target_id, 1.0, 'duel_bonus')
-        
-        challenger_chance = base_challenger_chance * challenger_buff
-        target_chance = base_target_chance * target_buff
-        
-        # Нормализуем шансы
-        total = challenger_chance + target_chance
-        challenger_chance /= total
-        target_chance /= total
-        
-        # Определяем победителя
-        winner_id = random.choices([self.challenger_id, self.target_id], 
-                                 weights=[challenger_chance, target_chance])[0]
-        loser_id = self.target_id if winner_id == self.challenger_id else self.challenger_id
-        
-        # Выдаем выигрыш с учетом бафов
-        base_winnings = self.bet * 2
-        winnings = db.apply_buff_to_amount(winner_id, base_winnings, 'game_bonus')
-        winnings = db.apply_buff_to_amount(winner_id, winnings, 'multiplier')
-        winnings = db.apply_buff_to_amount(winner_id, winnings, 'all_bonus')
-        
-        db.update_balance(winner_id, winnings)
-        
-        # Логируем и обновляем статистику
-        db.log_transaction(winner_id, 'duel_win', winnings, loser_id, "Победа в дуэли")
-        db.log_transaction(loser_id, 'duel_loss', -self.bet, winner_id, "Проигрыш в дуэли")
-        db.update_user_stat(winner_id, 'duels_won')
-        db.update_consecutive_wins(winner_id, True)
-        db.update_consecutive_wins(loser_id, False)
-        
-        winner = bot.get_user(winner_id)
-        loser = bot.get_user(loser_id)
-        
-        embed = discord.Embed(
-            title=f"{EMOJIS['duel']} Результат дуэли",
-            description=f"**Победитель:** {winner.mention}\n**Проигравший:** {loser.mention}",
-            color=0x00ff00
-        )
-        embed.add_field(name="Выигрыш", value=f"{winnings} {EMOJIS['coin']}")
-        embed.add_field(name="Шанс победы", value=f"{challenger_chance*100:.1f}% / {target_chance*100:.1f}%")
-        
-        await interaction.edit_original_response(embed=embed)
-
-# УЛУЧШЕННАЯ ПАГИНАЦИЯ ДЛЯ КЕЙСОВ
-class ImprovedCasesView(View):
-    def __init__(self, pages, author_id):
-        super().__init__(timeout=120)
-        self.pages = pages
-        self.current_page = 0
-        self.total_pages = len(pages)
-        self.author_id = author_id
-        self.update_buttons()
-
-    def update_buttons(self):
-        """Обновляет состояние кнопок"""
-        self.previous_button.disabled = (self.current_page == 0)
-        self.next_button.disabled = (self.current_page >= self.total_pages - 1)
-
-    @discord.ui.button(label='⬅️ Назад', style=discord.ButtonStyle.secondary)
-    async def previous_button(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
-            return
-        
-        if self.current_page > 0:
-            self.current_page -= 1
-            self.update_buttons()
-            embed = self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
-
-    @discord.ui.button(label='➡️ Вперед', style=discord.ButtonStyle.secondary)
-    async def next_button(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
-            return
-        
-        if self.current_page < self.total_pages - 1:
-            self.current_page += 1
-            self.update_buttons()
-            embed = self.create_embed()
-            await interaction.response.edit_message(embed=embed, view=self)
-
-    def create_embed(self):
-        page_cases = self.pages[self.current_page]
-        embed = discord.Embed(
-            title=f"🎁 Доступные кейсы (Страница {self.current_page + 1}/{self.total_pages})", 
-            color=0xff69b4
-        )
-        
-        for case in page_cases:
-            try:
-                rewards = json.loads(case[3])
-                
-                # Полное описание наград
-                rewards_desc = ""
-                for reward in rewards:
-                    chance_percent = reward['chance'] * 100
-                    if reward['type'] == 'coins':
-                        if reward['amount'][0] < 0:
-                            rewards_desc += f"• 💀 Потеря: {abs(reward['amount'][0])}-{abs(reward['amount'][1])} монет ({chance_percent:.1f}%)\n"
-                        else:
-                            rewards_desc += f"• 💰 Монеты: {reward['amount'][0]}-{reward['amount'][1]} ({chance_percent:.1f}%)\n"
-                    elif reward['type'] == 'special_item':
-                        rewards_desc += f"• 🎁 {reward['name']} ({chance_percent:.1f}%)\n"
-                    elif reward['type'] == 'bonus':
-                        rewards_desc += f"• ⭐ Бонус x{reward['multiplier']} ({chance_percent:.1f}%)\n"
-                    elif reward['type'] == 'custom_role':
-                        rewards_desc += f"• 👑 Кастомная роль ({chance_percent:.1f}%)\n"
-                
-                embed.add_field(
-                    name=f"{case[1]} - {case[2]} {EMOJIS['coin']} (ID: {case[0]})",
-                    value=rewards_desc,
-                    inline=False
-                )
-            except Exception as e:
-                print(f"⚠️ Ошибка обработки кейса {case[0]}: {e}")
-                continue
-        
-        return embed
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
 
 # Улучшенная функция проверки прав администратора
 def is_admin():
@@ -3777,11 +3256,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
-
-
-
-
-
-
-
-

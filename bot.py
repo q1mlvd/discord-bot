@@ -1705,35 +1705,38 @@ async def open_case(interaction: discord.Interaction, case_id: int):
         print(f"❌ Ошибка в команде open_case: {e}")
         await interaction.response.send_message("❌ Произошла ошибка при открытии кейса!", ephemeral=True)
 
-@bot.tree.command(name="admin_update_all_cases", description="Обновить все кейсы на новые (админ)")
+@bot.tree.command(name="admin_replace_cases", description="Заменить все кейсы на новые (админ)")
 @is_admin()
-async def admin_update_all_cases(interaction: discord.Interaction):
+async def admin_replace_cases(interaction: discord.Interaction):
     try:
         cursor = db.conn.cursor()
         
         # Удаляем все существующие кейсы
         cursor.execute('DELETE FROM cases')
         
-        # Создаем новые кейсы согласно вашему описанию
+        # Создаем новые кейсы с ID от 1 до 15
         new_cases = [
-            # Основные кейсы (ID 1-5)
+            # ID 1
             ('📦 Малый кейс', 50, json.dumps([
                 {'type': 'coins', 'amount': [10, 40], 'chance': 0.8, 'description': 'Небольшая сумма монет'},
                 {'type': 'coins', 'amount': [41, 100], 'chance': 0.15, 'description': 'Средняя сумма монет'},
                 {'type': 'coins', 'amount': [101, 300], 'chance': 0.05, 'description': 'Хорошая сумма монет'}
             ])),
+            # ID 2
             ('📦 Средний кейс', 150, json.dumps([
                 {'type': 'coins', 'amount': [50, 120], 'chance': 0.7, 'description': 'Надежная сумма монет'},
                 {'type': 'coins', 'amount': [121, 300], 'chance': 0.2, 'description': 'Отличная сумма монет'},
                 {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.05, 'description': 'Увеличивает выигрыш в рулетке на 25%'},
                 {'type': 'coins', 'amount': [301, 800], 'chance': 0.05, 'description': 'Отличный выигрыш'}
             ])),
+            # ID 3
             ('💎 Большой кейс', 500, json.dumps([
                 {'type': 'coins', 'amount': [200, 400], 'chance': 0.6, 'description': 'Солидная сумма'},
                 {'type': 'coins', 'amount': [401, 1000], 'chance': 0.25, 'description': 'Очень хорошая сумма'},
                 {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.08, 'description': 'Увеличивает ежедневную награду на 20%'},
                 {'type': 'bonus', 'multiplier': 1.5, 'duration': 24, 'chance': 0.07, 'description': 'Временный бонус x1.5 на 24 часа'}
             ])),
+            # ID 4
             ('👑 Элитный кейс', 1000, json.dumps([
                 {'type': 'coins', 'amount': [500, 1000], 'chance': 0.3, 'description': 'Элитные монеты'},
                 {'type': 'coins', 'amount': [-300, -100], 'chance': 0.2, 'description': 'Неудача (потеря монет)'},
@@ -1742,6 +1745,7 @@ async def admin_update_all_cases(interaction: discord.Interaction):
                 {'type': 'coins', 'amount': [1001, 3000], 'chance': 0.15, 'description': 'Элитный выигрыш'},
                 {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.1, 'description': 'Элитный джекпот'}
             ])),
+            # ID 5
             ('🔮 Секретный кейс', 2000, json.dumps([
                 {'type': 'coins', 'amount': [800, 1500], 'chance': 0.3, 'description': 'Секретные монеты'},
                 {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.15, 'description': 'Секретный риск'},
@@ -1750,7 +1754,7 @@ async def admin_update_all_cases(interaction: discord.Interaction):
                 {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.15, 'description': 'Секретная удача'},
                 {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.15, 'description': 'Секретный клад'}
             ])),
-            # Сбалансированные кейсы (ID 6-15)
+            # ID 6
             ('⚔️ Боевой кейс', 3500, json.dumps([
                 {'type': 'coins', 'amount': [1000, 3000], 'chance': 0.4, 'description': 'Боевая награда'},
                 {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.1, 'description': 'Боевые потери'},
@@ -1759,6 +1763,7 @@ async def admin_update_all_cases(interaction: discord.Interaction):
                 {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.15, 'description': 'Боевой трофей'},
                 {'type': 'special_item', 'name': 'Тотем защиты', 'chance': 0.1, 'description': '+20% к шансу победы в дуэлях'}
             ])),
+            # ID 7
             ('💎 Премиум кейс', 5000, json.dumps([
                 {'type': 'coins', 'amount': [2000, 4000], 'chance': 0.4, 'description': 'Премиум монеты'},
                 {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.2, 'description': 'Увеличивает ежедневную награду на 20%'},
@@ -1767,6 +1772,7 @@ async def admin_update_all_cases(interaction: discord.Interaction):
                 {'type': 'coins', 'amount': [5001, 8000], 'chance': 0.1, 'description': 'Премиум выигрыш'},
                 {'type': 'special_item', 'name': 'Кристалл маны', 'chance': 0.1, 'description': 'Умножает все награды x1.3'}
             ])),
+            # ID 8
             ('🔥 Адский кейс', 7500, json.dumps([
                 {'type': 'coins', 'amount': [3000, 6000], 'chance': 0.35, 'description': 'Адское богатство'},
                 {'type': 'coins', 'amount': [-3000, -2000], 'chance': 0.15, 'description': 'Адские потери'},
@@ -1775,6 +1781,7 @@ async def admin_update_all_cases(interaction: discord.Interaction):
                 {'type': 'coins', 'amount': [6001, 10000], 'chance': 0.1, 'description': 'Адский куш'},
                 {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.1, 'description': 'Мощный множитель наград x1.5'}
             ])),
+            # ID 9
             ('⚡ Легендарный кейс', 10000, json.dumps([
                 {'type': 'coins', 'amount': [5000, 8000], 'chance': 0.3, 'description': 'Легендарные монеты'},
                 {'type': 'special_item', 'name': 'Кольцо удачи', 'chance': 0.2, 'description': '+15% к наградам из кейсов'},
@@ -1783,6 +1790,7 @@ async def admin_update_all_cases(interaction: discord.Interaction):
                 {'type': 'coins', 'amount': [8001, 15000], 'chance': 0.15, 'description': 'Легендарный выигрыш'},
                 {'type': 'special_item', 'name': 'Карточный шулер', 'chance': 0.15, 'description': '+15% к выигрышу в блэкджеке'}
             ])),
+            # ID 10
             ('🌌 Космический кейс', 15000, json.dumps([
                 {'type': 'coins', 'amount': [8000, 15000], 'chance': 0.3, 'description': 'Космическое богатство'},
                 {'type': 'special_item', 'name': 'Ожерелье мудрости', 'chance': 0.2, 'description': '+15% к опыту'},
@@ -1791,6 +1799,7 @@ async def admin_update_all_cases(interaction: discord.Interaction):
                 {'type': 'coins', 'amount': [15001, 25000], 'chance': 0.15, 'description': 'Космический куш'},
                 {'type': 'special_item', 'name': 'Руна богатства', 'chance': 0.15, 'description': '-10% к комиссии переводов'}
             ])),
+            # ID 11
             ('💠 Кристальный кейс', 20000, json.dumps([
                 {'type': 'coins', 'amount': [10000, 20000], 'chance': 0.3, 'description': 'Кристальные монеты'},
                 {'type': 'special_item', 'name': 'Кристалл маны', 'chance': 0.15, 'description': 'Умножает все награды x1.3'},
@@ -1799,6 +1808,7 @@ async def admin_update_all_cases(interaction: discord.Interaction):
                 {'type': 'coins', 'amount': [20001, 30000], 'chance': 0.15, 'description': 'Кристальный выигрыш'},
                 {'type': 'special_item', 'name': 'Зелье удачи', 'chance': 0.2, 'description': '+10% ко всем наградам'}
             ])),
+            # ID 12
             ('👁️ Теневой кейс', 25000, json.dumps([
                 {'type': 'coins', 'amount': [12000, 22000], 'chance': 0.3, 'description': 'Теневые монеты'},
                 {'type': 'special_item', 'name': 'Плащ тени', 'chance': 0.15, 'description': '+15% к шансу кражи'},
@@ -1807,6 +1817,7 @@ async def admin_update_all_cases(interaction: discord.Interaction):
                 {'type': 'coins', 'amount': [22001, 35000], 'chance': 0.15, 'description': 'Теневой куш'},
                 {'type': 'special_item', 'name': 'Защитный талисман', 'chance': 0.2, 'description': '-50% к шансу кражи у вас'}
             ])),
+            # ID 13
             ('🌈 Радужный кейс', 30000, json.dumps([
                 {'type': 'coins', 'amount': [15000, 25000], 'chance': 0.25, 'description': 'Радужные монеты'},
                 {'type': 'special_item', 'name': 'Слот-мастер', 'chance': 0.2, 'description': '+25% к выигрышу в слотах'},
@@ -1815,6 +1826,7 @@ async def admin_update_all_cases(interaction: discord.Interaction):
                 {'type': 'coins', 'amount': [25001, 40000], 'chance': 0.15, 'description': 'Радужный выигрыш'},
                 {'type': 'special_item', 'name': 'Счастливая монета', 'chance': 0.2, 'description': '+20% к выигрышу в coinflip'}
             ])),
+            # ID 14
             ('🩸 Кровавый кейс', 40000, json.dumps([
                 {'type': 'coins', 'amount': [18000, 30000], 'chance': 0.25, 'description': 'Кровавые монеты'},
                 {'type': 'special_item', 'name': 'Флакон зелья', 'chance': 0.2, 'description': '+20% к наградам за квесты'},
@@ -1823,6 +1835,7 @@ async def admin_update_all_cases(interaction: discord.Interaction):
                 {'type': 'coins', 'amount': [30001, 45000], 'chance': 0.15, 'description': 'Кровавый куш'},
                 {'type': 'special_item', 'name': 'Щит богатства', 'chance': 0.2, 'description': '-20% к проигрышам'}
             ])),
+            # ID 15
             ('🌟 Божественный кейс', 50000, json.dumps([
                 {'type': 'coins', 'amount': [25000, 50000], 'chance': 0.2, 'description': 'Божественные монеты'},
                 {'type': 'special_item', 'name': 'Зелье удачи', 'chance': 0.2, 'description': '+10% ко всем наградам'},
@@ -1839,41 +1852,19 @@ async def admin_update_all_cases(interaction: discord.Interaction):
         
         db.conn.commit()
         
-        # Создаем красивый embed с информацией о новых кейсах
         embed = discord.Embed(
-            title="🎉 Все кейсы успешно обновлены!",
-            description="Добавлено 15 новых кейсов с улучшенными наградами и балансом",
+            title="✅ Все кейсы заменены!",
+            description="Добавлено 15 новых кейсов с ID от 1 до 15",
             color=0x00ff00
         )
-        
-        # Группируем кейсы для отображения
-        embed.add_field(
-            name="📦 Основные кейсы (ID 1-5)",
-            value="• Малый кейс - 50 🪙\n• Средний кейс - 150 🪙\n• Большой кейс - 500 🪙\n• Элитный кейс - 1,000 🪙\n• Секретный кейс - 2,000 🪙",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="⚔️ Сбалансированные кейсы (ID 6-10)",
-            value="• Боевой кейс - 3,500 🪙\n• Премиум кейс - 5,000 🪙\n• Адский кейс - 7,500 🪙\n• Легендарный кейс - 10,000 🪙\n• Космический кейс - 15,000 🪙",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="💎 Премиум кейсы (ID 11-15)", 
-            value="• Кристальный кейс - 20,000 🪙\n• Теневой кейс - 25,000 🪙\n• Радужный кейс - 30,000 🪙\n• Кровавый кейс - 40,000 🪙\n• Божественный кейс - 50,000 🪙",
-            inline=False
-        )
-        
-        embed.set_footer(text="Используйте /cases для просмотра всех кейсов")
         
         await interaction.response.send_message(embed=embed)
         
     except Exception as e:
-        print(f"❌ Ошибка при обновлении кейсов: {e}")
+        print(f"❌ Ошибка при замене кейсов: {e}")
         error_embed = discord.Embed(
-            title="❌ Ошибка обновления кейсов",
-            description=f"Произошла ошибка: {str(e)}",
+            title="❌ Ошибка",
+            description=f"Не удалось заменить кейсы: {str(e)}",
             color=0xff0000
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
@@ -3311,4 +3302,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 

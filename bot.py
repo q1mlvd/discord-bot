@@ -188,17 +188,6 @@ class Database:
                     print("💥 Не удалось подключиться к базе данных после нескольких попыток")
                     raise
 
-    def get_cases(self):
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('SELECT * FROM cases ORDER BY price ASC')
-            cases = cursor.fetchall()
-            print(f"🔍 Загружено {len(cases)} кейсов из базы данных")
-            return cases
-        except Exception as e:
-            print(f"❌ Ошибка в get_cases: {e}")
-            return []
-
     def get_user(self, user_id):
         """Безопасное получение пользователя"""
         try:
@@ -940,148 +929,69 @@ def _initialize_default_data(self):
     try:
         cursor = self.conn.cursor()
         
-        # УДАЛЯЕМ СУЩЕСТВУЮЩИЕ КЕЙСЫ И ДОБАВЛЯЕМ НОВЫЕ
-        print("🔄 Очистка и добавление улучшенных кейсов...")
-        cursor.execute('DELETE FROM cases')  # Очищаем таблицу
+        # Проверяем текущее количество кейсов
+        cursor.execute('SELECT COUNT(*) FROM cases')
+        current_count = cursor.fetchone()[0]
+        print(f"🔍 Текущее количество кейсов в базе: {current_count}")
         
-        # УЛУЧШЕННЫЕ КЕЙСЫ (16 кейсов)
-        improved_cases = [
-            ('📦 Начинающий кейс', 25, json.dumps([
-                {'type': 'coins', 'amount': [10, 30], 'chance': 0.6, 'description': 'Небольшая сумма монет'},
-                {'type': 'coins', 'amount': [31, 80], 'chance': 0.3, 'description': 'Средняя сумма монет'},
-                {'type': 'coins', 'amount': [81, 150], 'chance': 0.1, 'description': 'Хорошая сумма монет'}
-            ])),
-            ('📦 Малый кейс', 50, json.dumps([
-                {'type': 'coins', 'amount': [20, 50], 'chance': 0.5, 'description': 'Небольшая сумма монет'},
-                {'type': 'coins', 'amount': [51, 120], 'chance': 0.3, 'description': 'Средняя сумма монет'},
-                {'type': 'coins', 'amount': [121, 250], 'chance': 0.15, 'description': 'Хорошая сумма монет'},
-                {'type': 'special_item', 'name': 'Серебряный амулет', 'chance': 0.05, 'description': 'Увеличивает ежедневную награду на 10%'}
-            ])),
-            ('⚡ Быстрый кейс', 75, json.dumps([
-                {'type': 'coins', 'amount': [30, 80], 'chance': 0.7, 'description': 'Быстрые монеты'},
-                {'type': 'coins', 'amount': [81, 180], 'chance': 0.2, 'description': 'Быстрая хорошая сумма'},
-                {'type': 'special_item', 'name': 'Перчатка вора', 'chance': 0.1, 'description': 'Увеличивает шанс кражи на 20%'}
-            ])),
-            ('📦 Средний кейс', 150, json.dumps([
-                {'type': 'coins', 'amount': [50, 100], 'chance': 0.4, 'description': 'Надежная сумма монет'},
-                {'type': 'coins', 'amount': [101, 250], 'chance': 0.3, 'description': 'Отличная сумма монет'},
-                {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.15, 'description': 'Увеличивает ежедневную награду на 20%'},
-                {'type': 'coins', 'amount': [251, 500], 'chance': 0.1, 'description': 'Отличный выигрыш'},
-                {'type': 'bonus', 'multiplier': 1.2, 'duration': 12, 'chance': 0.05, 'description': 'Временный бонус x1.2 на 12 часов'}
-            ])),
-            ('🏹 Охотничий кейс', 200, json.dumps([
-                {'type': 'coins', 'amount': [60, 150], 'chance': 0.5, 'description': 'Охотничья добыча'},
-                {'type': 'coins', 'amount': [151, 350], 'chance': 0.3, 'description': 'Богатая добыча'},
-                {'type': 'special_item', 'name': 'Плащ тени', 'chance': 0.15, 'description': 'Увеличивает шанс кражи на 15%'},
-                {'type': 'bonus', 'multiplier': 1.3, 'duration': 8, 'chance': 0.05, 'description': 'Временный бонус x1.3 на 8 часов'}
-            ])),
-            ('🎭 Загадочный кейс', 300, json.dumps([
-                {'type': 'coins', 'amount': [80, 200], 'chance': 0.35, 'description': 'Загадочные монеты'},
-                {'type': 'coins', 'amount': [-100, -50], 'chance': 0.15, 'description': 'Неудача (потеря монет)'},
-                {'type': 'coins', 'amount': [201, 500], 'chance': 0.25, 'description': 'Загадочный выигрыш'},
-                {'type': 'special_item', 'name': 'Кристалл маны', 'chance': 0.15, 'description': 'Умножает все награды на 1.3'},
-                {'type': 'coins', 'amount': [501, 1000], 'chance': 0.08, 'description': 'Загадочный джекпот'},
-                {'type': 'bonus', 'multiplier': 1.5, 'duration': 24, 'chance': 0.02, 'description': 'Временный бонус x1.5 на 24 часа'}
-            ])),
-            ('🔥 Огненный кейс', 400, json.dumps([
-                {'type': 'coins', 'amount': [100, 250], 'chance': 0.45, 'description': 'Горячие монеты'},
-                {'type': 'coins', 'amount': [251, 600], 'chance': 0.3, 'description': 'Огненная сумма'},
-                {'type': 'special_item', 'name': 'Флакон зелья', 'chance': 0.15, 'description': '+20% к наградам за квесты'},
-                {'type': 'bonus', 'multiplier': 1.4, 'duration': 16, 'chance': 0.1, 'description': 'Временный бонус x1.4 на 16 часов'}
-            ])),
-            ('❄️ Ледяной кейс', 400, json.dumps([
-                {'type': 'coins', 'amount': [100, 250], 'chance': 0.45, 'description': 'Холодные монеты'},
-                {'type': 'coins', 'amount': [251, 600], 'chance': 0.3, 'description': 'Ледяная сумма'},
-                {'type': 'special_item', 'name': 'Зелье удачи', 'chance': 0.15, 'description': '+10% ко всем наградам'},
-                {'type': 'bonus', 'multiplier': 1.4, 'duration': 16, 'chance': 0.1, 'description': 'Временный бонус x1.4 на 16 часов'}
-            ])),
-            ('⚗️ Алхимический кейс', 500, json.dumps([
-                {'type': 'coins', 'amount': [150, 350], 'chance': 0.4, 'description': 'Алхимические монеты'},
-                {'type': 'coins', 'amount': [351, 750], 'chance': 0.25, 'description': 'Алхимическая удача'},
-                {'type': 'special_item', 'name': 'Ожерелье мудрости', 'chance': 0.2, 'description': '+15% к получаемому опыту'},
-                {'type': 'bonus', 'multiplier': 1.6, 'duration': 20, 'chance': 0.15, 'description': 'Временный бонус x1.6 на 20 часов'}
-            ])),
-            ('💎 Большой кейс', 750, json.dumps([
-                {'type': 'coins', 'amount': [200, 450], 'chance': 0.35, 'description': 'Солидная сумма'},
-                {'type': 'coins', 'amount': [451, 900], 'chance': 0.25, 'description': 'Очень хорошая сумма'},
-                {'type': 'special_item', 'name': 'Кольцо удачи', 'chance': 0.15, 'description': '+15% к наградам из кейсов'},
-                {'type': 'bonus', 'multiplier': 1.7, 'duration': 24, 'chance': 0.1, 'description': 'Временный бонус x1.7 на 24 часа'},
-                {'type': 'coins', 'amount': [901, 1800], 'chance': 0.1, 'description': 'Большой выигрыш'},
-                {'type': 'special_item', 'name': 'Браслет везения', 'chance': 0.05, 'description': '+10% к выигрышам в играх'}
-            ])),
-            ('🌟 Звездный кейс', 1000, json.dumps([
-                {'type': 'coins', 'amount': [300, 600], 'chance': 0.3, 'description': 'Звездные монеты'},
-                {'type': 'coins', 'amount': [601, 1200], 'chance': 0.25, 'description': 'Звездная удача'},
-                {'type': 'special_item', 'name': 'Счастливая монета', 'chance': 0.15, 'description': '+20% к выигрышу в coinflip'},
-                {'type': 'bonus', 'multiplier': 1.8, 'duration': 30, 'chance': 0.1, 'description': 'Временный бонус x1.8 на 30 часов'},
-                {'type': 'coins', 'amount': [1201, 2500], 'chance': 0.15, 'description': 'Звездный джекпот'},
-                {'type': 'special_item', 'name': 'Карточный шулер', 'chance': 0.05, 'description': '+15% к выигрышу в блэкджеке'}
-            ])),
-            ('🌙 Лунный кейс', 1500, json.dumps([
-                {'type': 'coins', 'amount': [400, 800], 'chance': 0.3, 'description': 'Лунный свет'},
-                {'type': 'coins', 'amount': [801, 1600], 'chance': 0.2, 'description': 'Лунная удача'},
-                {'type': 'special_item', 'name': 'Руна богатства', 'chance': 0.15, 'description': '-10% к комиссии переводов'},
-                {'type': 'bonus', 'multiplier': 2.0, 'duration': 36, 'chance': 0.1, 'description': 'Временный бонус x2.0 на 36 часов'},
-                {'type': 'coins', 'amount': [1601, 3200], 'chance': 0.15, 'description': 'Лунный джекпот'},
-                {'type': 'special_item', 'name': 'Тотем защиты', 'chance': 0.1, 'description': '+20% к шансу победы в дуэлях'}
-            ])),
-            ('🐉 Драконий кейс', 2000, json.dumps([
-                {'type': 'coins', 'amount': [500, 1000], 'chance': 0.25, 'description': 'Драконье золото'},
-                {'type': 'coins', 'amount': [1001, 2000], 'chance': 0.2, 'description': 'Драконья удача'},
-                {'type': 'special_item', 'name': 'Слот-мастер', 'chance': 0.15, 'description': '+25% к выигрышу в слотах'},
-                {'type': 'bonus', 'multiplier': 2.2, 'duration': 48, 'chance': 0.1, 'description': 'Временный бонус x2.2 на 48 часов'},
-                {'type': 'coins', 'amount': [2001, 4000], 'chance': 0.15, 'description': 'Драконий клад'},
-                {'type': 'special_item', 'name': 'Щит богатства', 'chance': 0.1, 'description': '-20% к проигрышам'},
-                {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.05, 'description': 'x1.5 к любым наградам'}
-            ])),
-            ('👑 Элитный кейс', 3000, json.dumps([
-                {'type': 'coins', 'amount': [750, 1500], 'chance': 0.25, 'description': 'Элитные монеты'},
-                {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.2, 'description': 'Элитная удача'},
-                {'type': 'special_item', 'name': 'Защитный талисман', 'chance': 0.15, 'description': '-50% к шансу кражи у вас'},
-                {'type': 'bonus', 'multiplier': 2.5, 'duration': 60, 'chance': 0.1, 'description': 'Временный бонус x2.5 на 60 часов'},
-                {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.15, 'description': 'Элитный джекпот'},
-                {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.1, 'description': '+25% к выигрышу в рулетке'},
-                {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.05, 'description': 'x2.0 к любым наградам'}
-            ])),
-            ('🔮 Секретный кейс', 5000, json.dumps([
-                {'type': 'coins', 'amount': [1000, 2000], 'chance': 0.2, 'description': 'Секретные монеты'},
-                {'type': 'coins', 'amount': [-500, -200], 'chance': 0.1, 'description': 'Секретный риск'},
-                {'type': 'coins', 'amount': [2001, 5000], 'chance': 0.15, 'description': 'Секретная удача'},
-                {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.15, 'description': 'x2.0 к любым наградам'},
-                {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.1, 'description': 'Временный бонус x3.0 на 72 часа'},
-                {'type': 'coins', 'amount': [5001, 10000], 'chance': 0.15, 'description': 'Секретный клад'},
-                {'type': 'custom_role', 'chance': 0.1, 'description': 'Кастомная роль на сервере'},
-                {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.05, 'description': 'x1.5 к любым наградам'}
-            ]))
-        ]
-        
-        for case in improved_cases:
-            cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', case)
-        
-        print(f"✅ Добавлено {len(improved_cases)} улучшенных кейсов!")
-        
-        # Проверяем и добавляем предметы
-        cursor.execute('SELECT COUNT(*) FROM items')
-        if cursor.fetchone()[0] == 0:
-            print("🔄 Добавление стандартных предметов...")
+        # Если кейсов нет, добавляем их
+        if current_count == 0:
+            print("🔄 Добавление улучшенных кейсов...")
             
-            default_items = [
-                ('Золотой амулет', 'Увеличивает ежедневную награду', 500, 'rare', 'daily_bonus', 1.2, '+20% к ежедневной награде'),
-                ('Серебряный амулет', 'Небольшой бонус к ежедневной награде', 250, 'common', 'daily_bonus', 1.1, '+10% к ежедневной награде'),
-                ('Кольцо удачи', 'Увеличивает награды из кейсов', 600, 'rare', 'case_bonus', 1.15, '+15% к наградам из кейсов'),
-                ('Браслет везения', 'Увеличивает выигрыши в играх', 450, 'uncommon', 'game_bonus', 1.1, '+10% к выигрышам в играх'),
-                ('Защитный талисман', 'Защищает от краж', 800, 'epic', 'steal_protection', 0.5, '-50% к шансу кражи у вас'),
-                ('Перчатка вора', 'Увеличивает шанс успешной кражи', 700, 'rare', 'steal_bonus', 1.2, '+20% к шансу успешной кражи'),
-                ('Магический свиток', 'Увеличивает выигрыш в рулетке', 550, 'rare', 'roulette_bonus', 1.25, '+25% к выигрышу в рулетке'),
-                ('Кристалл маны', 'Умножает все награды', 1000, 'epic', 'multiplier', 1.3, 'x1.3 к любым наградам'),
-                ('Древний артефакт', 'Мощный множитель наград', 2000, 'legendary', 'multiplier', 1.5, 'x1.5 к любым наградам'),
-                ('Мифический предмет', 'Легендарный множитель наград', 5000, 'mythic', 'multiplier', 2.0, 'x2.0 к любым наградам')
+            improved_cases = [
+                ('📦 Начинающий кейс', 25, json.dumps([
+                    {'type': 'coins', 'amount': [10, 30], 'chance': 0.6, 'description': 'Небольшая сумма монет'},
+                    {'type': 'coins', 'amount': [31, 80], 'chance': 0.3, 'description': 'Средняя сумма монет'},
+                    {'type': 'coins', 'amount': [81, 150], 'chance': 0.1, 'description': 'Хорошая сумма монет'}
+                ])),
+                ('📦 Малый кейс', 50, json.dumps([
+                    {'type': 'coins', 'amount': [20, 50], 'chance': 0.5, 'description': 'Небольшая сумма монет'},
+                    {'type': 'coins', 'amount': [51, 120], 'chance': 0.3, 'description': 'Средняя сумма монет'},
+                    {'type': 'coins', 'amount': [121, 250], 'chance': 0.15, 'description': 'Хорошая сумма монет'},
+                    {'type': 'special_item', 'name': 'Серебряный амулет', 'chance': 0.05, 'description': 'Увеличивает ежедневную награду на 10%'}
+                ])),
+                ('⚡ Быстрый кейс', 75, json.dumps([
+                    {'type': 'coins', 'amount': [30, 80], 'chance': 0.7, 'description': 'Быстрые монеты'},
+                    {'type': 'coins', 'amount': [81, 180], 'chance': 0.2, 'description': 'Быстрая хорошая сумма'},
+                    {'type': 'special_item', 'name': 'Перчатка вора', 'chance': 0.1, 'description': 'Увеличивает шанс кражи на 20%'}
+                ])),
+                ('📦 Средний кейс', 150, json.dumps([
+                    {'type': 'coins', 'amount': [50, 100], 'chance': 0.4, 'description': 'Надежная сумма монет'},
+                    {'type': 'coins', 'amount': [101, 250], 'chance': 0.3, 'description': 'Отличная сумма монет'},
+                    {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.15, 'description': 'Увеличивает ежедневную награду на 20%'},
+                    {'type': 'coins', 'amount': [251, 500], 'chance': 0.1, 'description': 'Отличный выигрыш'},
+                    {'type': 'bonus', 'multiplier': 1.2, 'duration': 12, 'chance': 0.05, 'description': 'Временный бонус x1.2 на 12 часов'}
+                ])),
+                ('💎 Большой кейс', 500, json.dumps([
+                    {'type': 'coins', 'amount': [200, 400], 'chance': 0.6, 'description': 'Солидная сумма'},
+                    {'type': 'coins', 'amount': [401, 1000], 'chance': 0.25, 'description': 'Очень хорошая сумма'},
+                    {'type': 'special_item', 'name': 'Золотой ключ', 'chance': 0.08, 'description': 'Особый предмет'},
+                    {'type': 'bonus', 'multiplier': 1.5, 'duration': 24, 'chance': 0.07, 'description': 'Временный бонус x1.5 на 24 часа'}
+                ])),
+                ('👑 Элитный кейс', 1000, json.dumps([
+                    {'type': 'coins', 'amount': [500, 1000], 'chance': 0.3, 'description': 'Элитные монеты'},
+                    {'type': 'coins', 'amount': [-300, -100], 'chance': 0.2, 'description': 'Неудача (потеря монет)'},
+                    {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.15, 'description': 'Мощный множитель наград'},
+                    {'type': 'bonus', 'multiplier': 2.0, 'duration': 48, 'chance': 0.1, 'description': 'Временный бонус x2.0 на 48 часов'},
+                    {'type': 'coins', 'amount': [1001, 3000], 'chance': 0.15, 'description': 'Элитный выигрыш'},
+                    {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.1, 'description': 'Элитный джекпот'}
+                ])),
+                ('🔮 Секретный кейс', 2000, json.dumps([
+                    {'type': 'coins', 'amount': [800, 1500], 'chance': 0.3, 'description': 'Секретные монеты'},
+                    {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.15, 'description': 'Секретный риск'},
+                    {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.15, 'description': 'Легендарный множитель наград'},
+                    {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.1, 'description': 'Временный бонус x3.0 на 72 часа'},
+                    {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.15, 'description': 'Секретная удача'},
+                    {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.15, 'description': 'Секретный клад'}
+                ]))
             ]
             
-            for item in default_items:
-                cursor.execute('INSERT INTO items (name, description, value, rarity, buff_type, buff_value, buff_description) VALUES (%s, %s, %s, %s, %s, %s, %s)', item)
+            for case in improved_cases:
+                cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', case)
             
-            print("✅ Стандартные предметы добавлены!")
+            print(f"✅ Добавлено {len(improved_cases)} улучшенных кейсов!")
+        else:
+            print(f"✅ В базе уже есть {current_count} кейсов, пропускаем инициализацию")
         
         self.conn.commit()
         print("✅ Начальные данные успешно инициализированы!")
@@ -1089,6 +999,7 @@ def _initialize_default_data(self):
     except Exception as e:
         print(f"❌ Ошибка при инициализации данных: {e}")
         self.conn.rollback()
+
 # Вспомогательные функции для работы с наградами
 def get_reward(case):
     rand = random.random()
@@ -1730,20 +1641,24 @@ async def market(interaction: discord.Interaction, action: app_commands.Choice[s
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
-# Создаем экземпляр базы данных с улучшенной обработкой ошибок
+# Создаем экземпляр базы данных
 try:
     db = Database()
     print("✅ База данных успешно инициализирована!")
     
-    # Принудительно вызываем инициализацию данных
-    try:
-        db._initialize_default_data()
-        print("✅ Данные кейсов успешно инициализированы!")
-    except Exception as e:
-        print(f"⚠️ Предупреждение при инициализации данных: {e}")
-        
+    # Принудительно инициализируем данные
+    print("🔄 Принудительная инициализация данных...")
+    db._initialize_default_data()
+    
+    # Проверяем, что кейсы загружаются
+    test_cases = db.get_cases()
+    print(f"🔍 Тест: загружено {len(test_cases)} кейсов после инициализации")
+    
 except Exception as e:
     print(f"💥 Критическая ошибка при инициализации базы данных: {e}")
+    traceback.print_exc()
+    exit(1)
+
     # Создаем заглушку для db чтобы избежать ошибок
     class DummyDB:
         def get_cases(self):
@@ -1934,7 +1849,63 @@ async def duel(interaction: discord.Interaction, user: discord.Member, bet: int)
     
     await interaction.followup.send(embed=result_embed)
 
-# ОСТАЛЬНЫЕ КОМАНДЫ ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ (для экономии места)
+@bot.tree.command(name="admin_update_cases", description="[ADMIN] Принудительно обновить кейсы")
+@is_admin()
+async def admin_update_cases(interaction: discord.Interaction):
+    try:
+        # Очищаем таблицу кейсов и добавляем заново
+        cursor = db.conn.cursor()
+        cursor.execute('DELETE FROM cases')
+        db.conn.commit()
+        
+        # Инициализируем данные
+        db._initialize_default_data()
+        
+        # Проверяем результат
+        cases = db.get_cases()
+        
+        embed = discord.Embed(title="🔄 Кейсы обновлены", color=0x00ff00)
+        embed.add_field(name="Добавлено кейсов", value=len(cases), inline=False)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+
+@bot.tree.command(name="debug_database", description="Глубокая отладка базы данных")
+async def debug_database(interaction: discord.Interaction):
+    try:
+        cursor = db.conn.cursor()
+        
+        # Проверяем существование таблицы cases
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'cases'
+            );
+        """)
+        table_exists = cursor.fetchone()[0]
+        
+        # Получаем информацию о таблице
+        cursor.execute("""
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'cases'
+        """)
+        columns = cursor.fetchall()
+        
+        # Получаем все кейсы
+        cases = db.get_cases()
+        
+        embed = discord.Embed(title="🔧 Отладка базы данных", color=0xff9900)
+        embed.add_field(name="Таблица cases существует", value="✅ Да" if table_exists else "❌ Нет", inline=False)
+        embed.add_field(name="Колонки таблицы", value="\n".join([f"{col[0]}: {col[1]}" for col in columns]), inline=False)
+        embed.add_field(name="Количество кейсов", value=len(cases), inline=False)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Ошибка отладки: {e}", ephemeral=True)
 
 # ЗАПУСК БОТА
 if __name__ == "__main__":
@@ -1949,6 +1920,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

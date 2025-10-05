@@ -2244,15 +2244,93 @@ async def steal_error(interaction: discord.Interaction, error: app_commands.AppC
 
 # ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ ИЗ ВТОРОГО КОДА
 
-@bot.tree.command(name="items", description="Показать все доступные предметы")
+@bot.tree.command(name="items", description="Показать все доступные предметы с эффектами")
 async def items_list(interaction: discord.Interaction):
     try:
         items = db.get_all_items_safe()
         
-        embed = discord.Embed(title="📦 Все доступные предметы", color=0x3498db)
+        if not items:
+            await interaction.response.send_message("❌ Предметы не найдены!", ephemeral=True)
+            return
         
-        for item in items:
+        # Создаем страницы
+        items_per_page = 5
+        pages = []
+        
+        for i in range(0, len(items), items_per_page):
+            page_items = items[i:i + items_per_page]
+            pages.append(page_items)
+        
+        # Создаем view для пагинации
+        view = ItemsPaginatedView(pages, interaction.user.id)
+        embed = view.create_embed()
+        
+        await interaction.response.send_message(embed=embed, view=view)
+        
+    except Exception as e:
+        print(f"❌ Ошибка в команде items: {e}")
+        await interaction.response.send_message("❌ Произошла ошибка при загрузке предметов!", ephemeral=True)
+
+# Класс для пагинации предметов
+class ItemsPaginatedView(View):
+    def __init__(self, pages, author_id):
+        super().__init__(timeout=120)
+        self.pages = pages
+        self.current_page = 0
+        self.total_pages = len(pages)
+        self.author_id = author_id
+        self.update_buttons()
+
+    def update_buttons(self):
+        """Обновляет состояние кнопок"""
+        self.previous_button.disabled = (self.current_page == 0)
+        self.next_button.disabled = (self.current_page >= self.total_pages - 1)
+
+    @discord.ui.button(label='⬅️ Назад', style=discord.ButtonStyle.secondary)
+    async def previous_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
+            return
+        
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_buttons()
+            embed = self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label='➡️ Вперед', style=discord.ButtonStyle.secondary)
+    async def next_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
+            return
+        
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.update_buttons()
+            embed = self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    def create_embed(self):
+        page_items = self.pages[self.current_page]
+        embed = discord.Embed(
+            title=f"📦 Все доступные предметы (Страница {self.current_page + 1}/{self.total_pages})",
+            description="**Предметы автоматически активируются при получении и дают постоянные баффы!**",
+            color=0x3498db
+        )
+        
+        for item in page_items:
             try:
+                # Безопасный доступ к данным предмета
+                item_id = item[0] if len(item) > 0 else "N/A"
+                item_name = item[1] if len(item) > 1 else "Неизвестный предмет"
+                item_description = item[2] if len(item) > 2 else "Описание отсутствует"
+                item_value = item[3] if len(item) > 3 else 0
+                item_rarity = item[4] if len(item) > 4 else "common"
+                buff_type = item[5] if len(item) > 5 else None
+                buff_value = item[6] if len(item) > 6 else 1.0
+                buff_description = item[7] if len(item) > 7 else "Без особого эффекта"
+                
+                # Эмодзи редкости
                 rarity_emoji = {
                     'common': '⚪',
                     'uncommon': '🟢', 
@@ -2260,23 +2338,213 @@ async def items_list(interaction: discord.Interaction):
                     'epic': '🟣',
                     'legendary': '🟠',
                     'mythic': '🟡'
-                }.get(item[4] if len(item) > 4 else 'common', '⚪')
+                }.get(item_rarity, '⚪')
                 
-                buff_info = f"**Баф:** {item[7]}\n" if len(item) > 7 and item[7] else ""
+                # Детальное описание эффекта
+                effect_details = self.get_effect_details(buff_type, buff_value, buff_description)
+                
+                # Создаем поле для предмета
+                field_value = f"**Описание:** {item_description}\n"
+                field_value += f"**Эффект:** {effect_details}\n"
+                field_value += f"**Ценность:** {item_value} {EMOJIS['coin']}\n"
+                field_value += f"**Редкость:** {rarity_emoji} {item_rarity.capitalize()}"
+                
                 embed.add_field(
-                    name=f"{rarity_emoji} {item[1]}",
-                    value=f"{item[2]}\n{buff_info}**Цена:** {item[3]} {EMOJIS['coin']}",
+                    name=f"{item_name} (ID: {item_id})",
+                    value=field_value,
                     inline=False
                 )
+                
             except Exception as e:
                 print(f"⚠️ Ошибка обработки предмета {item}: {e}")
                 continue
         
-        await interaction.response.send_message(embed=embed)
+        # Добавляем подсказку в подвал
+        embed.set_footer(text="💡 Предметы можно получить из кейсов или купить на маркетплейсе")
+        
+        return embed
+
+    def get_effect_details(self, buff_type, buff_value, buff_description):
+        """Возвращает детальное описание эффекта предмета"""
+        if not buff_type:
+            return "Без особого эффекта"
+        
+        effect_map = {
+            'daily_bonus': f"📅 Увеличивает ежедневную награду в {buff_value}x раза",
+            'case_bonus': f"🎁 Увеличивает награды из кейсов в {buff_value}x раза", 
+            'game_bonus': f"🎮 Увеличивает выигрыши в играх в {buff_value}x раза",
+            'steal_protection': f"🛡️ Уменьшает шанс кражи у вас в {buff_value}x раза",
+            'steal_bonus': f"🦹 Увеличивает шанс успешной кражи в {buff_value}x раза",
+            'roulette_bonus': f"🎰 Увеличивает выигрыш в рулетке в {buff_value}x раза",
+            'multiplier': f"✨ Умножает все награды в {buff_value}x раза",
+            'coinflip_bonus': f"🪙 Увеличивает выигрыш в coinflip в {buff_value}x раза",
+            'blackjack_bonus': f"🃏 Увеличивает выигрыш в блэкджеке в {buff_value}x раза",
+            'slot_bonus': f"🎰 Увеличивает выигрыш в слотах в {buff_value}x раза",
+            'loss_protection': f"💎 Уменьшает проигрыши в {buff_value}x раза",
+            'quest_bonus': f"🗺️ Увеличивает награды за квесты в {buff_value}x раза",
+            'all_bonus': f"🌟 Увеличивает все награды в {buff_value}x раза",
+            'transfer_bonus': f"💸 Уменьшает комиссию переводов в {buff_value}x раза",
+            'duel_bonus': f"⚔️ Увеличивает шанс победы в дуэлях в {buff_value}x раза",
+            'xp_bonus': f"📚 Увеличивает получаемый опыт в {buff_value}x раза",
+            'steal_chance': f"🎯 Увеличивает шанс кражи в {buff_value}x раза"
+        }
+        
+        return effect_map.get(buff_type, buff_description)
+
+# Также обновим команду myitems для пагинации
+@bot.tree.command(name="myitems", description="Показать ваши предметы с эффектами")
+async def my_items(interaction: discord.Interaction):
+    try:
+        inventory = db.get_user_inventory_safe(interaction.user.id)
+        
+        items = inventory.get("items", {})
+        if not items:
+            embed = discord.Embed(
+                title=f"📦 Предметы {interaction.user.display_name}",
+                description="У вас пока нет предметов. Открывайте кейсы или покупайте на маркетплейсе!",
+                color=0x3498db
+            )
+            await interaction.response.send_message(embed=embed)
+            return
+        
+        # Получаем информацию о каждом предмете
+        user_items = []
+        for item_id, count in items.items():
+            try:
+                if item_id.isdigit():
+                    item_data = db.get_item(int(item_id))
+                    if item_data:
+                        user_items.append((item_data, count))
+            except Exception as e:
+                print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
+                continue
+        
+        if not user_items:
+            embed = discord.Embed(
+                title=f"📦 Предметы {interaction.user.display_name}",
+                description="Не удалось загрузить информацию о ваших предметах.",
+                color=0x3498db
+            )
+            await interaction.response.send_message(embed=embed)
+            return
+        
+        # Создаем страницы для инвентаря
+        items_per_page = 5
+        pages = []
+        
+        for i in range(0, len(user_items), items_per_page):
+            page_items = user_items[i:i + items_per_page]
+            pages.append(page_items)
+        
+        # Создаем view для пагинации инвентаря
+        view = MyItemsPaginatedView(pages, interaction.user.id)
+        embed = view.create_embed()
+        
+        await interaction.response.send_message(embed=embed, view=view)
         
     except Exception as e:
-        print(f"❌ Ошибка в команде items: {e}")
+        print(f"❌ Ошибка в команде myitems: {e}")
         await interaction.response.send_message("❌ Произошла ошибка при загрузке предметов!", ephemeral=True)
+
+# Класс для пагинации личных предметов
+class MyItemsPaginatedView(View):
+    def __init__(self, pages, author_id):
+        super().__init__(timeout=120)
+        self.pages = pages
+        self.current_page = 0
+        self.total_pages = len(pages)
+        self.author_id = author_id
+        self.update_buttons()
+
+    def update_buttons(self):
+        """Обновляет состояние кнопок"""
+        self.previous_button.disabled = (self.current_page == 0)
+        self.next_button.disabled = (self.current_page >= self.total_pages - 1)
+
+    @discord.ui.button(label='⬅️ Назад', style=discord.ButtonStyle.secondary)
+    async def previous_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
+            return
+        
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_buttons()
+            embed = self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label='➡️ Вперед', style=discord.ButtonStyle.secondary)
+    async def next_button(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
+            return
+        
+        if self.current_page < self.total_pages - 1:
+            self.current_page += 1
+            self.update_buttons()
+            embed = self.create_embed()
+            await interaction.response.edit_message(embed=embed, view=self)
+
+    def create_embed(self):
+        page_items = self.pages[self.current_page]
+        embed = discord.Embed(
+            title=f"🎒 Инвентарь {self.author_name} (Страница {self.current_page + 1}/{self.total_pages})",
+            description="**Активные предметы автоматически дают бонусы! Самый сильный предмет каждого типа действует.**",
+            color=0x3498db
+        )
+        
+        user = bot.get_user(self.author_id)
+        self.author_name = user.display_name if user else "Пользователь"
+        
+        for item_data, count in page_items:
+            try:
+                item_name = item_data[1] if len(item_data) > 1 else "Неизвестный предмет"
+                item_description = item_data[2] if len(item_data) > 2 else "Описание отсутствует"
+                item_rarity = item_data[4] if len(item_data) > 4 else "common"
+                buff_description = item_data[7] if len(item_data) > 7 else "Без особого эффекта"
+                
+                # Эмодзи редкости
+                rarity_emoji = {
+                    'common': '⚪',
+                    'uncommon': '🟢', 
+                    'rare': '🔵',
+                    'epic': '🟣',
+                    'legendary': '🟠',
+                    'mythic': '🟡'
+                }.get(item_rarity, '⚪')
+                
+                # Создаем поле для предмета
+                field_value = f"**Количество:** ×{count}\n"
+                field_value += f"**Описание:** {item_description}\n"
+                field_value += f"**Эффект:** {buff_description}\n"
+                field_value += f"**Редкость:** {rarity_emoji} {item_rarity.capitalize()}"
+                
+                embed.add_field(
+                    name=f"{item_name}",
+                    value=field_value,
+                    inline=False
+                )
+                
+            except Exception as e:
+                print(f"⚠️ Ошибка обработки предмета в инвентаре: {e}")
+                continue
+        
+        # Добавляем информацию о активных бафах
+        try:
+            buffs = db.get_user_buffs(self.author_id)
+            if buffs:
+                buffs_text = "\n".join([f"• **{buff['item_name']}**: {buff['description']}" for buff in buffs.values()])
+                embed.add_field(
+                    name="🎯 Активные бафы (самые сильные)",
+                    value=buffs_text,
+                    inline=False
+                )
+        except Exception as e:
+            print(f"⚠️ Ошибка получения бафов: {e}")
+        
+        embed.set_footer(text="💡 Предметы можно продать на маркетплейсе или использовать для улучшения")
+        
+        return embed
 
 @bot.tree.command(name="myitems", description="Показать ваши предметы")
 async def my_items(interaction: discord.Interaction):
@@ -2676,12 +2944,20 @@ async def inventory(interaction: discord.Interaction):
 @app_commands.checks.cooldown(1, 10800.0)  # 3 часа КД
 async def quest(interaction: discord.Interaction):
     try:
+        # Проверяем, есть ли доступные квесты
+        if not QUESTS:
+            await interaction.response.send_message("❌ В системе пока нет доступных квестов!", ephemeral=True)
+            return
+        
         # Получаем случайный квест
         quest_id, quest_data = random.choice(list(QUESTS.items()))
         
         # Добавляем квест пользователю
-        if db.add_user_quest(interaction.user.id, quest_id):
+        success = db.add_user_quest(interaction.user.id, quest_id)
+        
+        if success:
             base_reward = quest_data['reward']
+            # Применяем бафы к награде
             reward = db.apply_buff_to_amount(interaction.user.id, base_reward, 'quest_bonus')
             reward = db.apply_buff_to_amount(interaction.user.id, reward, 'multiplier')
             reward = db.apply_buff_to_amount(interaction.user.id, reward, 'all_bonus')
@@ -2696,18 +2972,114 @@ async def quest(interaction: discord.Interaction):
             
             await interaction.response.send_message(embed=embed)
         else:
-            await interaction.response.send_message("❌ Не удалось выдать квест!", ephemeral=True)
+            await interaction.response.send_message("❌ Не удалось выдать квест! Возможно, он у вас уже есть.", ephemeral=True)
             
     except Exception as e:
         print(f"❌ Ошибка в команде quest: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка при получении квеста!", ephemeral=True)
+        traceback.print_exc()  # Добавляем детальную трассировку
+        error_embed = discord.Embed(
+            title="❌ Ошибка получения квеста",
+            description="Произошла ошибка при получении квеста. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
+# Также исправим метод add_user_quest в классе Database
+def add_user_quest(self, user_id, quest_id):
+    """Добавить квест пользователю"""
+    try:
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            INSERT INTO quests (user_id, quest_id, progress, completed) 
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id, quest_id) DO NOTHING
+        ''', (user_id, quest_id, 0, False))
+        self.conn.commit()
+        
+        # Проверяем, была ли вставка (если нет - значит квест уже существует)
+        if cursor.rowcount > 0:
+            return True
+        else:
+            return False
+            
+    except Exception as e:
+        print(f"❌ Ошибка в add_user_quest: {e}")
+        self.conn.rollback()
+        return False
+
+# И добавим команду для просмотра текущих квестов
+@bot.tree.command(name="quests", description="Показать ваши активные квесты")
+async def quests(interaction: discord.Interaction):
+    try:
+        user_quests = db.get_user_quests(interaction.user.id)
+        
+        embed = discord.Embed(title=f"{EMOJIS['quest']} Ваши квесты", color=0x9b59b6)
+        
+        if not user_quests:
+            embed.description = "У вас пока нет активных квестов. Используйте `/quest` чтобы получить новый!"
+            await interaction.response.send_message(embed=embed)
+            return
+        
+        completed_quests = 0
+        for quest_row in user_quests:
+            # Безопасный доступ к данным квеста
+            quest_id = quest_row[0] if len(quest_row) > 0 else None
+            progress = quest_row[1] if len(quest_row) > 1 else 0
+            completed = quest_row[2] if len(quest_row) > 2 else False
+            
+            if quest_id and quest_id in QUESTS:
+                quest_data = QUESTS[quest_id]
+                status = "✅" if completed else f"📊 Прогресс: {progress}%"
+                embed.add_field(
+                    name=f"{status} {quest_data['name']}",
+                    value=f"{quest_data['description']}\nНаграда: {quest_data['reward']} {EMOJIS['coin']}",
+                    inline=False
+                )
+                if completed:
+                    completed_quests += 1
+        
+        embed.set_footer(text=f"Завершено: {completed_quests}/{len(user_quests)}")
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        print(f"❌ Ошибка в команде quests: {e}")
+        error_embed = discord.Embed(
+            title="❌ Ошибка загрузки квестов",
+            description="Произошла ошибка при загрузке ваших квестов. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
+
+# Обновим метод get_user_quests для безопасного доступа к данным
+def get_user_quests(self, user_id):
+    """Получить квесты пользователя"""
+    try:
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT quest_id, progress, completed FROM quests WHERE user_id = %s', (user_id,))
+        quests = cursor.fetchall()
+        
+        # Безопасно обрабатываем результаты
+        safe_quests = []
+        for quest in quests:
+            if quest and len(quest) >= 3:
+                safe_quests.append(quest)
+        
+        return safe_quests
+    except Exception as e:
+        print(f"❌ Ошибка в get_user_quests: {e}")
+        return []
 @bot.tree.command(name="achievements", description="Показать ваши достижения")
 async def achievements(interaction: discord.Interaction):
     try:
         cursor = db.conn.cursor()
         cursor.execute('SELECT achievement_id FROM achievements WHERE user_id = %s', (interaction.user.id,))
-        user_achievements = [row[0] for row in cursor.fetchall()]
+        user_achievements_result = cursor.fetchall()
+        
+        # Безопасное извлечение achievement_id
+        user_achievements = []
+        for row in user_achievements_result:
+            if row and len(row) > 0:
+                user_achievements.append(row[0])
         
         embed = discord.Embed(title="🏅 Ваши достижения", color=0xffd700)
         
@@ -2799,7 +3171,13 @@ async def achievements(interaction: discord.Interaction):
             
     except Exception as e:
         print(f"❌ Ошибка в команде achievements: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка при загрузке достижений!", ephemeral=True)
+        traceback.print_exc()  # Добавляем детальную трассировку
+        error_embed = discord.Embed(
+            title="❌ Ошибка загрузки достижений",
+            description="Произошла ошибка при загрузке ваших достижений. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 @bot.tree.command(name="stats", description="Показать вашу статистику")
 async def stats(interaction: discord.Interaction):
@@ -3328,6 +3706,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

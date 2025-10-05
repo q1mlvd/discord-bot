@@ -14,18 +14,66 @@ class CustomBot(commands.Bot):
         # Задержка перед началом работы
         await asyncio.sleep(5)
         
+        # Предварительная синхронизация
+        try:
+            print("🔄 Начинаем предварительную синхронизацию команд...")
+            synced = await self.tree.sync()
+            print(f"✅ Предварительно синхронизировано {len(synced)} команд")
+        except Exception as e:
+            print(f"❌ Ошибка предварительной синхронизации: {e}")
+        
     async def on_ready(self):
         print(f'✅ Бот {self.user.name} успешно запущен!')
         print(f'🔗 ID бота: {self.user.id}')
-        
-        # Медленная синхронизация команд
+        print(f'👥 Бот находится на {len(self.guilds)} серверах')
+
+        # Финальная синхронизация команд
         try:
             await asyncio.sleep(2)
             synced = await self.tree.sync()
-            print(f"✅ Успешно синхронизировано {len(synced)} команд")
+            print(f"✅ Финально синхронизировано {len(synced)} команд")
+            
+            # Отладочная информация
+            if synced:
+                print("📋 Список синхронизированных команд:")
+                for cmd in synced:
+                    print(f"   - {cmd.name}: {cmd.description}")
+            else:
+                print("⚠️  Внимание: синхронизировано 0 команд")
+                print("🔍 Проверка зарегистрированных команд...")
+                commands = self.tree.get_commands()
+                print(f"🔍 Команд в дереве: {len(commands)}")
+                for cmd in commands:
+                    print(f"   - {cmd.name}: {cmd.description}")
+                
         except Exception as e:
             print(f"❌ Ошибка синхронизации: {e}")
+            traceback.print_exc()
 
+@bot.tree.command(name="test", description="Тестовая команда для проверки работы")
+async def test(interaction: discord.Interaction):
+    """Простая тестовая команда для проверки синхронизации"""
+    embed = discord.Embed(
+        title="✅ Тестовая команда работает!",
+        description="Если вы видите это сообщение, значит команды синхронизированы правильно!",
+        color=0x00ff00
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# Событие подключения для отладки
+@bot.event
+async def on_connect():
+    print(f"🔗 Бот подключился к Discord")
+    commands_count = len(bot.tree.get_commands())
+    print(f"📊 Зарегистрировано команд в коде: {commands_count}")
+    
+    if commands_count == 0:
+        print("❌ КРИТИЧЕСКАЯ ОШИБКА: Нет зарегистрированных команд!")
+        print("🔍 Проверьте:")
+        print("   - Декораторы @bot.tree.command")
+        print("   - Отсутствие ошибок в определении команд")
+        print("   - Правильность импортов")
+        
 # Импорт PostgreSQL
 try:
     import psycopg2
@@ -81,7 +129,11 @@ if not DATABASE_URL:
     exit(1)
 
 # Настройки бота
-intents = discord.Intents.all()
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+intents.guilds = True
+
 bot = CustomBot(command_prefix='!', intents=intents, help_command=None)
 
 # Конфигурация
@@ -1570,21 +1622,6 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
                 pass
 
 # КОМАНДЫ БОТА
-
-@bot.event
-async def on_ready():
-    print(f'✅ Бот {bot.user.name} успешно запущен!')
-    print(f'🔗 ID бота: {bot.user.id}')
-    print(f'👥 Бот находится на {len(bot.guilds)} серверах')
-
-    try:
-        # Очищаем все команды
-        bot.tree.clear_commands(guild=None)
-        # Синхронизируем заново
-        synced = await bot.tree.sync()
-        print(f"✅ Успешно синхронизировано {len(synced)} команд")
-    except Exception as e:
-        print(f"❌ Ошибка синхронизации команд: {e}")
 
 # Экономические команды
 @bot.tree.command(name="balance", description="Показать ваш баланс")
@@ -3661,6 +3698,20 @@ async def market_item_autocomplete(interaction: discord.Interaction, current: st
         print(f"❌ Ошибка в autocomplete: {e}")
         return []
 
+@bot.event
+async def on_connect():
+    print(f"🔗 Бот подключился к Discord")
+    print(f"📊 Зарегистрировано команд: {len(bot.tree.get_commands())}")
+    
+    # Выведем список зарегистрированных команд
+    commands_list = bot.tree.get_commands()
+    if commands_list:
+        print("📋 Зарегистрированные команды:")
+        for cmd in commands_list:
+            print(f"   - {cmd.name}: {cmd.description}")
+    else:
+        print("⚠️  Предупреждение: нет зарегистрированных команд")
+
 # Создаем экземпляр базы данных
 try:
     db = Database()
@@ -3675,6 +3726,44 @@ except Exception as e:
     traceback.print_exc()
     exit(1)
 
+@bot.tree.command(name="sync", description="Синхронизировать команды (админ)")
+@is_admin()
+async def sync_commands(interaction: discord.Interaction):
+    try:
+        await interaction.response.defer(ephemeral=True)
+        
+        # Синхронизация глобальных команд
+        synced = await bot.tree.sync()
+        
+        embed = discord.Embed(
+            title="✅ Синхронизация завершена",
+            description=f"Синхронизировано {len(synced)} команд",
+            color=0x00ff00
+        )
+        
+        if synced:
+            commands_list = "\n".join([f"• `/{cmd.name}`" for cmd in synced])
+            embed.add_field(name="Синхронизированные команды:", value=commands_list, inline=False)
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Ошибка синхронизации",
+            description=f"```{e}```",
+            color=0xff0000
+        )
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
+
+async def setup_hook(self):
+    print("🔄 Запуск setup_hook...")
+    await asyncio.sleep(10)  # Увеличьте задержку до 10 секунд
+    try:
+        synced = await self.tree.sync()
+        print(f"✅ Синхронизировано {len(synced)} команд в setup_hook")
+    except Exception as e:
+        print(f"❌ Ошибка в setup_hook: {e}")
+
 # ЗАПУСК БОТА
 if __name__ == "__main__":
     print("🚀 Запуск улучшенного экономического бота...")
@@ -3688,6 +3777,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

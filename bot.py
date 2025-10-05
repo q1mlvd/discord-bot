@@ -8,9 +8,6 @@ import random
 import asyncio
 import datetime
 import traceback
-import asyncio
-import time
-from discord import HTTPException
 
 class CustomBot(commands.Bot):
     async def setup_hook(self):
@@ -168,14 +165,35 @@ QUESTS = {
 # Безопасный доступ к данным пользователя
 def get_user_data_safe(user_data):
     """Безопасное извлечение данных пользователя из кортежа"""
-    return {
-        'user_id': user_data[0] if len(user_data) > 0 else 0,
-        'balance': user_data[1] if len(user_data) > 1 else 100,
-        'daily_streak': user_data[2] if len(user_data) > 2 else 0,
-        'last_daily': user_data[3] if len(user_data) > 3 else None,
-        'inventory': user_data[4] if len(user_data) > 4 else '{"cases": {}, "items": {}}',
-        'created_at': user_data[5] if len(user_data) > 5 else datetime.datetime.now()
-    }
+    if not user_data:
+        return {
+            'user_id': 0,
+            'balance': 100,
+            'daily_streak': 0,
+            'last_daily': None,
+            'inventory': '{"cases": {}, "items": {}}',
+            'created_at': datetime.datetime.now()
+        }
+    
+    try:
+        return {
+            'user_id': user_data[0] if len(user_data) > 0 else 0,
+            'balance': user_data[1] if len(user_data) > 1 else 100,
+            'daily_streak': user_data[2] if len(user_data) > 2 else 0,
+            'last_daily': user_data[3] if len(user_data) > 3 else None,
+            'inventory': user_data[4] if len(user_data) > 4 else '{"cases": {}, "items": {}}',
+            'created_at': user_data[5] if len(user_data) > 5 else datetime.datetime.now()
+        }
+    except (IndexError, TypeError) as e:
+        print(f"⚠️ Ошибка в get_user_data_safe: {e}")
+        return {
+            'user_id': 0,
+            'balance': 100,
+            'daily_streak': 0,
+            'last_daily': None,
+            'inventory': '{"cases": {}, "items": {}}',
+            'created_at': datetime.datetime.now()
+        }
 
 # Исправленный класс Database для PostgreSQL
 class Database:
@@ -792,14 +810,14 @@ class Database:
             return []
 
     def get_item_name_by_id(self, item_id):
-        """Получить название предмета по ID"""
+        """Безопасное получение названия предмета по ID"""
         try:
             if not item_id or not str(item_id).isdigit():
                 return f"Предмет ID:{item_id}"
                 
             item_data = self.get_item(int(item_id))
             if item_data and len(item_data) > 1 and item_data[1]:
-                return item_data[1]  # название предмета
+                return item_data[1]
             return f"Предмет ID:{item_id}"
         except Exception as e:
             print(f"❌ Ошибка получения названия предмета {item_id}: {e}")
@@ -891,17 +909,25 @@ class Database:
         return cursor.fetchall()
 
     def get_user_quests(self, user_id):
-        """Получить квесты пользователя"""
+        """Получить квесты пользователя - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             cursor = self.conn.cursor()
             cursor.execute('SELECT quest_id, progress, completed FROM quests WHERE user_id = %s', (user_id,))
-            return cursor.fetchall()
+            quests = cursor.fetchall()
+            
+            # Безопасно обрабатываем результаты
+            safe_quests = []
+            for quest in quests:
+                if quest and len(quest) >= 3:
+                    safe_quests.append(quest)
+            
+            return safe_quests
         except Exception as e:
             print(f"❌ Ошибка в get_user_quests: {e}")
             return []
     
     def add_user_quest(self, user_id, quest_id):
-        """Добавить квест пользователю"""
+        """Добавить квест пользователю - ИСПРАВЛЕННАЯ ВЕРСИЯ"""
         try:
             cursor = self.conn.cursor()
             cursor.execute('''
@@ -910,9 +936,16 @@ class Database:
                 ON CONFLICT (user_id, quest_id) DO NOTHING
             ''', (user_id, quest_id, 0, False))
             self.conn.commit()
-            return True
+            
+            # Проверяем, была ли вставка
+            if cursor.rowcount > 0:
+                return True
+            else:
+                return False
+                
         except Exception as e:
             print(f"❌ Ошибка в add_user_quest: {e}")
+            self.conn.rollback()
             return False
     
     def update_quest_progress(self, user_id, quest_id, progress, completed=False):
@@ -1543,8 +1576,11 @@ async def on_ready():
     print(f'✅ Бот {bot.user.name} успешно запущен!')
     print(f'🔗 ID бота: {bot.user.id}')
     print(f'👥 Бот находится на {len(bot.guilds)} серверах')
-    
+
     try:
+        # Очищаем все команды
+        bot.tree.clear_commands(guild=None)
+        # Синхронизируем заново
         synced = await bot.tree.sync()
         print(f"✅ Успешно синхронизировано {len(synced)} команд")
     except Exception as e:
@@ -2454,7 +2490,16 @@ class MyItemsPaginatedView(View):
         self.current_page = 0
         self.total_pages = len(pages)
         self.author_id = author_id
+        self.author_name = "Пользователь"  # ДОБАВЬТЕ ЭТУ СТРОКУ
         self.update_buttons()
+        
+        # Получаем имя пользователя
+        try:
+            user = bot.get_user(author_id)
+            if user:
+                self.author_name = user.display_name
+        except:
+            pass
 
     def update_buttons(self):
         """Обновляет состояние кнопок"""
@@ -2899,7 +2944,7 @@ async def inventory(interaction: discord.Interaction):
 # КВЕСТЫ И ДОСТИЖЕНИЯ
 @bot.tree.command(name="quest", description="Получить случайный квест")
 @app_commands.checks.cooldown(1, 10800.0)  # 3 часа КД
-async def quest(interaction: discord.Interaction):
+async def quest_command(interaction: discord.Interaction):  # ИЗМЕНИТЕ НАЗВАНИЕ ФУНКЦИИ
     try:
         # Проверяем, есть ли доступные квесты
         if not QUESTS:
@@ -2933,13 +2978,26 @@ async def quest(interaction: discord.Interaction):
             
     except Exception as e:
         print(f"❌ Ошибка в команде quest: {e}")
-        traceback.print_exc()  # Добавляем детальную трассировку
         error_embed = discord.Embed(
             title="❌ Ошибка получения квеста",
             description="Произошла ошибка при получении квеста. Попробуйте позже.",
             color=0xff0000
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
+
+# Обработчик кд для /quest
+@quest_command.error
+async def quest_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CommandOnCooldown):
+        hours = int(error.retry_after // 3600)
+        minutes = int((error.retry_after % 3600) // 60)
+        
+        await interaction.response.send_message(
+            f"❌ Следующий квест можно получить через {hours} часов {minutes} минут",
+            ephemeral=True
+        )
+    else:
+        raise error
 
 # Также исправим метод add_user_quest в классе Database
 def add_user_quest(self, user_id, quest_id):
@@ -2966,7 +3024,7 @@ def add_user_quest(self, user_id, quest_id):
 
 # И добавим команду для просмотра текущих квестов
 @bot.tree.command(name="quests", description="Показать ваши активные квесты")
-async def quests(interaction: discord.Interaction):
+async def show_quests(interaction: discord.Interaction):  # ИЗМЕНИТЕ НАЗВАНИЕ ФУНКЦИИ
     try:
         user_quests = db.get_user_quests(interaction.user.id)
         
@@ -3026,7 +3084,7 @@ def get_user_quests(self, user_id):
         print(f"❌ Ошибка в get_user_quests: {e}")
         return []
 @bot.tree.command(name="achievements", description="Показать ваши достижения")
-async def achievements(interaction: discord.Interaction):
+async def show_achievements(interaction: discord.Interaction):  # ИЗМЕНИТЕ НАЗВАНИЕ
     try:
         cursor = db.conn.cursor()
         cursor.execute('SELECT achievement_id FROM achievements WHERE user_id = %s', (interaction.user.id,))
@@ -3072,13 +3130,15 @@ async def achievements(interaction: discord.Interaction):
                 await interaction.response.send_message(embed=embed)
             else:
                 # Создаем пагинацию для достижений
-                class AchievementsView(View):
-                    def __init__(self, pages, author_id):
+                class AchievementsPaginatedView(View):  # ИЗМЕНИТЕ НАЗВАНИЕ КЛАССА
+                    def __init__(self, pages, author_id, unlocked_count, total_count):
                         super().__init__(timeout=120)
                         self.pages = pages
                         self.current_page = 0
                         self.total_pages = len(pages)
                         self.author_id = author_id
+                        self.unlocked_count = unlocked_count
+                        self.total_count = total_count
                         self.update_buttons()
 
                     def update_buttons(self):
@@ -3115,10 +3175,10 @@ async def achievements(interaction: discord.Interaction):
                             description=self.pages[self.current_page],
                             color=0xffd700
                         )
-                        embed.set_footer(text=f"Разблокировано: {unlocked_count}/{len(ACHIEVEMENTS)}")
+                        embed.set_footer(text=f"Разблокировано: {self.unlocked_count}/{self.total_count}")
                         return embed
                 
-                view = AchievementsView(pages, interaction.user.id)
+                view = AchievementsPaginatedView(pages, interaction.user.id, unlocked_count, len(ACHIEVEMENTS))
                 embed = view.create_embed()
                 await interaction.response.send_message(embed=embed, view=view)
         else:
@@ -3128,7 +3188,6 @@ async def achievements(interaction: discord.Interaction):
             
     except Exception as e:
         print(f"❌ Ошибка в команде achievements: {e}")
-        traceback.print_exc()  # Добавляем детальную трассировку
         error_embed = discord.Embed(
             title="❌ Ошибка загрузки достижений",
             description="Произошла ошибка при загрузке ваших достижений. Попробуйте позже.",
@@ -3519,40 +3578,6 @@ async def help_command(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
-# СИСТЕМА КВЕСТОВ И ПРОГРЕССА
-@bot.tree.command(name="quests", description="Показать ваши активные квесты")
-async def quests(interaction: discord.Interaction):
-    try:
-        user_quests = db.get_user_quests(interaction.user.id)
-        
-        embed = discord.Embed(title=f"{EMOJIS['quest']} Ваши квесты", color=0x9b59b6)
-        
-        if not user_quests:
-            embed.description = "У вас пока нет активных квестов. Используйте `/quest` чтобы получить новый!"
-            await interaction.response.send_message(embed=embed)
-            return
-        
-        completed_quests = 0
-        for quest_row in user_quests:
-            quest_id, progress, completed = quest_row
-            if quest_id in QUESTS:
-                quest_data = QUESTS[quest_id]
-                status = "✅" if completed else f"📊 Прогресс: {progress}%"
-                embed.add_field(
-                    name=f"{status} {quest_data['name']}",
-                    value=f"{quest_data['description']}\nНаграда: {quest_data['reward']} {EMOJIS['coin']}",
-                    inline=False
-                )
-                if completed:
-                    completed_quests += 1
-        
-        embed.set_footer(text=f"Завершено: {completed_quests}/{len(user_quests)}")
-        await interaction.response.send_message(embed=embed)
-        
-    except Exception as e:
-        print(f"❌ Ошибка в команде quests: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка при загрузке квестов!", ephemeral=True)
-
 # КОМАНДА ПЕРЕЗАГРУЗКИ БАФОВ
 @bot.tree.command(name="buffs", description="Показать ваши активные бафы")
 async def buffs(interaction: discord.Interaction):
@@ -3663,6 +3688,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

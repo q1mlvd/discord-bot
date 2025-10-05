@@ -189,15 +189,15 @@ class Database:
                     raise
 
     def get_cases(self):
-    try:
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM cases ORDER BY price ASC')
-        cases = cursor.fetchall()
-        print(f"🔍 Загружено {len(cases)} кейсов из базы данных")
-        return cases
-    except Exception as e:
-        print(f"❌ Ошибка в get_cases: {e}")
-        return []
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT * FROM cases ORDER BY price ASC')
+            cases = cursor.fetchall()
+            print(f"🔍 Загружено {len(cases)} кейсов из базы данных")
+            return cases
+        except Exception as e:
+            print(f"❌ Ошибка в get_cases: {e}")
+            return []
 
     def get_user(self, user_id):
         """Безопасное получение пользователя"""
@@ -1949,6 +1949,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

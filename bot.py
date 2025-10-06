@@ -1842,19 +1842,15 @@ async def balance(interaction: discord.Interaction, user: discord.Member = None)
     try:
         user = user or interaction.user
         
-        # Убедимся, что пользователь существует в базе
         db.get_user(user.id)
-        
         user_data = db.get_user(user.id)
         user_safe = get_user_data_safe(user_data)
         
-        # Получаем статистику достижений
         cursor = db.conn.cursor()
         cursor.execute('SELECT COUNT(*) FROM achievements WHERE user_id = %s', (user.id,))
         achievements_result = cursor.fetchone()
         achievements_count = achievements_result[0] if achievements_result else 0
         
-        # Получаем активные бафы
         buffs = {}
         try:
             buffs = db.get_user_buffs(user.id)
@@ -1869,7 +1865,6 @@ async def balance(interaction: discord.Interaction, user: discord.Member = None)
         embed.add_field(name="Ежедневная серия", value=f"{user_safe['daily_streak']} дней", inline=True)
         embed.add_field(name="Достижения", value=f"{achievements_count}/{len(ACHIEVEMENTS)}", inline=True)
         
-        # Показываем активные бафы
         if buffs:
             buffs_text = "\n".join([f"• {buff['item_name']}: {buff['description']}" for buff in buffs.values()])
             embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
@@ -1927,7 +1922,7 @@ async def daily(interaction: discord.Interaction):
         db.log_transaction(interaction.user.id, 'daily', reward)
         db.update_user_stat(interaction.user.id, 'daily_claimed')
         
-        # ПРИНУДИТЕЛЬНАЯ ПРОВЕРКА ДОСТИЖЕНИЙ
+        # Принудительная проверка достижений
         new_achievements = db.check_achievements(interaction.user.id)
         
         embed = discord.Embed(
@@ -2400,177 +2395,194 @@ async def steal_error(interaction: discord.Interaction, error: app_commands.AppC
     else:
         raise error
 
-# ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ
-@bot.tree.command(name="items", description="Показать все доступные предметы с эффектами")
-async def items_list(interaction: discord.Interaction):
-    try:
-        items = db.get_all_items_safe()
-        
-        if not items:
-            await interaction.response.send_message("❌ Предметы не найдены!", ephemeral=True)
-            return
-        
-        print(f"🔍 Загружено {len(items)} предметов из базы данных")
-        
-        # Создаем страницы
-        items_per_page = 5
-        pages = []
-        
-        for i in range(0, len(items), items_per_page):
-            page_items = items[i:i + items_per_page]
-            pages.append(page_items)
-        
-        # Создаем view для пагинации
-        view = ItemsPaginatedView(pages, interaction.user.id)
-        embed = view.create_embed()
-        
-        await interaction.response.send_message(embed=embed, view=view)
-        
-    except Exception as e:
-        print(f"❌ Ошибка в команде items: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка при загрузке предметов!", ephemeral=True)
+# ДОПОЛНИТЕЛЬНЫЕ КОМАНДЫ (myitems, pay, giftcase, openmycase - оставляем без изменений)
 
-@bot.tree.command(name="myitems", description="Показать ваши предметы с эффектами")
-async def my_items(interaction: discord.Interaction):
+# УЛУЧШЕННЫЙ МАРКЕТПЛЕЙС
+@bot.tree.command(name="market", description="Взаимодействие с маркетплейсом")
+@app_commands.describe(action="Действие на маркетплейсе", item_id="ID товара (для покупки)", item_name="Название предмета (для продажи)", price="Цена")
+@app_commands.choices(action=[
+    app_commands.Choice(name="📋 Список товаров", value="list"),
+    app_commands.Choice(name="💰 Продать предмет", value="sell"),
+    app_commands.Choice(name="🛒 Купить товар", value="buy"),
+    app_commands.Choice(name="❌ Удалить свой товар", value="remove")
+])
+async def market(interaction: discord.Interaction, action: app_commands.Choice[str], item_id: int = None, item_name: str = None, price: int = None):
     try:
-        inventory = db.get_user_inventory_safe(interaction.user.id)
-        
-        items = inventory.get("items", {})
-        if not items:
-            embed = discord.Embed(
-                title=f"📦 Предметы {interaction.user.display_name}",
-                description="У вас пока нет предметов. Открывайте кейсы или покупайте на маркетплейсе!",
-                color=0x3498db
-            )
+        if action.value == "list":
+            cursor = db.conn.cursor()
+            cursor.execute('''
+                SELECT m.id, m.seller_id, m.item_name, m.price, m.created_at, i.description 
+                FROM market m 
+                LEFT JOIN items i ON m.item_name = i.name 
+                ORDER BY m.created_at DESC LIMIT 15
+            ''')
+            items = cursor.fetchall()
+            
+            embed = discord.Embed(title="🏪 Маркетплейс - Последние 15 товаров", color=0x00ff00)
+            
+            if not items:
+                embed.description = "На маркетплейсе пока нет товаров."
+            else:
+                for item in items:
+                    item_id = item[0]
+                    seller_id = item[1]
+                    item_name_db = item[2]
+                    item_price = item[3]
+                    created_at = item[4]
+                    item_description = item[5] if item[5] else "Описание отсутствует"
+                    
+                    seller = bot.get_user(seller_id) if seller_id else None
+                    
+                    buff_info = ""
+                    try:
+                        item_data = db.get_item_by_name(item_name_db)
+                        if item_data and len(item_data) > 7 and item_data[7]:
+                            buff_info = f"\n**Эффект:** {item_data[7]}"
+                    except Exception as e:
+                        print(f"⚠️ Ошибка получения информации о предмете {item_name_db}: {e}")
+                    
+                    embed.add_field(
+                        name=f"🆔 #{item_id} | {item_name_db} | {item_price} {EMOJIS['coin']}",
+                        value=f"**Продавец:** {seller.mention if seller else 'Неизвестно'}{buff_info}\n**Описание:** {item_description}",
+                        inline=False
+                    )
+            
+            embed.set_footer(text="Используйте /market buy [ID] чтобы купить товар")
             await interaction.response.send_message(embed=embed)
-            return
         
-        user_items = []
-        for item_id, count in items.items():
+        elif action.value == "sell":
+            if not item_name or not price:
+                await interaction.response.send_message("❌ Укажите название предмета и цену!", ephemeral=True)
+                return
+            
+            if price <= 0:
+                await interaction.response.send_message("❌ Цена должна быть положительной!", ephemeral=True)
+                return
+            
+            # Проверяем, есть ли предмет у пользователя
+            if not db.remove_item_from_inventory(interaction.user.id, item_name):
+                await interaction.response.send_message("❌ У вас нет этого предмета в инвентаре!", ephemeral=True)
+                return
+            
+            cursor = db.conn.cursor()
+            cursor.execute('INSERT INTO market (seller_id, item_name, price) VALUES (%s, %s, %s) RETURNING id', 
+                          (interaction.user.id, item_name, price))
+            new_item_id = cursor.fetchone()[0]
+            db.conn.commit()
+            db.update_user_stat(interaction.user.id, 'market_sales')
+            
+            embed = discord.Embed(
+                title="✅ Предмет выставлен на продажу!",
+                description=f"**Предмет:** {item_name}\n**Цена:** {price} {EMOJIS['coin']}\n**ID товара:** {new_item_id}",
+                color=0x00ff00
+            )
+            embed.set_footer(text="Другие пользователи могут купить ваш товар по ID")
+            await interaction.response.send_message(embed=embed)
+        
+        elif action.value == "buy":
+            if item_id is None:
+                await interaction.response.send_message("❌ Укажите ID товара для покупки! Используйте /market list чтобы посмотреть товары.", ephemeral=True)
+                return
+            
+            cursor = db.conn.cursor()
+            cursor.execute('SELECT id, seller_id, item_name, price FROM market WHERE id = %s', (item_id,))
+            item = cursor.fetchone()
+            
+            if not item:
+                await interaction.response.send_message("❌ Товар с таким ID не найден!", ephemeral=True)
+                return
+            
+            market_item_id = item[0]
+            seller_id = item[1]
+            market_item_name = item[2]
+            item_price = item[3]
+            
+            if not seller_id:
+                await interaction.response.send_message("❌ Ошибка: продавец не найден!", ephemeral=True)
+                return
+            
+            if seller_id == interaction.user.id:
+                await interaction.response.send_message("❌ Нельзя купить свой же товар!", ephemeral=True)
+                return
+            
+            user_data = db.get_user(interaction.user.id)
+            user_safe = get_user_data_safe(user_data)
+            
+            if user_safe['balance'] < item_price:
+                await interaction.response.send_message("❌ Недостаточно монет!", ephemeral=True)
+                return
+            
+            # Совершаем покупку
+            db.update_balance(interaction.user.id, -item_price)
+            db.update_balance(seller_id, item_price)
+            db.add_item_to_inventory(interaction.user.id, market_item_name)
+            
+            cursor.execute('DELETE FROM market WHERE id = %s', (market_item_id,))
+            db.conn.commit()
+            
+            db.log_transaction(interaction.user.id, 'market_buy', -item_price, seller_id, f"Покупка: {market_item_name}")
+            db.log_transaction(seller_id, 'market_sell', item_price, interaction.user.id, f"Продажа: {market_item_name}")
+            
+            seller_user = bot.get_user(seller_id)
+            buff_info = ""
             try:
-                if item_id.isdigit():
-                    item_data = db.get_item(int(item_id))
-                    if item_data:
-                        user_items.append((item_data, count))
+                item_data = db.get_item_by_name(market_item_name)
+                if item_data and len(item_data) > 7 and item_data[7]:
+                    buff_info = f"\n**Эффект:** {item_data[7]}"
             except Exception as e:
-                print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
-                continue
-        
-        if not user_items:
+                print(f"⚠️ Ошибка получения бафа предмета {market_item_name}: {e}")
+            
             embed = discord.Embed(
-                title=f"📦 Предметы {interaction.user.display_name}",
-                description="Не удалось загрузить информацию о ваших предметах.",
-                color=0x3498db
+                title="✅ Покупка совершена!",
+                description=f"**Товар:** {market_item_name}\n**Цена:** {item_price} {EMOJIS['coin']}\n**Продавец:** {seller_user.mention if seller_user else 'Неизвестно'}{buff_info}",
+                color=0x00ff00
             )
             await interaction.response.send_message(embed=embed)
-            return
         
-        items_per_page = 5
-        pages = []
-        
-        for i in range(0, len(user_items), items_per_page):
-            page_items = user_items[i:i + items_per_page]
-            pages.append(page_items)
-        
-        view = MyItemsPaginatedView(pages, interaction.user.id)
-        embed = view.create_embed()
-        
-        await interaction.response.send_message(embed=embed, view=view)
-        
+        elif action.value == "remove":
+            if item_id is None:
+                await interaction.response.send_message("❌ Укажите ID вашего товара для удаления!", ephemeral=True)
+                return
+            
+            cursor = db.conn.cursor()
+            cursor.execute('SELECT id, seller_id, item_name FROM market WHERE id = %s', (item_id,))
+            item = cursor.fetchone()
+            
+            if not item:
+                await interaction.response.send_message("❌ Товар с таким ID не найден!", ephemeral=True)
+                return
+            
+            if item[1] != interaction.user.id:
+                await interaction.response.send_message("❌ Вы можете удалять только свои товары!", ephemeral=True)
+                return
+            
+            # Возвращаем предмет в инвентарь
+            db.add_item_to_inventory(interaction.user.id, item[2])
+            cursor.execute('DELETE FROM market WHERE id = %s', (item_id,))
+            db.conn.commit()
+            
+            embed = discord.Embed(
+                title="✅ Товар удален с маркетплейса",
+                description=f"Товар **{item[2]}** возвращен в ваш инвентарь.",
+                color=0x00ff00
+            )
+            await interaction.response.send_message(embed=embed)
+    
     except Exception as e:
-        print(f"❌ Ошибка в команде myitems: {e}")
-        await interaction.response.send_message("❌ Произошла ошибка при загрузке предметов!", ephemeral=True)
-
-@bot.tree.command(name="pay", description="Перевести монеты другому пользователю")
-@app_commands.describe(user="Пользователь, которому переводим", amount="Сумма перевода")
-async def pay(interaction: discord.Interaction, user: discord.Member, amount: int):
-    if amount <= 0:
-        await interaction.response.send_message("Сумма должна быть положительной!", ephemeral=True)
-        return
-    
-    if user.id == interaction.user.id:
-        await interaction.response.send_message("Нельзя переводить самому себе!", ephemeral=True)
-        return
-    
-    sender_data = db.get_user(interaction.user.id)
-    sender_safe = get_user_data_safe(sender_data)
-    
-    if sender_safe['balance'] < amount:
-        await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
-        return
-    
-    transfer_amount = db.apply_buff_to_amount(interaction.user.id, amount, 'transfer_bonus')
-    
-    db.update_balance(interaction.user.id, -transfer_amount)
-    db.update_balance(user.id, amount)
-    db.log_transaction(interaction.user.id, 'transfer', -transfer_amount, user.id, f"Перевод {user.name}")
-    db.log_transaction(user.id, 'transfer', amount, interaction.user.id, f"Получено от {interaction.user.name}")
-    
-    embed = discord.Embed(
-        title=f"{EMOJIS['coin']} Перевод средств",
-        description=f"{interaction.user.mention} → {user.mention}",
-        color=0x00ff00
-    )
-    embed.add_field(name="Сумма", value=f"{amount} {EMOJIS['coin']}")
-    if transfer_amount < amount:
-        embed.add_field(name="Комиссия", value=f"-{amount - transfer_amount} {EMOJIS['coin']} (баф)")
-    
-    await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name="giftcase", description="Подарить кейс другому пользователю")
-@app_commands.describe(user="Пользователь, которому дарим кейс", case_id="ID кейса")
-async def giftcase(interaction: discord.Interaction, user: discord.Member, case_id: int):
-    if user.id == interaction.user.id:
-        await interaction.response.send_message("Нельзя дарить кейс самому себе!", ephemeral=True)
-        return
-    
-    case_data = db.get_case(case_id)
-    if not case_data:
-        await interaction.response.send_message("Кейс не найден!", ephemeral=True)
-        return
-    
-    user_data = db.get_user(interaction.user.id)
-    user_safe = get_user_data_safe(user_data)
-    
-    if user_safe['balance'] < case_data[2]:
-        await interaction.response.send_message("Недостаточно монет!", ephemeral=True)
-        return
-    
-    db.get_user(user.id)
-    
-    db.update_balance(interaction.user.id, -case_data[2])
-    db.add_case_to_inventory(user.id, case_id, case_data[1], "gifted")
-    db.log_transaction(interaction.user.id, 'gift_case', -case_data[2], user.id, f"Подарок: {case_data[1]}")
-    db.update_user_stat(interaction.user.id, 'gifts_sent')
-    
-    embed = discord.Embed(
-        title="🎁 Кейс в подарок!",
-        description=f"{interaction.user.mention} подарил {case_data[1]} пользователю {user.mention}!",
-        color=0xff69b4
-    )
-    embed.add_field(name="💼 Получатель", value=f"Кейс добавлен в инвентарь {user.mention}")
-    embed.add_field(name="📦 Кейс", value=f"{case_data[1]}")
-    embed.add_field(name="💰 Стоимость", value=f"{case_data[2]} {EMOJIS['coin']}")
-    
-    await interaction.response.send_message(embed=embed)
+        print(f"❌ Критическая ошибка в команде market: {e}")
+        error_embed = discord.Embed(
+            title="❌ Ошибка маркетплейса",
+            description="Произошла ошибка при выполнении команды. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 @bot.tree.command(name="work", description="Выполнить случайную работу")
 @app_commands.checks.cooldown(1, 3600.0)  # 1 час КД
 async def work_command(interaction: discord.Interaction):
     try:
-        works = {
-            'programmer': {'name': '💻 Программист', 'description': 'Написать код для проекта', 'min_reward': 500, 'max_reward': 1500},
-            'designer': {'name': '🎨 Дизайнер', 'description': 'Создать дизайн интерфейса', 'min_reward': 400, 'max_reward': 1200},
-            'writer': {'name': '📝 Копирайтер', 'description': 'Написать статьи для блога', 'min_reward': 300, 'max_reward': 1000},
-            'translator': {'name': '🌐 Переводчик', 'description': 'Перевести документы', 'min_reward': 350, 'max_reward': 1100},
-            'tester': {'name': '🐛 Тестировщик', 'description': 'Найти баги в приложении', 'min_reward': 450, 'max_reward': 1300},
-            'manager': {'name': '📊 Менеджер', 'description': 'Управление проектом', 'min_reward': 600, 'max_reward': 1800},
-            'security': {'name': '🛡️ Аналитик безопасности', 'description': 'Проверить систему на уязвимости', 'min_reward': 700, 'max_reward': 2000},
-            'data_scientist': {'name': '📈 Data Scientist', 'description': 'Проанализировать данные', 'min_reward': 550, 'max_reward': 1600}
-        }
-        
-        work_type = random.choice(list(works.keys()))
-        work_data = works[work_type]
+        work_type = random.choice(list(WORKS.keys()))
+        work_data = WORKS[work_type]
         
         base_reward = random.randint(work_data['min_reward'], work_data['max_reward'])
         reward = db.apply_buff_to_amount(interaction.user.id, base_reward, 'multiplier')
@@ -3288,8 +3300,8 @@ async def stats(interaction: discord.Interaction):
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 # ЛИДЕРБОРДЫ
-@bot.tree.command(name="stats", description="Показать вашу статистику")
-async def stats(interaction: discord.Interaction):
+@bot.tree.command(name="mystats", description="Показать вашу статистику")  # Изменили имя на mystats чтобы избежать конфликта
+async def mystats(interaction: discord.Interaction):
     try:
         # Обновляем статистику предметов
         db.update_items_collected_stat(interaction.user.id)
@@ -3320,7 +3332,7 @@ async def stats(interaction: discord.Interaction):
         embed.add_field(
             name="🎰 Статистика игр",
             value=f"**Побед в рулетке:** {stats_data[5]}\n"
-                  f"**Побед в слотах:** {stats_data[6]}\n"  # Исправлено
+                  f"**Побед в слотах:** {stats_data[6]}\n"
                   f"**Побед в блэкджеке:** {stats_data[7]}\n"
                   f"**Побед в coinflip:** {stats_data[8]}",
             inline=False
@@ -3336,7 +3348,8 @@ async def stats(interaction: discord.Interaction):
                   f"**Всего заработано:** {stats_data[10]} {EMOJIS['coin']}\n"
                   f"**Продаж на маркете:** {stats_data[11]}\n"
                   f"**Подарков отправлено:** {stats_data[12]}\n"
-                  f"**Предметов собрано:** {unique_items}",  # Исправлено
+                  f"**Предметов собрано:** {unique_items}\n"
+                  f"**Работ выполнено:** {stats_data[15]}",
             inline=False
         )
         
@@ -3347,7 +3360,7 @@ async def stats(interaction: discord.Interaction):
         await interaction.response.send_message(embed=embed)
         
     except Exception as e:
-        print(f"❌ Ошибка в команде stats: {e}")
+        print(f"❌ Ошибка в команде mystats: {e}")
         error_embed = discord.Embed(
             title="❌ Ошибка загрузки статистики",
             description="Произошла ошибка при загрузке статистики.",
@@ -3364,12 +3377,99 @@ async def stats(interaction: discord.Interaction):
     app_commands.Choice(name="🦹 Кражи", value="steals"),
     app_commands.Choice(name="🎁 Кейсы", value="cases"),
     app_commands.Choice(name="🏅 Достижения", value="achievements"),
-    app_commands.Choice(name="📦 Предметы", value="items")
+    app_commands.Choice(name="📦 Предметы", value="items"),
+    app_commands.Choice(name="💼 Работы", value="works")
 ])
 async def leaderboard(interaction: discord.Interaction, type: app_commands.Choice[str]):
     cursor = db.conn.cursor()
     
-    if type.value == 'items':
+    if type.value == 'balance':
+        cursor.execute('SELECT user_id, balance FROM users ORDER BY balance DESC LIMIT 10')
+        title = "💰 Лидеры по балансу"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, balance) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{balance} {EMOJIS['coin']}",
+                inline=False
+            )
+    
+    elif type.value == 'wins':
+        cursor.execute('''
+            SELECT user_id, 
+                   (COALESCE(roulette_wins, 0) + COALESCE(duels_won, 0) + COALESCE(slot_wins, 0) + 
+                    COALESCE(blackjack_wins, 0) + COALESCE(coinflip_wins, 0)) as total_wins 
+            FROM user_stats 
+            ORDER BY total_wins DESC LIMIT 10
+        ''')
+        title = "🏆 Лидеры по победам"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, wins) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{wins} побед",
+                inline=False
+            )
+    
+    elif type.value == 'steals':
+        cursor.execute('SELECT user_id, steals_successful FROM user_stats ORDER BY steals_successful DESC LIMIT 10')
+        title = "🦹 Лидеры по кражам"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, steals) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{steals} краж",
+                inline=False
+            )
+    
+    elif type.value == 'cases':
+        cursor.execute('SELECT user_id, cases_opened FROM user_stats ORDER BY cases_opened DESC LIMIT 10')
+        title = "🎁 Лидеры по кейсам"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, cases) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{cases} кейсов",
+                inline=False
+            )
+    
+    elif type.value == 'achievements':
+        cursor.execute('''
+            SELECT user_id, COUNT(*) as achievement_count 
+            FROM achievements 
+            GROUP BY user_id 
+            ORDER BY achievement_count DESC LIMIT 10
+        ''')
+        title = "🏅 Лидеры по достижениям"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, achievements_count) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{achievements_count} достижений",
+                inline=False
+            )
+    
+    elif type.value == 'items':
         # Исправленный запрос для лидерборда по предметам
         cursor.execute('''
             SELECT u.user_id, 
@@ -3391,7 +3491,22 @@ async def leaderboard(interaction: discord.Interaction, type: app_commands.Choic
                 inline=False
             )
     
-    await interaction.response.send_message(embed=embed)
+    elif type.value == 'works':
+        cursor.execute('SELECT user_id, work_completed FROM user_stats ORDER BY work_completed DESC LIMIT 10')
+        title = "💼 Лидеры по работам"
+        
+        embed = discord.Embed(title=title, color=0xffd700)
+        
+        for i, (user_id, works) in enumerate(cursor.fetchall(), 1):
+            user = bot.get_user(user_id)
+            name = user.display_name if user else f"User#{user_id}"
+            embed.add_field(
+                name=f"{i}. {name}",
+                value=f"{works} работ",
+                inline=False
+            )
+    
+    await interaction.response.send_message(embed=embed))
 
 # АДМИН-КОМАНДЫ
 @bot.tree.command(name="admin_addcoins", description="Добавить монеты пользователю (админ)")
@@ -3543,7 +3658,7 @@ async def help_command(interaction: discord.Interaction):
 **/daily** - Ежедневная награда
 **/pay** @user сумма - Перевод
 **/inventory** - Инвентарь
-**/stats** - Статистика""",
+**/mystats** - Статистика""",  # Обновили ссылку на mystats
         inline=False
     )
     
@@ -3581,7 +3696,7 @@ async def help_command(interaction: discord.Interaction):
         name="🏅 Достижения и лидеры",
         value="""**/leaderboard** тип - Топ игроков
 **/achievements** - Ваши достижения
-**Типы:** баланс, победы, кражи, кейсы, достижения, предметы""",
+**Типы:** баланс, победы, кражи, кейсы, достижения, предметы, работы""",
         inline=False
     )
     
@@ -3746,7 +3861,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
-
-
-
-

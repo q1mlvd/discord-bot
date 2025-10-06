@@ -134,69 +134,67 @@ EMOJIS = {
     'admin': '⚙️',
     'slot': '🎰',
     'coinflip': '🪙',
-    'blackjack': '🃏'
+    'blackjack': '🃏',
+    'work': '💼'
 }
 
 # Система бафов от предметов
 ITEM_BUFFS = {
-default_items = [
-    ('Золотой амулет', 'Увеличивает ежедневную награду', 500, 'rare', 'daily_bonus', 1.2, '+20% к ежедневной награде'),
-    ('Серебряный амулет', 'Небольшой бонус к ежедневной награде', 250, 'common', 'daily_bonus', 1.1, '+10% к ежедневной награде'),
-    ('Кольцо удачи', 'Увеличивает награды из кейсов', 600, 'rare', 'case_bonus', 1.15, '+15% к наградам из кейсов'),
-    ('Браслет везения', 'Увеличивает выигрыши в играх', 450, 'uncommon', 'game_bonus', 1.1, '+10% к выигрышам в играх'),
-    ('Защитный талисман', 'Защищает от краж', 800, 'epic', 'steal_protection', 0.5, '-50% к шансу кражи у вас'),
-    ('Перчатка вора', 'Увеличивает шанс успешной кражи', 700, 'rare', 'steal_bonus', 1.2, '+20% к шансу успешной кражи'),
-    ('Магический свиток', 'Увеличивает выигрыш в рулетке', 550, 'rare', 'roulette_bonus', 1.25, '+25% к выигрышу в рулетке'),
-    ('Кристалл маны', 'Умножает все награды', 1000, 'epic', 'multiplier', 1.3, 'x1.3 к любым наградам'),
-    ('Древний артефакт', 'Мощный множитель наград', 2000, 'legendary', 'multiplier', 1.5, 'x1.5 к любым наградам'),
-    ('Мифический предмет', 'Легендарный множитель наград', 5000, 'mythic', 'multiplier', 2.0, 'x2.0 к любым наградам'),
-    ('Счастливая монета', 'Увеличивает выигрыш в coinflip', 300, 'uncommon', 'coinflip_bonus', 1.2, '+20% к выигрышу в coinflip'),
-    ('Карточный шулер', 'Увеличивает выигрыш в блэкджеке', 400, 'rare', 'blackjack_bonus', 1.15, '+15% к выигрышу в блэкджеке'),
-    ('Слот-мастер', 'Увеличивает выигрыш в слотах', 600, 'rare', 'slot_bonus', 1.25, '+25% к выигрышу в слотах'),
-    ('Щит богатства', 'Уменьшает проигрыши', 900, 'epic', 'loss_protection', 0.8, '-20% к проигрышам'),
-    ('Флакон зелья', 'Увеличивает награды за квесты', 350, 'uncommon', 'quest_bonus', 1.2, '+20% к наградам за квесты'),
-    ('Зелье удачи', 'Увеличивает все награды', 800, 'epic', 'all_bonus', 1.1, '+10% ко всем наградам'),
-    ('Руна богатства', 'Уменьшает комиссию переводов', 700, 'rare', 'transfer_bonus', 0.9, '-10% к комиссии переводов'),
-    ('Тотем защиты', 'Увеличивает шанс победы в дуэлях', 500, 'rare', 'duel_bonus', 1.2, '+20% к шансу победы в дуэлях'),
-    ('Ожерелье мудрости', 'Увеличивает получаемый опыт', 450, 'uncommon', 'xp_bonus', 1.15, '+15% к опыту'),
-    ('Плащ тени', 'Увеличивает шанс кражи', 550, 'rare', 'steal_chance', 1.15, '+15% к шансу кражи'),
-    # ДОБАВЛЕННЫЕ ПРЕДМЕТЫ:
-    ('Железный щит', 'Базовая защита от краж', 200, 'common', 'steal_protection', 0.8, '-20% к шансу кражи у вас'),
-    ('Бронзовый медальон', 'Небольшой бонус к играм', 150, 'common', 'game_bonus', 1.05, '+5% к выигрышам в играх'),
-    ('Серебряный кулон', 'Бонус к рулетке', 300, 'uncommon', 'roulette_bonus', 1.1, '+10% к выигрышу в рулетке'),
-    ('Золотой перстень', 'Бонус к слотам', 400, 'uncommon', 'slot_bonus', 1.15, '+15% к выигрышу в слотах'),
-    ('Изумрудный амулет', 'Бонус к блэкджеку', 350, 'uncommon', 'blackjack_bonus', 1.1, '+10% к выигрышу в блэкджеке'),
-    ('Рубиновый талисман', 'Бонус к кейсам', 500, 'rare', 'case_bonus', 1.1, '+10% к наградам из кейсов'),
-    ('Сапфировый оберег', 'Защита от потерь', 600, 'rare', 'loss_protection', 0.9, '-10% к проигрышам'),
-    ('Аметистовый жезл', 'Бонус к переводам', 400, 'uncommon', 'transfer_bonus', 0.95, '-5% к комиссии переводов'),
-    ('Топазный скипетр', 'Бонус к дуэлям', 450, 'uncommon', 'duel_bonus', 1.1, '+10% к шансу победы в дуэлях'),
-    ('Опаловый артефакт', 'Небольшой множитель', 800, 'rare', 'multiplier', 1.1, 'x1.1 к любым наградам'),
-    ('Алмазная корона', 'Улучшенная защита', 1200, 'epic', 'steal_protection', 0.3, '-70% к шансу кражи у вас'),
-    ('Платиновый диск', 'Улучшенный бонус к играм', 900, 'epic', 'game_bonus', 1.2, '+20% к выигрышам в играх'),
-    ('Титановый щит', 'Максимальная защита', 2000, 'legendary', 'loss_protection', 0.5, '-50% к проигрышам')
-]
+    'Золотой амулет': {'type': 'daily_bonus', 'value': 1.2, 'description': '+20% к ежедневной награде'},
+    'Серебряный амулет': {'type': 'daily_bonus', 'value': 1.1, 'description': '+10% к ежедневной награде'},
+    'Кольцо удачи': {'type': 'case_bonus', 'value': 1.15, 'description': '+15% к наградам из кейсов'},
+    'Браслет везения': {'type': 'game_bonus', 'value': 1.1, 'description': '+10% к выигрышам в играх'},
+    'Защитный талисман': {'type': 'steal_protection', 'value': 0.5, 'description': '-50% к шансу кражи у вас'},
+    'Перчатка вора': {'type': 'steal_bonus', 'value': 1.2, 'description': '+20% к шансу успешной кражи'},
+    'Магический свиток': {'type': 'roulette_bonus', 'value': 1.25, 'description': '+25% к выигрышу в рулетке'},
+    'Кристалл маны': {'type': 'multiplier', 'value': 1.3, 'description': 'x1.3 к любым наградам'},
+    'Древний артефакт': {'type': 'multiplier', 'value': 1.5, 'description': 'x1.5 к любым наградам'},
+    'Мифический предмет': {'type': 'multiplier', 'value': 2.0, 'description': 'x2.0 к любым наградам'},
+    'Счастливая монета': {'type': 'coinflip_bonus', 'value': 1.2, 'description': '+20% к выигрышу в coinflip'},
+    'Карточный шулер': {'type': 'blackjack_bonus', 'value': 1.15, 'description': '+15% к выигрышу в блэкджеке'},
+    'Слот-мастер': {'type': 'slot_bonus', 'value': 1.25, 'description': '+25% к выигрышу в слотах'},
+    'Щит богатства': {'type': 'loss_protection', 'value': 0.8, 'description': '-20% к проигрышам'},
+    'Флакон зелья': {'type': 'quest_bonus', 'value': 1.2, 'description': '+20% к наградам за квесты'},
+    'Зелье удачи': {'type': 'all_bonus', 'value': 1.1, 'description': '+10% ко всем наградам'},
+    'Руна богатства': {'type': 'transfer_bonus', 'value': 0.9, 'description': '-10% к комиссии переводов'},
+    'Тотем защиты': {'type': 'duel_bonus', 'value': 1.2, 'description': '+20% к шансу победы в дуэлях'},
+    'Ожерелье мудрости': {'type': 'xp_bonus', 'value': 1.15, 'description': '+15% к опыту'},
+    'Плащ тени': {'type': 'steal_chance', 'value': 1.15, 'description': '+15% к шансу кражи'},
+    # НОВЫЕ ПРЕДМЕТЫ:
+    'Железный щит': {'type': 'steal_protection', 'value': 0.8, 'description': '-20% к шансу кражи у вас'},
+    'Бронзовый медальон': {'type': 'game_bonus', 'value': 1.05, 'description': '+5% к выигрышам в играх'},
+    'Серебряный кулон': {'type': 'roulette_bonus', 'value': 1.1, 'description': '+10% к выигрышу в рулетке'},
+    'Золотой перстень': {'type': 'slot_bonus', 'value': 1.15, 'description': '+15% к выигрышу в слотах'},
+    'Изумрудный амулет': {'type': 'blackjack_bonus', 'value': 1.1, 'description': '+10% к выигрышу в блэкджеке'},
+    'Рубиновый талисман': {'type': 'case_bonus', 'value': 1.1, 'description': '+10% к наградам из кейсов'},
+    'Сапфировый оберег': {'type': 'loss_protection', 'value': 0.9, 'description': '-10% к проигрышам'},
+    'Аметистовый жезл': {'type': 'transfer_bonus', 'value': 0.95, 'description': '-5% к комиссии переводов'},
+    'Топазный скипетр': {'type': 'duel_bonus', 'value': 1.1, 'description': '+10% к шансу победы в дуэлях'},
+    'Опаловый артефакт': {'type': 'multiplier', 'value': 1.1, 'description': 'x1.1 к любым наградам'},
+    'Алмазная корона': {'type': 'steal_protection', 'value': 0.3, 'description': '-70% к шансу кражи у вас'},
+    'Платиновый диск': {'type': 'game_bonus', 'value': 1.2, 'description': '+20% к выигрышам в играх'},
+    'Титановый щит': {'type': 'loss_protection', 'value': 0.5, 'description': '-50% к проигрышам'}
 }
 
 # Улучшенная система достижений
-# ОБНОВИТЕ систему достижений:
 ACHIEVEMENTS = {
     'first_daily': {'name': 'Первый шаг', 'description': 'Получите первую ежедневную награду', 'reward': 100},
     'rich': {'name': 'Богач', 'description': 'Накопите 10,000 монет', 'reward': 500},
     'millionaire': {'name': 'Миллионер', 'description': 'Накопите 100,000 монет', 'reward': 5000},
-    'gambler': {'name': 'Азартный игрок', 'description': 'Выиграйте в рулетку 10 раз', 'reward': 1000},  # Уменьшили с 25
-    'thief': {'name': 'Вор', 'description': 'Успешно украдите монеты 10 раз', 'reward': 800},  # Уменьшили с 20
-    'case_opener': {'name': 'Коллекционер', 'description': 'Откройте 25 кейсов', 'reward': 1500},  # Уменьшили с 50
-    'case_master': {'name': 'Мастер кейсов', 'description': 'Откройте 100 кейсов', 'reward': 5000},  # Уменьшили с 200
-    'duel_master': {'name': 'Мастер дуэлей', 'description': 'Выиграйте 15 дуэлей', 'reward': 1200},  # Уменьшили с 25
-    'slot_king': {'name': 'Король слотов', 'description': 'Выиграйте джекпот в слотах 1 раз', 'reward': 3000},  # Исправлено условие
-    'blackjack_pro': {'name': 'Профи в блэкджеке', 'description': 'Выиграйте 5 раз в блэкджек', 'reward': 2000},  # Уменьшили с 10
-    'coinflip_champ': {'name': 'Чемпион монетки', 'description': 'Выиграйте 15 раз в подбрасывание монеты', 'reward': 1500},  # Уменьшили с 30
-    'trader': {'name': 'Торговец', 'description': 'Продайте 5 предметов на маркетплейсе', 'reward': 800},  # Уменьшили с 15
-    'gifter': {'name': 'Щедрый', 'description': 'Подарите 5 кейсов', 'reward': 1000},  # Уменьшили с 10
-    'veteran': {'name': 'Ветеран', 'description': 'Получите ежедневную награду 15 дней подряд', 'reward': 3000},  # Уменьшили с 30
+    'gambler': {'name': 'Азартный игрок', 'description': 'Выиграйте в рулетку 10 раз', 'reward': 1000},
+    'thief': {'name': 'Вор', 'description': 'Успешно украдите монеты 10 раз', 'reward': 800},
+    'case_opener': {'name': 'Коллекционер', 'description': 'Откройте 25 кейсов', 'reward': 1500},
+    'case_master': {'name': 'Мастер кейсов', 'description': 'Откройте 100 кейсов', 'reward': 5000},
+    'duel_master': {'name': 'Мастер дуэлей', 'description': 'Выиграйте 15 дуэлей', 'reward': 1200},
+    'slot_king': {'name': 'Король слотов', 'description': 'Выиграйте джекпот в слотах 1 раз', 'reward': 3000},
+    'blackjack_pro': {'name': 'Профи в блэкджеке', 'description': 'Выиграйте 5 раз в блэкджек', 'reward': 2000},
+    'coinflip_champ': {'name': 'Чемпион монетки', 'description': 'Выиграйте 15 раз в подбрасывание монеты', 'reward': 1500},
+    'trader': {'name': 'Торговец', 'description': 'Продайте 5 предметов на маркетплейсе', 'reward': 800},
+    'gifter': {'name': 'Щедрый', 'description': 'Подарите 5 кейсов', 'reward': 1000},
+    'veteran': {'name': 'Ветеран', 'description': 'Получите ежедневную награду 15 дней подряд', 'reward': 3000},
     'lucky': {'name': 'Везунчик', 'description': 'Выиграйте 3 раза подряд в любую игру', 'reward': 2000},
-    'item_collector': {'name': 'Коллекционер предметов', 'description': 'Соберите 5 разных предметов', 'reward': 1500},  # Уменьшили с 10
-    'buff_master': {'name': 'Мастер бафов', 'description': 'Активируйте 3 разных бафа одновременно', 'reward': 2000},  # Уменьшили с 5
+    'item_collector': {'name': 'Коллекционер предметов', 'description': 'Соберите 5 разных предметов', 'reward': 1500},
+    'buff_master': {'name': 'Мастер бафов', 'description': 'Активируйте 3 разных бафа одновременно', 'reward': 2000},
     # НОВЫЕ ДОСТИЖЕНИЯ:
     'workaholic': {'name': 'Трудоголик', 'description': 'Выполните 10 работ', 'reward': 2000},
     'rich_af': {'name': 'Олигарх', 'description': 'Накопите 1,000,000 монет', 'reward': 20000},
@@ -205,145 +203,17 @@ ACHIEVEMENTS = {
     'gambling_legend': {'name': 'Легенда азарта', 'description': 'Выиграйте 50 раз в каждой игре', 'reward': 10000}
 }
 
-# В функции check_achievements ДОБАВЬТЕ проверки для новых достижений:
-def check_achievements(self, user_id):
-    """Проверяет и выдает достижения пользователю"""
-    try:
-        cursor = self.conn.cursor()
-        
-        cursor.execute('SELECT * FROM user_stats WHERE user_id = %s', (user_id,))
-        stats = cursor.fetchone()
-        
-        if not stats:
-            return []
-        
-        user_data = self.get_user(user_id)
-        balance = user_data[1] if len(user_data) > 1 else 0
-        
-        inventory = self.get_user_inventory(user_id)
-        unique_items = len(inventory.get("items", {}))
-        
-        cursor.execute('SELECT achievement_id FROM achievements WHERE user_id = %s', (user_id,))
-        user_achievements = [row[0] for row in cursor.fetchall()]
-        
-        achievements_to_add = []
-        
-        # Достижения по балансу
-        if 'first_daily' not in user_achievements and stats[9] >= 1:  # daily_claimed
-            achievements_to_add.append('first_daily')
-        if 'rich' not in user_achievements and balance >= 10000:
-            achievements_to_add.append('rich')
-        if 'millionaire' not in user_achievements and balance >= 100000:
-            achievements_to_add.append('millionaire')
-        if 'rich_af' not in user_achievements and balance >= 1000000:
-            achievements_to_add.append('rich_af')
-        
-        # Достижения по кейсам
-        if 'case_opener' not in user_achievements and stats[1] >= 25:  # cases_opened
-            achievements_to_add.append('case_opener')
-        if 'case_master' not in user_achievements and stats[1] >= 100:
-            achievements_to_add.append('case_master')
-        if 'case_addict' not in user_achievements and stats[1] >= 500:
-            achievements_to_add.append('case_addict')
-        
-        # Достижения по играм
-        if 'gambler' not in user_achievements and stats[5] >= 10:  # roulette_wins
-            achievements_to_add.append('gambler')
-        if 'thief' not in user_achievements and stats[3] >= 10:  # steals_successful
-            achievements_to_add.append('thief')
-        if 'perfect_thief' not in user_achievements and stats[3] >= 50:
-            achievements_to_add.append('perfect_thief')
-        if 'duel_master' not in user_achievements and stats[2] >= 15:  # duels_won
-            achievements_to_add.append('duel_master')
-        if 'slot_king' not in user_achievements and stats[6] >= 1:  # slot_wins (джекпот)
-            achievements_to_add.append('slot_king')
-        if 'blackjack_pro' not in user_achievements and stats[7] >= 5:  # blackjack_wins
-            achievements_to_add.append('blackjack_pro')
-        if 'coinflip_champ' not in user_achievements and stats[8] >= 15:  # coinflip_wins
-            achievements_to_add.append('coinflip_champ')
-        
-        # Проверка достижения "Легенда азарта"
-        if ('gambling_legend' not in user_achievements and 
-            stats[5] >= 50 and stats[6] >= 50 and stats[7] >= 50 and stats[8] >= 50):
-            achievements_to_add.append('gambling_legend')
-        
-        # Другие достижения
-        if 'trader' not in user_achievements and stats[11] >= 5:  # market_sales
-            achievements_to_add.append('trader')
-        if 'gifter' not in user_achievements and stats[12] >= 5:  # gifts_sent
-            achievements_to_add.append('gifter')
-        if 'veteran' not in user_achievements and stats[9] >= 15:  # daily_claimed
-            achievements_to_add.append('veteran')
-        if 'lucky' not in user_achievements and stats[13] >= 3:  # consecutive_wins
-            achievements_to_add.append('lucky')
-        if 'item_collector' not in user_achievements and unique_items >= 5:
-            achievements_to_add.append('item_collector')
-        if 'buff_master' not in user_achievements and self.get_active_buffs_count(user_id) >= 3:
-            achievements_to_add.append('buff_master')
-        if 'workaholic' not in user_achievements and stats[16] >= 10:  # work_completed (будет добавлено)
-            achievements_to_add.append('workaholic')
-        
-        # Добавляем новые достижения и выдаем награды
-        for achievement_id in achievements_to_add:
-            cursor.execute('INSERT INTO achievements (user_id, achievement_id) VALUES (%s, %s)', 
-                          (user_id, achievement_id))
-            
-            reward = ACHIEVEMENTS[achievement_id]['reward']
-            self.update_balance(user_id, reward)
-            self.log_transaction(user_id, 'achievement_reward', reward, description=f"Достижение: {ACHIEVEMENTS[achievement_id]['name']}")
-        
-        self.conn.commit()
-        
-        return achievements_to_add
-    except Exception as e:
-        print(f"❌ Ошибка в check_achievements: {e}")
-        return []
-
-def get_user_works(self, user_id):
-    """Получить выполненные работы пользователя"""
-    try:
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT work_type, completed_count, last_completed FROM user_works WHERE user_id = %s', (user_id,))
-        return cursor.fetchall()
-    except Exception as e:
-        print(f"❌ Ошибка в get_user_works: {e}")
-        return []
-
-def complete_work(self, user_id, work_type, reward):
-    """Зарегистрировать выполнение работы"""
-    try:
-        cursor = self.conn.cursor()
-        
-        # Проверяем существование записи
-        cursor.execute('SELECT 1 FROM user_works WHERE user_id = %s AND work_type = %s', (user_id, work_type))
-        if cursor.fetchone():
-            cursor.execute('''
-                UPDATE user_works SET completed_count = completed_count + 1, last_completed = CURRENT_TIMESTAMP 
-                WHERE user_id = %s AND work_type = %s
-            ''', (user_id, work_type))
-        else:
-            cursor.execute('''
-                INSERT INTO user_works (user_id, work_type, completed_count) 
-                VALUES (%s, %s, 1)
-            ''', (user_id, work_type))
-        
-        # Обновляем баланс
-        self.update_balance(user_id, reward)
-        self.log_transaction(user_id, 'work', reward, description=f"Работа: {work_type}")
-        
-        # Обновляем общую статистику работ
-        cursor.execute('SELECT work_completed FROM user_stats WHERE user_id = %s', (user_id,))
-        if cursor.fetchone():
-            cursor.execute('UPDATE user_stats SET work_completed = work_completed + 1 WHERE user_id = %s', (user_id,))
-        else:
-            cursor.execute('INSERT INTO user_stats (user_id, work_completed) VALUES (%s, 1)', (user_id,))
-        
-        self.conn.commit()
-        return True
-    except Exception as e:
-        print(f"❌ Ошибка в complete_work: {e}")
-        self.conn.rollback()
-        return False
+# Система работ
+WORKS = {
+    'programmer': {'name': '💻 Программист', 'description': 'Написать код для проекта', 'min_reward': 500, 'max_reward': 1500},
+    'designer': {'name': '🎨 Дизайнер', 'description': 'Создать дизайн интерфейса', 'min_reward': 400, 'max_reward': 1200},
+    'writer': {'name': '📝 Копирайтер', 'description': 'Написать статьи для блога', 'min_reward': 300, 'max_reward': 1000},
+    'translator': {'name': '🌐 Переводчик', 'description': 'Перевести документы', 'min_reward': 350, 'max_reward': 1100},
+    'tester': {'name': '🐛 Тестировщик', 'description': 'Найти баги в приложении', 'min_reward': 450, 'max_reward': 1300},
+    'manager': {'name': '📊 Менеджер', 'description': 'Управление проектом', 'min_reward': 600, 'max_reward': 1800},
+    'security': {'name': '🛡️ Аналитик безопасности', 'description': 'Проверить систему на уязвимости', 'min_reward': 700, 'max_reward': 2000},
+    'data_scientist': {'name': '📈 Data Scientist', 'description': 'Проанализировать данные', 'min_reward': 550, 'max_reward': 1600}
+}
 
 # Безопасный доступ к данным пользователя
 def get_user_data_safe(user_data):
@@ -379,7 +249,6 @@ def get_user_data_safe(user_data):
         }
 
 # Исправленный класс Database для PostgreSQL
-# Исправленный класс Database для PostgreSQL
 class Database:
     def __init__(self):
         self.conn = None
@@ -403,21 +272,6 @@ class Database:
                 else:
                     print("💥 Не удалось подключиться к базе данных после нескольких попыток")
                     raise
-
-    def update_items_collected_stat(self, user_id):
-    """Обновляет статистику собранных предметов на основе инвентаря"""
-    try:
-        inventory = self.get_user_inventory_safe(user_id)
-        unique_items_count = len(inventory.get("items", {}))
-        
-        cursor = self.conn.cursor()
-        cursor.execute('UPDATE user_stats SET items_collected = %s WHERE user_id = %s', 
-                      (unique_items_count, user_id))
-        self.conn.commit()
-        return unique_items_count
-    except Exception as e:
-        print(f"❌ Ошибка в update_items_collected_stat: {e}")
-        return 0
 
     def create_tables(self):
         """Создание таблиц с улучшенной обработкой ошибок"""
@@ -483,18 +337,6 @@ class Database:
                 )
             ''')
             
-            # Таблица квестов
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS quests (
-                    user_id BIGINT,
-                    quest_id TEXT,
-                    progress INTEGER DEFAULT 0,
-                    completed BOOLEAN DEFAULT FALSE,
-                    last_quest TEXT,
-                    PRIMARY KEY (user_id, quest_id)
-                )
-            ''')
-            
             # Таблица дуэлей
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS duels (
@@ -541,9 +383,12 @@ class Database:
                     gifts_sent INTEGER DEFAULT 0,
                     consecutive_wins INTEGER DEFAULT 0,
                     items_collected INTEGER DEFAULT 0,
+                    work_completed INTEGER DEFAULT 0,
                     last_win_time TIMESTAMP
                 )
             ''')
+            
+            # Таблица работ пользователей
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS user_works (
                     user_id BIGINT,
@@ -553,7 +398,7 @@ class Database:
                     PRIMARY KEY (user_id, work_type)
                 )
             ''')
-
+            
             self.conn.commit()
             print("✅ Все таблицы успешно созданы!")
             
@@ -565,113 +410,166 @@ class Database:
             self.conn.rollback()
             raise
 
-# ЗАМЕНИТЕ функцию initialize_default_data на эту улучшенную версию:
-def initialize_default_data(self):
-    """Инициализация начальных данных с СБАЛАНСИРОВАННЫМИ КЕЙСАМИ"""
-    try:
-        cursor = self.conn.cursor()
-        
-        cursor.execute('SELECT COUNT(*) FROM cases')
-        current_count = cursor.fetchone()[0]
-        print(f"🔍 Текущее количество кейсов в базе: {current_count}")
-        
-        if current_count == 0:
-            print("🔄 Добавление сбалансированных кейсов...")
+    def initialize_default_data(self):
+        """Инициализация начальных данных с СБАЛАНСИРОВАННЫМИ КЕЙСАМИ"""
+        try:
+            cursor = self.conn.cursor()
             
-            balanced_cases = [
-                # Бюджетные кейсы (до 1000 монет)
-                ('📦 Малый кейс', 50, json.dumps([
-                    {'type': 'coins', 'amount': [20, 60], 'chance': 0.7, 'description': 'Небольшая сумма монет'},
-                    {'type': 'coins', 'amount': [61, 150], 'chance': 0.25, 'description': 'Средняя сумма монет'},
-                    {'type': 'special_item', 'name': 'Серебряный амулет', 'chance': 0.05, 'description': '+10% к ежедневной награде'}
-                ])),
-                
-                ('📦 Средний кейс', 150, json.dumps([
-                    {'type': 'coins', 'amount': [80, 200], 'chance': 0.6, 'description': 'Надежная сумма монет'},
-                    {'type': 'coins', 'amount': [201, 400], 'chance': 0.25, 'description': 'Хорошая сумма монет'},
-                    {'type': 'special_item', 'name': 'Браслет везения', 'chance': 0.1, 'description': '+10% к выигрышам в играх'},
-                    {'type': 'special_item', 'name': 'Флакон зелья', 'chance': 0.05, 'description': '+20% к наградам за квесты'}
-                ])),
-                
-                ('💎 Большой кейс', 500, json.dumps([
-                    {'type': 'coins', 'amount': [300, 600], 'chance': 0.5, 'description': 'Солидная сумма'},
-                    {'type': 'coins', 'amount': [601, 1200], 'chance': 0.3, 'description': 'Отличная сумма'},
-                    {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.1, 'description': '+25% к выигрышу в рулетке'},
-                    {'type': 'special_item', 'name': 'Счастливая монета', 'chance': 0.1, 'description': '+20% к выигрышу в coinflip'}
-                ])),
-                
-                # Средние кейсы (1000-5000 монет)
-                ('👑 Элитный кейс', 1000, json.dumps([
-                    {'type': 'coins', 'amount': [700, 1500], 'chance': 0.4, 'description': 'Элитные монеты'},
-                    {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.2, 'description': '+20% к ежедневной награде'},
-                    {'type': 'special_item', 'name': 'Кольцо удачи', 'chance': 0.15, 'description': '+15% к наградам из кейсов'},
-                    {'type': 'special_item', 'name': 'Карточный шулер', 'chance': 0.15, 'description': '+15% к выигрышу в блэкджеке'},
-                    {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.1, 'description': 'Элитный выигрыш'}
-                ])),
-                
-                ('🔮 Секретный кейс', 2000, json.dumps([
-                    {'type': 'coins', 'amount': [1500, 3000], 'chance': 0.35, 'description': 'Секретные монеты'},
-                    {'type': 'special_item', 'name': 'Перчатка вора', 'chance': 0.2, 'description': '+20% к шансу успешной кражи'},
-                    {'type': 'special_item', 'name': 'Тотем защиты', 'chance': 0.15, 'description': '+20% к шансу победы в дуэлях'},
-                    {'type': 'special_item', 'name': 'Слот-мастер', 'chance': 0.15, 'description': '+25% к выигрышу в слотах'},
-                    {'type': 'coins', 'amount': [3001, 5000], 'chance': 0.15, 'description': 'Секретный клад'}
-                ])),
-                
-                # Премиум кейсы (5000-15000 монет)
-                ('💎 Премиум кейс', 5000, json.dumps([
-                    {'type': 'coins', 'amount': [4000, 7000], 'chance': 0.3, 'description': 'Премиум монеты'},
-                    {'type': 'special_item', 'name': 'Кристалл маны', 'chance': 0.25, 'description': 'x1.3 к любым наградам'},
-                    {'type': 'special_item', 'name': 'Щит богатства', 'chance': 0.2, 'description': '-20% к проигрышам'},
-                    {'type': 'special_item', 'name': 'Руна богатства', 'chance': 0.15, 'description': '-10% к комиссии переводов'},
-                    {'type': 'coins', 'amount': [7001, 10000], 'chance': 0.1, 'description': 'Премиум выигрыш'}
-                ])),
-                
-                ('⚡ Легендарный кейс', 10000, json.dumps([
-                    {'type': 'coins', 'amount': [8000, 12000], 'chance': 0.25, 'description': 'Легендарные монеты'},
-                    {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.3, 'description': 'x1.5 к любым наградам'},
-                    {'type': 'special_item', 'name': 'Ожерелье мудрости', 'chance': 0.2, 'description': '+15% к опыту'},
-                    {'type': 'special_item', 'name': 'Плащ тени', 'chance': 0.15, 'description': '+15% к шансу кражи'},
-                    {'type': 'coins', 'amount': [12001, 20000], 'chance': 0.1, 'description': 'Легендарный выигрыш'}
-                ])),
-                
-                # Эксклюзивные кейсы (15000+ монет)
-                ('🌟 Божественный кейс', 15000, json.dumps([
-                    {'type': 'coins', 'amount': [12000, 18000], 'chance': 0.2, 'description': 'Божественные монеты'},
-                    {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.35, 'description': 'x2.0 к любым наградам'},
-                    {'type': 'special_item', 'name': 'Зелье удачи', 'chance': 0.25, 'description': '+10% ко всем наградам'},
-                    {'type': 'coins', 'amount': [18001, 30000], 'chance': 0.2, 'description': 'Божественный куш'}
-                ])),
-                
-                ('✨ Космический кейс', 25000, json.dumps([
-                    {'type': 'coins', 'amount': [20000, 30000], 'chance': 0.15, 'description': 'Космическое богатство'},
-                    {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.4, 'description': 'x2.0 к любым наградам'},
-                    {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.3, 'description': 'x1.5 к любым наградам'},
-                    {'type': 'coins', 'amount': [30001, 50000], 'chance': 0.15, 'description': 'Космический куш'}
-                ])),
-                
-                ('🏆 Титановый кейс', 50000, json.dumps([
-                    {'type': 'coins', 'amount': [40000, 60000], 'chance': 0.1, 'description': 'Титановые монеты'},
-                    {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.5, 'description': 'x2.0 к любым наградам'},
-                    {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.3, 'description': 'x1.5 к любым наградам'},
-                    {'type': 'coins', 'amount': [60001, 100000], 'chance': 0.1, 'description': 'Титановый джекпот'}
-                ]))
-            ]
+            # Проверяем текущее количество кейсов
+            cursor.execute('SELECT COUNT(*) FROM cases')
+            current_count = cursor.fetchone()[0]
+            print(f"🔍 Текущее количество кейсов в базе: {current_count}")
             
-            for case in balanced_cases:
-                cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', case)
+            # Если кейсов нет, добавляем их
+            if current_count == 0:
+                print("🔄 Добавление сбалансированных кейсов...")
+                
+                balanced_cases = [
+                    # Бюджетные кейсы (до 1000 монет)
+                    ('📦 Малый кейс', 50, json.dumps([
+                        {'type': 'coins', 'amount': [20, 60], 'chance': 0.7, 'description': 'Небольшая сумма монет'},
+                        {'type': 'coins', 'amount': [61, 150], 'chance': 0.25, 'description': 'Средняя сумма монет'},
+                        {'type': 'special_item', 'name': 'Серебряный амулет', 'chance': 0.05, 'description': '+10% к ежедневной награде'}
+                    ])),
+                    
+                    ('📦 Средний кейс', 150, json.dumps([
+                        {'type': 'coins', 'amount': [80, 200], 'chance': 0.6, 'description': 'Надежная сумма монет'},
+                        {'type': 'coins', 'amount': [201, 400], 'chance': 0.25, 'description': 'Хорошая сумма монет'},
+                        {'type': 'special_item', 'name': 'Браслет везения', 'chance': 0.1, 'description': '+10% к выигрышам в играх'},
+                        {'type': 'special_item', 'name': 'Флакон зелья', 'chance': 0.05, 'description': '+20% к наградам за квесты'}
+                    ])),
+                    
+                    ('💎 Большой кейс', 500, json.dumps([
+                        {'type': 'coins', 'amount': [300, 600], 'chance': 0.5, 'description': 'Солидная сумма'},
+                        {'type': 'coins', 'amount': [601, 1200], 'chance': 0.3, 'description': 'Отличная сумма'},
+                        {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.1, 'description': '+25% к выигрышу в рулетке'},
+                        {'type': 'special_item', 'name': 'Счастливая монета', 'chance': 0.1, 'description': '+20% к выигрышу в coinflip'}
+                    ])),
+                    
+                    # Средние кейсы (1000-5000 монет)
+                    ('👑 Элитный кейс', 1000, json.dumps([
+                        {'type': 'coins', 'amount': [700, 1500], 'chance': 0.4, 'description': 'Элитные монеты'},
+                        {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.2, 'description': '+20% к ежедневной награде'},
+                        {'type': 'special_item', 'name': 'Кольцо удачи', 'chance': 0.15, 'description': '+15% к наградам из кейсов'},
+                        {'type': 'special_item', 'name': 'Карточный шулер', 'chance': 0.15, 'description': '+15% к выигрышу в блэкджеке'},
+                        {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.1, 'description': 'Элитный выигрыш'}
+                    ])),
+                    
+                    ('🔮 Секретный кейс', 2000, json.dumps([
+                        {'type': 'coins', 'amount': [1500, 3000], 'chance': 0.35, 'description': 'Секретные монеты'},
+                        {'type': 'special_item', 'name': 'Перчатка вора', 'chance': 0.2, 'description': '+20% к шансу успешной кражи'},
+                        {'type': 'special_item', 'name': 'Тотем защиты', 'chance': 0.15, 'description': '+20% к шансу победы в дуэлях'},
+                        {'type': 'special_item', 'name': 'Слот-мастер', 'chance': 0.15, 'description': '+25% к выигрышу в слотах'},
+                        {'type': 'coins', 'amount': [3001, 5000], 'chance': 0.15, 'description': 'Секретный клад'}
+                    ])),
+                    
+                    # Премиум кейсы (5000-15000 монет)
+                    ('💎 Премиум кейс', 5000, json.dumps([
+                        {'type': 'coins', 'amount': [4000, 7000], 'chance': 0.3, 'description': 'Премиум монеты'},
+                        {'type': 'special_item', 'name': 'Кристалл маны', 'chance': 0.25, 'description': 'x1.3 к любым наградам'},
+                        {'type': 'special_item', 'name': 'Щит богатства', 'chance': 0.2, 'description': '-20% к проигрышам'},
+                        {'type': 'special_item', 'name': 'Руна богатства', 'chance': 0.15, 'description': '-10% к комиссии переводов'},
+                        {'type': 'coins', 'amount': [7001, 10000], 'chance': 0.1, 'description': 'Премиум выигрыш'}
+                    ])),
+                    
+                    ('⚡ Легендарный кейс', 10000, json.dumps([
+                        {'type': 'coins', 'amount': [8000, 12000], 'chance': 0.25, 'description': 'Легендарные монеты'},
+                        {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.3, 'description': 'x1.5 к любым наградам'},
+                        {'type': 'special_item', 'name': 'Ожерелье мудрости', 'chance': 0.2, 'description': '+15% к опыту'},
+                        {'type': 'special_item', 'name': 'Плащ тени', 'chance': 0.15, 'description': '+15% к шансу кражи'},
+                        {'type': 'coins', 'amount': [12001, 20000], 'chance': 0.1, 'description': 'Легендарный выигрыш'}
+                    ])),
+                    
+                    # Эксклюзивные кейсы (15000+ монет)
+                    ('🌟 Божественный кейс', 15000, json.dumps([
+                        {'type': 'coins', 'amount': [12000, 18000], 'chance': 0.2, 'description': 'Божественные монеты'},
+                        {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.35, 'description': 'x2.0 к любым наградам'},
+                        {'type': 'special_item', 'name': 'Зелье удачи', 'chance': 0.25, 'description': '+10% ко всем наградам'},
+                        {'type': 'coins', 'amount': [18001, 30000], 'chance': 0.2, 'description': 'Божественный куш'}
+                    ])),
+                    
+                    ('✨ Космический кейс', 25000, json.dumps([
+                        {'type': 'coins', 'amount': [20000, 30000], 'chance': 0.15, 'description': 'Космическое богатство'},
+                        {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.4, 'description': 'x2.0 к любым наградам'},
+                        {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.3, 'description': 'x1.5 к любым наградам'},
+                        {'type': 'coins', 'amount': [30001, 50000], 'chance': 0.15, 'description': 'Космический куш'}
+                    ])),
+                    
+                    ('🏆 Титановый кейс', 50000, json.dumps([
+                        {'type': 'coins', 'amount': [40000, 60000], 'chance': 0.1, 'description': 'Титановые монеты'},
+                        {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.5, 'description': 'x2.0 к любым наградам'},
+                        {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.3, 'description': 'x1.5 к любым наградам'},
+                        {'type': 'coins', 'amount': [60001, 100000], 'chance': 0.1, 'description': 'Титановый джекпот'}
+                    ]))
+                ]
+                
+                for case in balanced_cases:
+                    cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', case)
+                
+                print(f"✅ Добавлено {len(balanced_cases)} сбалансированных кейсов!")
+            else:
+                print(f"✅ В базе уже есть {current_count} кейсов, пропускаем инициализацию")
             
-            print(f"✅ Добавлено {len(balanced_cases)} сбалансированных кейсов!")
-        else:
-            print(f"✅ В базе уже есть {items_count} предметов, пропускаем инициализацию")
-        
-        self.conn.commit()
-        print("✅ Начальные данные успешно инициализированы!")
-        
-    except Exception as e:
-        print(f"❌ Ошибка при инициализации данных: {e}")
-        self.conn.rollback()
+            # Проверяем и добавляем предметы если нужно
+            cursor.execute('SELECT COUNT(*) FROM items')
+            items_count = cursor.fetchone()[0]
+            
+            if items_count == 0:
+                print("🔄 Добавление ВСЕХ стандартных предметов...")
+                
+                # ИСПРАВЛЕННЫЙ СПИСОК ПРЕДМЕТОВ - правильный синтаксис
+                default_items = [
+                    ('Золотой амулет', 'Увеличивает ежедневную награду', 500, 'rare', 'daily_bonus', 1.2, '+20% к ежедневной награде'),
+                    ('Серебряный амулет', 'Небольшой бонус к ежедневной награде', 250, 'common', 'daily_bonus', 1.1, '+10% к ежедневной награде'),
+                    ('Кольцо удачи', 'Увеличивает награды из кейсов', 600, 'rare', 'case_bonus', 1.15, '+15% к наградам из кейсов'),
+                    ('Браслет везения', 'Увеличивает выигрыши в играх', 450, 'uncommon', 'game_bonus', 1.1, '+10% к выигрышам в играх'),
+                    ('Защитный талисман', 'Защищает от краж', 800, 'epic', 'steal_protection', 0.5, '-50% к шансу кражи у вас'),
+                    ('Перчатка вора', 'Увеличивает шанс успешной кражи', 700, 'rare', 'steal_bonus', 1.2, '+20% к шансу успешной кражи'),
+                    ('Магический свиток', 'Увеличивает выигрыш в рулетке', 550, 'rare', 'roulette_bonus', 1.25, '+25% к выигрышу в рулетке'),
+                    ('Кристалл маны', 'Умножает все награды', 1000, 'epic', 'multiplier', 1.3, 'x1.3 к любым наградам'),
+                    ('Древний артефакт', 'Мощный множитель наград', 2000, 'legendary', 'multiplier', 1.5, 'x1.5 к любым наградам'),
+                    ('Мифический предмет', 'Легендарный множитель наград', 5000, 'mythic', 'multiplier', 2.0, 'x2.0 к любым наградам'),
+                    ('Счастливая монета', 'Увеличивает выигрыш в coinflip', 300, 'uncommon', 'coinflip_bonus', 1.2, '+20% к выигрышу в coinflip'),
+                    ('Карточный шулер', 'Увеличивает выигрыш в блэкджеке', 400, 'rare', 'blackjack_bonus', 1.15, '+15% к выигрышу в блэкджеке'),
+                    ('Слот-мастер', 'Увеличивает выигрыш в слотах', 600, 'rare', 'slot_bonus', 1.25, '+25% к выигрышу в слотах'),
+                    ('Щит богатства', 'Уменьшает проигрыши', 900, 'epic', 'loss_protection', 0.8, '-20% к проигрышам'),
+                    ('Флакон зелья', 'Увеличивает награды за квесты', 350, 'uncommon', 'quest_bonus', 1.2, '+20% к наградам за квесты'),
+                    ('Зелье удачи', 'Увеличивает все награды', 800, 'epic', 'all_bonus', 1.1, '+10% ко всем наградам'),
+                    ('Руна богатства', 'Уменьшает комиссию переводов', 700, 'rare', 'transfer_bonus', 0.9, '-10% к комиссии переводов'),
+                    ('Тотем защиты', 'Увеличивает шанс победы в дуэлях', 500, 'rare', 'duel_bonus', 1.2, '+20% к шансу победы в дуэлях'),
+                    ('Ожерелье мудрости', 'Увеличивает получаемый опыт', 450, 'uncommon', 'xp_bonus', 1.15, '+15% к опыту'),
+                    ('Плащ тени', 'Увеличивает шанс кражи', 550, 'rare', 'steal_chance', 1.15, '+15% к шансу кражи'),
+                    # ДОБАВЛЕННЫЕ ПРЕДМЕТЫ:
+                    ('Железный щит', 'Базовая защита от краж', 200, 'common', 'steal_protection', 0.8, '-20% к шансу кражи у вас'),
+                    ('Бронзовый медальон', 'Небольшой бонус к играм', 150, 'common', 'game_bonus', 1.05, '+5% к выигрышам в играх'),
+                    ('Серебряный кулон', 'Бонус к рулетке', 300, 'uncommon', 'roulette_bonus', 1.1, '+10% к выигрышу в рулетке'),
+                    ('Золотой перстень', 'Бонус к слотам', 400, 'uncommon', 'slot_bonus', 1.15, '+15% к выигрышу в слотах'),
+                    ('Изумрудный амулет', 'Бонус к блэкджеку', 350, 'uncommon', 'blackjack_bonus', 1.1, '+10% к выигрышу в блэкджеке'),
+                    ('Рубиновый талисман', 'Бонус к кейсам', 500, 'rare', 'case_bonus', 1.1, '+10% к наградам из кейсов'),
+                    ('Сапфировый оберег', 'Защита от потерь', 600, 'rare', 'loss_protection', 0.9, '-10% к проигрышам'),
+                    ('Аметистовый жезл', 'Бонус к переводам', 400, 'uncommon', 'transfer_bonus', 0.95, '-5% к комиссии переводов'),
+                    ('Топазный скипетр', 'Бонус к дуэлям', 450, 'uncommon', 'duel_bonus', 1.1, '+10% к шансу победы в дуэлях'),
+                    ('Опаловый артефакт', 'Небольшой множитель', 800, 'rare', 'multiplier', 1.1, 'x1.1 к любым наградам'),
+                    ('Алмазная корона', 'Улучшенная защита', 1200, 'epic', 'steal_protection', 0.3, '-70% к шансу кражи у вас'),
+                    ('Платиновый диск', 'Улучшенный бонус к играм', 900, 'epic', 'game_bonus', 1.2, '+20% к выигрышам в играш'),
+                    ('Титановый щит', 'Максимальная защита', 2000, 'legendary', 'loss_protection', 0.5, '-50% к проигрышам')
+                ]
+                
+                for item in default_items:
+                    cursor.execute('INSERT INTO items (name, description, value, rarity, buff_type, buff_value, buff_description) VALUES (%s, %s, %s, %s, %s, %s, %s)', item)
+                
+                print(f"✅ Добавлено {len(default_items)} стандартных предметов!")
+            else:
+                print(f"✅ В базе уже есть {items_count} предметов, пропускаем инициализацию")
+            
+            self.conn.commit()
+            print("✅ Начальные данные успешно инициализированы!")
+            
+        except Exception as e:
+            print(f"❌ Ошибка при инициализации данных: {e}")
+            self.conn.rollback()
 
-    # Остальные методы класса Database остаются без изменений...
+    # Остальные методы класса Database...
     def get_user(self, user_id):
         """Безопасное получение пользователя"""
         try:
@@ -695,7 +593,6 @@ def initialize_default_data(self):
             
         except Exception as e:
             print(f"❌ Ошибка в get_user для {user_id}: {e}")
-            # Возвращаем кортеж с безопасными значениями по умолчанию
             return (user_id, 100, 0, None, json.dumps({"cases": {}, "items": {}}), datetime.datetime.now())
 
     def get_user_safe(self, user_id):
@@ -868,7 +765,6 @@ def initialize_default_data(self):
             if result and result[0]:
                 try:
                     inventory_data = json.loads(result[0])
-                    # Проверяем структуру инвентаря
                     if not isinstance(inventory_data, dict):
                         inventory_data = {"cases": {}, "items": {}}
                     if "cases" not in inventory_data:
@@ -920,12 +816,10 @@ def initialize_default_data(self):
         try:
             cursor = self.conn.cursor()
             
-            # Проверяем существование записи статистики
             cursor.execute('SELECT 1 FROM user_stats WHERE user_id = %s', (user_id,))
             if not cursor.fetchone():
                 cursor.execute('INSERT INTO user_stats (user_id) VALUES (%s)', (user_id,))
             
-            # Обновляем статистику
             cursor.execute(f'''
                 UPDATE user_stats SET {stat_name} = {stat_name} + %s 
                 WHERE user_id = %s
@@ -933,7 +827,6 @@ def initialize_default_data(self):
             
             self.conn.commit()
             
-            # Проверяем достижения
             return self.check_achievements(user_id)
         except Exception as e:
             print(f"❌ Ошибка в update_user_stat: {e}")
@@ -944,74 +837,83 @@ def initialize_default_data(self):
         try:
             cursor = self.conn.cursor()
             
-            # Получаем статистику пользователя
             cursor.execute('SELECT * FROM user_stats WHERE user_id = %s', (user_id,))
             stats = cursor.fetchone()
             
             if not stats:
                 return []
             
-            # Получаем баланс пользователя
             user_data = self.get_user(user_id)
             balance = user_data[1] if len(user_data) > 1 else 0
             
-            # Получаем инвентарь для проверки уникальных предметов
             inventory = self.get_user_inventory(user_id)
             unique_items = len(inventory.get("items", {}))
             
-            # Получаем уже полученные достижения
             cursor.execute('SELECT achievement_id FROM achievements WHERE user_id = %s', (user_id,))
             user_achievements = [row[0] for row in cursor.fetchall()]
             
-            # Проверяем каждое достижение
             achievements_to_add = []
             
             # Достижения по балансу
+            if 'first_daily' not in user_achievements and stats[9] >= 1:  # daily_claimed
+                achievements_to_add.append('first_daily')
             if 'rich' not in user_achievements and balance >= 10000:
                 achievements_to_add.append('rich')
             if 'millionaire' not in user_achievements and balance >= 100000:
                 achievements_to_add.append('millionaire')
+            if 'rich_af' not in user_achievements and balance >= 1000000:
+                achievements_to_add.append('rich_af')
             
             # Достижения по кейсам
-            if 'case_opener' not in user_achievements and stats[1] >= 50:  # cases_opened
+            if 'case_opener' not in user_achievements and stats[1] >= 25:  # cases_opened
                 achievements_to_add.append('case_opener')
-            if 'case_master' not in user_achievements and stats[1] >= 200:
+            if 'case_master' not in user_achievements and stats[1] >= 100:
                 achievements_to_add.append('case_master')
+            if 'case_addict' not in user_achievements and stats[1] >= 500:
+                achievements_to_add.append('case_addict')
             
             # Достижения по играм
-            if 'gambler' not in user_achievements and stats[5] >= 25:  # roulette_wins
+            if 'gambler' not in user_achievements and stats[5] >= 10:  # roulette_wins
                 achievements_to_add.append('gambler')
-            if 'thief' not in user_achievements and stats[3] >= 20:  # steals_successful
+            if 'thief' not in user_achievements and stats[3] >= 10:  # steals_successful
                 achievements_to_add.append('thief')
-            if 'duel_master' not in user_achievements and stats[2] >= 25:  # duels_won
+            if 'perfect_thief' not in user_achievements and stats[3] >= 50:
+                achievements_to_add.append('perfect_thief')
+            if 'duel_master' not in user_achievements and stats[2] >= 15:  # duels_won
                 achievements_to_add.append('duel_master')
             if 'slot_king' not in user_achievements and stats[6] >= 1:  # slot_wins (джекпот)
                 achievements_to_add.append('slot_king')
-            if 'blackjack_pro' not in user_achievements and stats[7] >= 10:  # blackjack_wins
+            if 'blackjack_pro' not in user_achievements and stats[7] >= 5:  # blackjack_wins
                 achievements_to_add.append('blackjack_pro')
-            if 'coinflip_champ' not in user_achievements and stats[8] >= 30:  # coinflip_wins
+            if 'coinflip_champ' not in user_achievements and stats[8] >= 15:  # coinflip_wins
                 achievements_to_add.append('coinflip_champ')
             
+            # Проверка достижения "Легенда азарта"
+            if ('gambling_legend' not in user_achievements and 
+                stats[5] >= 50 and stats[6] >= 50 and stats[7] >= 50 and stats[8] >= 50):
+                achievements_to_add.append('gambling_legend')
+            
             # Другие достижения
-            if 'trader' not in user_achievements and stats[11] >= 15:  # market_sales
+            if 'trader' not in user_achievements and stats[11] >= 5:  # market_sales
                 achievements_to_add.append('trader')
-            if 'gifter' not in user_achievements and stats[12] >= 10:  # gifts_sent
+            if 'gifter' not in user_achievements and stats[12] >= 5:  # gifts_sent
                 achievements_to_add.append('gifter')
-            if 'veteran' not in user_achievements and stats[9] >= 30:  # daily_claimed
+            if 'veteran' not in user_achievements and stats[9] >= 15:  # daily_claimed
                 achievements_to_add.append('veteran')
             if 'lucky' not in user_achievements and stats[13] >= 3:  # consecutive_wins
                 achievements_to_add.append('lucky')
-            if 'item_collector' not in user_achievements and unique_items >= 10:
+            if 'item_collector' not in user_achievements and unique_items >= 5:
                 achievements_to_add.append('item_collector')
-            if 'buff_master' not in user_achievements and self.get_active_buffs_count(user_id) >= 5:
+            if 'buff_master' not in user_achievements and self.get_active_buffs_count(user_id) >= 3:
                 achievements_to_add.append('buff_master')
+            if 'workaholic' not in user_achievements and stats[15] >= 10:  # work_completed
+                achievements_to_add.append('workaholic')
             
             # Добавляем новые достижения и выдаем награды
             for achievement_id in achievements_to_add:
                 cursor.execute('INSERT INTO achievements (user_id, achievement_id) VALUES (%s, %s)', 
                               (user_id, achievement_id))
                 
-                # Выдаем награду за достижение
                 reward = ACHIEVEMENTS[achievement_id]['reward']
                 self.update_balance(user_id, reward)
                 self.log_transaction(user_id, 'achievement_reward', reward, description=f"Достижение: {ACHIEVEMENTS[achievement_id]['name']}")
@@ -1031,7 +933,7 @@ def initialize_default_data(self):
                 
             item_data = self.get_item(int(item_id))
             if item_data and len(item_data) > 1 and item_data[1]:
-                return item_data[1]  # название предмета
+                return item_data[1]
             return f"Предмет ID:{item_id}"
         except Exception as e:
             print(f"❌ Ошибка получения названия предмета {item_id}: {e}")
@@ -1068,11 +970,10 @@ def initialize_default_data(self):
                         continue
                         
                     item_data = self.get_item(int(item_id))
-                    if item_data and len(item_data) > 6 and item_data[5]:  # buff_type
+                    if item_data and len(item_data) > 6 and item_data[5]:
                         buff_type = item_data[5]
                         buff_value = item_data[6] if len(item_data) > 6 else 1.0
                         
-                        # Берем самый сильный баф каждого типа
                         if buff_type not in buffs or buff_value > buffs[buff_type]['value']:
                             buffs[buff_type] = {
                                 'value': float(buff_value),
@@ -1122,50 +1023,62 @@ def initialize_default_data(self):
         cursor.execute('SELECT * FROM items')
         return cursor.fetchall()
 
-    def get_user_quests(self, user_id):
-        """Получить квесты пользователя"""
+    def update_items_collected_stat(self, user_id):
+        """Обновляет статистику собранных предметов на основе инвентаря"""
+        try:
+            inventory = self.get_user_inventory_safe(user_id)
+            unique_items_count = len(inventory.get("items", {}))
+            
+            cursor = self.conn.cursor()
+            cursor.execute('UPDATE user_stats SET items_collected = %s WHERE user_id = %s', 
+                          (unique_items_count, user_id))
+            self.conn.commit()
+            return unique_items_count
+        except Exception as e:
+            print(f"❌ Ошибка в update_items_collected_stat: {e}")
+            return 0
+
+    def get_user_works(self, user_id):
+        """Получить выполненные работы пользователя"""
         try:
             cursor = self.conn.cursor()
-            cursor.execute('SELECT quest_id, progress, completed FROM quests WHERE user_id = %s', (user_id,))
+            cursor.execute('SELECT work_type, completed_count, last_completed FROM user_works WHERE user_id = %s', (user_id,))
             return cursor.fetchall()
         except Exception as e:
-            print(f"❌ Ошибка в get_user_quests: {e}")
+            print(f"❌ Ошибка в get_user_works: {e}")
             return []
-    
-    def add_user_quest(self, user_id, quest_id):
-        """Добавить квест пользователю"""
+
+    def complete_work(self, user_id, work_type, reward):
+        """Зарегистрировать выполнение работы"""
         try:
             cursor = self.conn.cursor()
             
-            # Проверяем, есть ли уже такой квест у пользователя
-            cursor.execute('SELECT 1 FROM quests WHERE user_id = %s AND quest_id = %s', (user_id, quest_id))
+            cursor.execute('SELECT 1 FROM user_works WHERE user_id = %s AND work_type = %s', (user_id, work_type))
             if cursor.fetchone():
-                return False  # Квест уже есть
-                
-            cursor.execute('''
-                INSERT INTO quests (user_id, quest_id, progress, completed) 
-                VALUES (%s, %s, %s, %s)
-            ''', (user_id, quest_id, 0, False))
-            self.conn.commit()
+                cursor.execute('''
+                    UPDATE user_works SET completed_count = completed_count + 1, last_completed = CURRENT_TIMESTAMP 
+                    WHERE user_id = %s AND work_type = %s
+                ''', (user_id, work_type))
+            else:
+                cursor.execute('''
+                    INSERT INTO user_works (user_id, work_type, completed_count) 
+                    VALUES (%s, %s, 1)
+                ''', (user_id, work_type))
             
-            return True
-        except Exception as e:
-            print(f"❌ Ошибка в add_user_quest: {e}")
-            self.conn.rollback()
-            return False
-    
-    def update_quest_progress(self, user_id, quest_id, progress, completed=False):
-        """Обновить прогресс квеста"""
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                UPDATE quests SET progress = %s, completed = %s 
-                WHERE user_id = %s AND quest_id = %s
-            ''', (progress, completed, user_id, quest_id))
+            self.update_balance(user_id, reward)
+            self.log_transaction(user_id, 'work', reward, description=f"Работа: {work_type}")
+            
+            cursor.execute('SELECT work_completed FROM user_stats WHERE user_id = %s', (user_id,))
+            if cursor.fetchone():
+                cursor.execute('UPDATE user_stats SET work_completed = work_completed + 1 WHERE user_id = %s', (user_id,))
+            else:
+                cursor.execute('INSERT INTO user_stats (user_id, work_completed) VALUES (%s, 1)', (user_id,))
+            
             self.conn.commit()
             return True
         except Exception as e:
-            print(f"❌ Ошибка в update_quest_progress: {e}")
+            print(f"❌ Ошибка в complete_work: {e}")
+            self.conn.rollback()
             return False
 
 # Создаем экземпляр базы данных
@@ -1173,7 +1086,6 @@ try:
     db = Database()
     print("✅ База данных успешно инициализирована!")
     
-    # Проверяем, что кейсы загружаются
     test_cases = db.get_cases()
     print(f"🔍 Тест: загружено {len(test_cases)} кейсов после инициализации")
     
@@ -3834,6 +3746,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

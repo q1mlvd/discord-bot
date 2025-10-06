@@ -410,104 +410,191 @@ class Database:
             self.conn.rollback()
             raise
 
-    def initialize_default_data(self):
-        """Инициализация начальных данных с СБАЛАНСИРОВАННЫМИ КЕЙСАМИ"""
-        try:
-            cursor = self.conn.cursor()
+def initialize_default_data(self):
+    """Инициализация начальных данных с ПРАВИЛЬНЫМИ ПРОЦЕНТАМИ"""
+    try:
+        cursor = self.conn.cursor()
+        
+        # Проверяем текущее количество кейсов
+        cursor.execute('SELECT COUNT(*) FROM cases')
+        current_count = cursor.fetchone()[0]
+        print(f"🔍 Текущее количество кейсов в базе: {current_count}")
+        
+        # Если кейсов нет, добавляем их с ПРАВИЛЬНЫМИ ПРОЦЕНТАМИ
+        if current_count == 0:
+            print("🔄 Добавление кейсов с правильными процентами...")
             
-            # Проверяем текущее количество кейсов
-            cursor.execute('SELECT COUNT(*) FROM cases')
-            current_count = cursor.fetchone()[0]
-            print(f"🔍 Текущее количество кейсов в базе: {current_count}")
+            # ОСНОВНЫЕ КЕЙСЫ (ID 1-5)
+            balanced_cases = [
+                # 📦 Малый кейс — 50 🪙 (ID: 1)
+                ('📦 Малый кейс', 50, json.dumps([
+                    {'type': 'coins', 'amount': [10, 40], 'chance': 0.8, 'description': 'Базовые монеты'},
+                    {'type': 'coins', 'amount': [41, 100], 'chance': 0.15, 'description': 'Улучшенные монеты'},
+                    {'type': 'coins', 'amount': [101, 300], 'chance': 0.05, 'description': 'Премиум монеты'}
+                ])),
+                
+                # 📦 Средний кейс — 150 🪙 (ID: 2)
+                ('📦 Средний кейс', 150, json.dumps([
+                    {'type': 'coins', 'amount': [50, 120], 'chance': 0.7, 'description': 'Стандартные монеты'},
+                    {'type': 'coins', 'amount': [121, 300], 'chance': 0.2, 'description': 'Улучшенные монеты'},
+                    {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.05, 'description': 'Бонус к рулетке'},
+                    {'type': 'coins', 'amount': [301, 800], 'chance': 0.05, 'description': 'Премиум монеты'}
+                ])),
+                
+                # 💎 Большой кейс — 500 🪙 (ID: 3)
+                ('💎 Большой кейс', 500, json.dumps([
+                    {'type': 'coins', 'amount': [200, 400], 'chance': 0.6, 'description': 'Стандартные монеты'},
+                    {'type': 'coins', 'amount': [401, 1000], 'chance': 0.25, 'description': 'Улучшенные монеты'},
+                    {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.08, 'description': 'Бонус к ежедневным'},
+                    {'type': 'bonus', 'multiplier': 1.5, 'chance': 0.07, 'description': 'Бонус множитель'}
+                ])),
+                
+                # 👑 Элитный кейс — 1000 🪙 (ID: 4)
+                ('👑 Элитный кейс', 1000, json.dumps([
+                    {'type': 'coins', 'amount': [500, 1000], 'chance': 0.3, 'description': 'Элитные монеты'},
+                    {'type': 'loss', 'amount': [100, 300], 'chance': 0.2, 'description': 'Риск потери'},
+                    {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.15, 'description': 'Мощный множитель'},
+                    {'type': 'bonus', 'multiplier': 2.0, 'chance': 0.1, 'description': 'Большой бонус'},
+                    {'type': 'coins', 'amount': [1001, 3000], 'chance': 0.15, 'description': 'Премиум монеты'},
+                    {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.1, 'description': 'Элитные монеты'}
+                ])),
+                
+                # 🔮 Секретный кейс — 2000 🪙 (ID: 5)
+                ('🔮 Секретный кейс', 2000, json.dumps([
+                    {'type': 'coins', 'amount': [800, 1500], 'chance': 0.3, 'description': 'Секретные монеты'},
+                    {'type': 'loss', 'amount': [500, 1000], 'chance': 0.15, 'description': 'Высокий риск'},
+                    {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.15, 'description': 'Легендарный предмет'},
+                    {'type': 'bonus', 'multiplier': 3.0, 'chance': 0.1, 'description': 'Огромный бонус'},
+                    {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.15, 'description': 'Бонусные монеты'},
+                    {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.15, 'description': 'Максимальные монеты'}
+                ])),
+                
+                # СБАЛАНСИРОВАННЫЕ КЕЙСЫ (ID 6-15)
+                # ⚔️ Боевой кейс — 3 500 🪙 (ID: 6)
+                ('⚔️ Боевой кейс', 3500, json.dumps([
+                    {'type': 'coins', 'amount': [1000, 3000], 'chance': 0.4, 'description': 'Боевые монеты'},
+                    {'type': 'loss', 'amount': [500, 1000], 'chance': 0.1, 'description': 'Тактический риск'},
+                    {'type': 'special_item', 'name': 'Перчатка вора', 'chance': 0.15, 'description': 'Бонус к кражам'},
+                    {'type': 'bonus', 'multiplier': 2.5, 'chance': 0.1, 'description': 'Боевой бонус'},
+                    {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.15, 'description': 'Победные монеты'},
+                    {'type': 'special_item', 'name': 'Тотем защиты', 'chance': 0.1, 'description': 'Защита в дуэлях'}
+                ])),
+                
+                # 💎 Премиум кейс — 5 000 🪙 (ID: 7)
+                ('💎 Премиум кейс', 5000, json.dumps([
+                    {'type': 'coins', 'amount': [2000, 4000], 'chance': 0.4, 'description': 'Премиум монеты'},
+                    {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.2, 'description': 'Элитный амулет'},
+                    {'type': 'bonus', 'multiplier': 3.0, 'chance': 0.1, 'description': 'Премиум бонус'},
+                    {'type': 'loss', 'amount': [1000, 2000], 'chance': 0.1, 'description': 'Премиум риск'},
+                    {'type': 'coins', 'amount': [5001, 8000], 'chance': 0.1, 'description': 'Эксклюзивные монеты'},
+                    {'type': 'special_item', 'name': 'Кристалл маны', 'chance': 0.1, 'description': 'Мощный множитель'}
+                ])),
+                
+                # 🔥 Адский кейс — 7 500 🪙 (ID: 8)
+                ('🔥 Адский кейс', 7500, json.dumps([
+                    {'type': 'coins', 'amount': [3000, 6000], 'chance': 0.35, 'description': 'Адские монеты'},
+                    {'type': 'loss', 'amount': [2000, 3000], 'chance': 0.15, 'description': 'Адский риск'},
+                    {'type': 'special_item', 'name': 'Плащ тени', 'chance': 0.2, 'description': 'Бонус к кражам'},
+                    {'type': 'bonus', 'multiplier': 3.5, 'chance': 0.1, 'description': 'Огненный бонус'},
+                    {'type': 'coins', 'amount': [6001, 10000], 'chance': 0.1, 'description': 'Демонические монеты'},
+                    {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.1, 'description': 'Древняя сила'}
+                ])),
+                
+                # ⚡ Легендарный кейс — 10 000 🪙 (ID: 9)
+                ('⚡ Легендарный кейс', 10000, json.dumps([
+                    {'type': 'coins', 'amount': [5000, 8000], 'chance': 0.3, 'description': 'Легендарные монеты'},
+                    {'type': 'special_item', 'name': 'Кольцо удачи', 'chance': 0.2, 'description': 'Удача в кейсах'},
+                    {'type': 'bonus', 'multiplier': 4.0, 'chance': 0.1, 'description': 'Легендарный бонус'},
+                    {'type': 'loss', 'amount': [2000, 4000], 'chance': 0.1, 'description': 'Легендарный риск'},
+                    {'type': 'coins', 'amount': [8001, 15000], 'chance': 0.15, 'description': 'Мифические монеты'},
+                    {'type': 'special_item', 'name': 'Карточный шулер', 'chance': 0.15, 'description': 'Бонус к блэкджеку'}
+                ])),
+                
+                # 🌌 Космический кейс — 15 000 🪙 (ID: 10)
+                ('🌌 Космический кейс', 15000, json.dumps([
+                    {'type': 'coins', 'amount': [8000, 15000], 'chance': 0.3, 'description': 'Космические монеты'},
+                    {'type': 'special_item', 'name': 'Ожерелье мудрости', 'chance': 0.2, 'description': 'Мудрость и опыт'},
+                    {'type': 'bonus', 'multiplier': 4.5, 'chance': 0.1, 'description': 'Космический бонус'},
+                    {'type': 'loss', 'amount': [4000, 6000], 'chance': 0.1, 'description': 'Космический риск'},
+                    {'type': 'coins', 'amount': [15001, 25000], 'chance': 0.15, 'description': 'Галактические монеты'},
+                    {'type': 'special_item', 'name': 'Руна богатства', 'chance': 0.15, 'description': 'Богатство и удача'}
+                ])),
+                
+                # 💠 Кристальный кейс — 20 000 🪙 (ID: 11)
+                ('💠 Кристальный кейс', 20000, json.dumps([
+                    {'type': 'coins', 'amount': [10000, 20000], 'chance': 0.3, 'description': 'Кристальные монеты'},
+                    {'type': 'special_item', 'name': 'Кристалл маны', 'chance': 0.15, 'description': 'Магическая сила'},
+                    {'type': 'bonus', 'multiplier': 5.0, 'chance': 0.1, 'description': 'Кристальный бонус'},
+                    {'type': 'loss', 'amount': [5000, 8000], 'chance': 0.1, 'description': 'Кристальный риск'},
+                    {'type': 'coins', 'amount': [20001, 30000], 'chance': 0.15, 'description': 'Изумрудные монеты'},
+                    {'type': 'special_item', 'name': 'Зелье удачи', 'chance': 0.2, 'description': 'Удача во всем'}
+                ])),
+                
+                # 👁️ Теневой кейс — 25 000 🪙 (ID: 12)
+                ('👁️ Теневой кейс', 25000, json.dumps([
+                    {'type': 'coins', 'amount': [12000, 22000], 'chance': 0.3, 'description': 'Теневые монеты'},
+                    {'type': 'special_item', 'name': 'Плащ тени', 'chance': 0.15, 'description': 'Теневая мощь'},
+                    {'type': 'bonus', 'multiplier': 5.5, 'chance': 0.1, 'description': 'Теневой бонус'},
+                    {'type': 'loss', 'amount': [6000, 10000], 'chance': 0.1, 'description': 'Теневой риск'},
+                    {'type': 'coins', 'amount': [22001, 35000], 'chance': 0.15, 'description': 'Призрачные монеты'},
+                    {'type': 'special_item', 'name': 'Защитный талисман', 'chance': 0.2, 'description': 'Абсолютная защита'}
+                ])),
+                
+                # 🌈 Радужный кейс — 30 000 🪙 (ID: 13)
+                ('🌈 Радужный кейс', 30000, json.dumps([
+                    {'type': 'coins', 'amount': [15000, 25000], 'chance': 0.25, 'description': 'Радужные монеты'},
+                    {'type': 'special_item', 'name': 'Слот-мастер', 'chance': 0.2, 'description': 'Мастер слотов'},
+                    {'type': 'bonus', 'multiplier': 6.0, 'chance': 0.1, 'description': 'Радужный бонус'},
+                    {'type': 'loss', 'amount': [8000, 12000], 'chance': 0.1, 'description': 'Радужный риск'},
+                    {'type': 'coins', 'amount': [25001, 40000], 'chance': 0.15, 'description': 'Разноцветные монеты'},
+                    {'type': 'special_item', 'name': 'Счастливая монета', 'chance': 0.2, 'description': 'Удача в coinflip'}
+                ])),
+                
+                # 🩸 Кровавый кейс — 40 000 🪙 (ID: 14)
+                ('🩸 Кровавый кейс', 40000, json.dumps([
+                    {'type': 'coins', 'amount': [18000, 30000], 'chance': 0.25, 'description': 'Кровавые монеты'},
+                    {'type': 'special_item', 'name': 'Флакон зелья', 'chance': 0.2, 'description': 'Магическое зелье'},
+                    {'type': 'bonus', 'multiplier': 7.0, 'chance': 0.1, 'description': 'Кровавый бонус'},
+                    {'type': 'loss', 'amount': [10000, 15000], 'chance': 0.1, 'description': 'Кровавый риск'},
+                    {'type': 'coins', 'amount': [30001, 45000], 'chance': 0.15, 'description': 'Драконьи монеты'},
+                    {'type': 'special_item', 'name': 'Щит богатства', 'chance': 0.2, 'description': 'Защита богатства'}
+                ])),
+                
+                # 🌟 Божественный кейс — 50 000 🪙 (ID: 15)
+                ('🌟 Божественный кейс', 50000, json.dumps([
+                    {'type': 'coins', 'amount': [25000, 50000], 'chance': 0.2, 'description': 'Божественные монеты'},
+                    {'type': 'special_item', 'name': 'Зелье удачи', 'chance': 0.2, 'description': 'Божественная удача'},
+                    {'type': 'bonus', 'multiplier': 8.0, 'chance': 0.1, 'description': 'Божественный бонус'},
+                    {'type': 'loss', 'amount': [12000, 20000], 'chance': 0.1, 'description': 'Божественный риск'},
+                    {'type': 'coins', 'amount': [50001, 80000], 'chance': 0.15, 'description': 'Небесные монеты'},
+                    {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.25, 'description': 'Власть богов'}
+                ]))
+            ]
             
-            # Если кейсов нет, добавляем их
-            if current_count == 0:
-                print("🔄 Добавление сбалансированных кейсов...")
+            for case in balanced_cases:
+                cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', 
+                             (case[0], case[1], case[2]))
+            
+            print(f"✅ Добавлено {len(balanced_cases)} кейсов с правильными процентами!")
+            
+            # Проверяем суммы процентов для каждого кейса
+            print("🔍 Проверка процентов кейсов:")
+            for i, case in enumerate(balanced_cases, 1):
+                rewards = json.loads(case[2])
+                total_chance = sum(reward['chance'] for reward in rewards)
+                print(f"   Кейс {i}: {case[0]} - сумма процентов: {total_chance:.2f} ({'✅' if 0.99 <= total_chance <= 1.01 else '❌'})")
                 
-                balanced_cases = [
-                    ('📦 Малый кейс', 50, json.dumps([
-                        {'type': 'coins', 'amount': [20, 60], 'chance': 0.7, 'description': 'Небольшая сумма монет'},
-                        {'type': 'coins', 'amount': [61, 150], 'chance': 0.25, 'description': 'Средняя сумма монет'},
-                        {'type': 'special_item', 'name': 'Серебряный амулет', 'chance': 0.05, 'description': '+10% к ежедневной награде'}
-                    ])),
-                    
-                    ('📦 Средний кейс', 150, json.dumps([
-                        {'type': 'coins', 'amount': [80, 200], 'chance': 0.6, 'description': 'Надежная сумма монет'},
-                        {'type': 'coins', 'amount': [201, 400], 'chance': 0.25, 'description': 'Хорошая сумма монет'},
-                        {'type': 'special_item', 'name': 'Браслет везения', 'chance': 0.1, 'description': '+10% к выигрышам в играх'},
-                        {'type': 'special_item', 'name': 'Флакон зелья', 'chance': 0.05, 'description': '+20% к наградам за квесты'}
-                    ])),
-                    
-                    ('💎 Большой кейс', 500, json.dumps([
-                        {'type': 'coins', 'amount': [300, 600], 'chance': 0.5, 'description': 'Солидная сумма'},
-                        {'type': 'coins', 'amount': [601, 1200], 'chance': 0.3, 'description': 'Отличная сумма'},
-                        {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.1, 'description': '+25% к выигрышу в рулетке'},
-                        {'type': 'special_item', 'name': 'Счастливая монета', 'chance': 0.1, 'description': '+20% к выигрышу в coinflip'}
-                    ])),
-                    
-                    # Средние кейсы (1000-5000 монет)
-                    ('👑 Элитный кейс', 1000, json.dumps([
-                        {'type': 'coins', 'amount': [700, 1500], 'chance': 0.4, 'description': 'Элитные монеты'},
-                        {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.2, 'description': '+20% к ежедневной награде'},
-                        {'type': 'special_item', 'name': 'Кольцо удачи', 'chance': 0.15, 'description': '+15% к наградам из кейсов'},
-                        {'type': 'special_item', 'name': 'Карточный шулер', 'chance': 0.15, 'description': '+15% к выигрышу в блэкджеке'},
-                        {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.1, 'description': 'Элитный выигрыш'}
-                    ])),
-                    
-                    ('🔮 Секретный кейс', 2000, json.dumps([
-                        {'type': 'coins', 'amount': [1500, 3000], 'chance': 0.35, 'description': 'Секретные монеты'},
-                        {'type': 'special_item', 'name': 'Перчатка вора', 'chance': 0.2, 'description': '+20% к шансу успешной кражи'},
-                        {'type': 'special_item', 'name': 'Тотем защиты', 'chance': 0.15, 'description': '+20% к шансу победы в дуэлях'},
-                        {'type': 'special_item', 'name': 'Слот-мастер', 'chance': 0.15, 'description': '+25% к выигрышу в слотах'},
-                        {'type': 'coins', 'amount': [3001, 5000], 'chance': 0.15, 'description': 'Секретный клад'}
-                    ])),
-                    
-                    # Премиум кейсы (5000-15000 монет)
-                    ('💎 Премиум кейс', 5000, json.dumps([
-                        {'type': 'coins', 'amount': [4000, 7000], 'chance': 0.3, 'description': 'Премиум монеты'},
-                        {'type': 'special_item', 'name': 'Кристалл маны', 'chance': 0.25, 'description': 'x1.3 к любым наградам'},
-                        {'type': 'special_item', 'name': 'Щит богатства', 'chance': 0.2, 'description': '-20% к проигрышам'},
-                        {'type': 'special_item', 'name': 'Руна богатства', 'chance': 0.15, 'description': '-10% к комиссии переводов'},
-                        {'type': 'coins', 'amount': [7001, 10000], 'chance': 0.1, 'description': 'Премиум выигрыш'}
-                    ])),
-                    
-                    ('⚡ Легендарный кейс', 10000, json.dumps([
-                        {'type': 'coins', 'amount': [8000, 12000], 'chance': 0.25, 'description': 'Легендарные монеты'},
-                        {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.3, 'description': 'x1.5 к любым наградам'},
-                        {'type': 'special_item', 'name': 'Ожерелье мудрости', 'chance': 0.2, 'description': '+15% к опыту'},
-                        {'type': 'special_item', 'name': 'Плащ тени', 'chance': 0.15, 'description': '+15% к шансу кражи'},
-                        {'type': 'coins', 'amount': [12001, 20000], 'chance': 0.1, 'description': 'Легендарный выигрыш'}
-                    ])),
-                    
-                    # Эксклюзивные кейсы (15000+ монет)
-                    ('🌟 Божественный кейс', 15000, json.dumps([
-                        {'type': 'coins', 'amount': [12000, 18000], 'chance': 0.2, 'description': 'Божественные монеты'},
-                        {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.35, 'description': 'x2.0 к любым наградам'},
-                        {'type': 'special_item', 'name': 'Зелье удачи', 'chance': 0.25, 'description': '+10% ко всем наградам'},
-                        {'type': 'coins', 'amount': [18001, 30000], 'chance': 0.2, 'description': 'Божественный куш'}
-                    ])),
-                    
-                    ('✨ Космический кейс', 25000, json.dumps([
-                        {'type': 'coins', 'amount': [20000, 30000], 'chance': 0.15, 'description': 'Космическое богатство'},
-                        {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.4, 'description': 'x2.0 к любым наградам'},
-                        {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.3, 'description': 'x1.5 к любым наградам'},
-                        {'type': 'coins', 'amount': [30001, 50000], 'chance': 0.15, 'description': 'Космический куш'}
-                    ])),
-                    
-                    ('🏆 Титановый кейс', 50000, json.dumps([
-                        {'type': 'coins', 'amount': [40000, 60000], 'chance': 0.1, 'description': 'Титановые монеты'},
-                        {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.5, 'description': 'x2.0 к любым наградам'},
-                        {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.3, 'description': 'x1.5 к любым наградам'},
-                        {'type': 'coins', 'amount': [60001, 100000], 'chance': 0.1, 'description': 'Титановый джекпот'}
-                    ]))
-                ]
-                
-                for case in balanced_cases:
-                    cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', case)
-                
-                print(f"✅ Добавлено {len(balanced_cases)} сбалансированных кейсов!")
-            else:
-                print(f"✅ В базе уже есть {current_count} кейсов, пропускаем инициализацию")
+        else:
+            print(f"✅ В базе уже есть {current_count} кейсов, пропускаем инициализацию")
+            
+        # ... остальной код инициализации предметов и т.д.
+        
+        self.conn.commit()
+        print("✅ Начальные данные успешно инициализированы!")
+        
+    except Exception as e:
+        print(f"❌ Ошибка при инициализации данных: {e}")
+        self.conn.rollback()
             
             # Проверяем и добавляем предметы если нужно
             cursor.execute('SELECT COUNT(*) FROM items')
@@ -1277,31 +1364,39 @@ class CaseView(View):
                     return reward
             return rewards[0]
 
-        async def process_reward(user, reward, case):
-            user_id = user.id
-            if reward['type'] == 'coins':
-                amount = random.randint(reward['amount'][0], reward['amount'][1])
-                # Применяем бафы
-                amount = db.apply_buff_to_amount(user_id, amount, 'case_bonus')
-                amount = db.apply_buff_to_amount(user_id, amount, 'multiplier')
-                amount = db.apply_buff_to_amount(user_id, amount, 'all_bonus')
-                db.update_balance(user_id, amount)
-                db.log_transaction(user_id, 'case_reward', amount, description=f"Кейс: {case['name']}")
-                return f"Монеты: {amount} {EMOJIS['coin']}"
+async def process_reward(user, reward, case):
+    user_id = user.id
+    if reward['type'] == 'coins':
+        amount = random.randint(reward['amount'][0], reward['amount'][1])
+        # Применяем бафы
+        amount = db.apply_buff_to_amount(user_id, amount, 'case_bonus')
+        amount = db.apply_buff_to_amount(user_id, amount, 'multiplier')
+        amount = db.apply_buff_to_amount(user_id, amount, 'all_bonus')
+        db.update_balance(user_id, amount)
+        db.log_transaction(user_id, 'case_reward', amount, description=f"Кейс: {case['name']}")
+        return f"💰 Монеты: {amount} {EMOJIS['coin']}"
 
-            elif reward['type'] == 'special_item':
-                item_name = reward['name']
-                db.add_item_to_inventory(user_id, item_name)
-                return f"Предмет: {item_name}"
+    elif reward['type'] == 'special_item':
+        item_name = reward['name']
+        db.add_item_to_inventory(user_id, item_name)
+        return f"🎁 Предмет: {item_name}"
 
-            elif reward['type'] == 'bonus':
-                amount = case['price'] * reward['multiplier']
-                db.update_balance(user_id, amount)
-                db.log_transaction(user_id, 'case_bonus', amount, description=f"Бонус из кейса: {case['name']}")
-                return f"Бонус: {amount} {EMOJIS['coin']} (x{reward['multiplier']})"
+    elif reward['type'] == 'bonus':
+        amount = case['price'] * reward['multiplier']
+        db.update_balance(user_id, amount)
+        db.log_transaction(user_id, 'case_bonus', amount, description=f"Бонус из кейса: {case['name']}")
+        return f"⭐ Бонус: {amount} {EMOJIS['coin']} (x{reward['multiplier']})"
 
-            else:
-                return "Ничего"
+    elif reward['type'] == 'loss':
+        amount = random.randint(reward['amount'][0], reward['amount'][1])
+        # Применяем защиту от потерь
+        actual_loss = db.apply_buff_to_amount(user_id, amount, 'loss_protection')
+        db.update_balance(user_id, -actual_loss)
+        db.log_transaction(user_id, 'case_loss', -actual_loss, description=f"Потеря из кейса: {case['name']}")
+        return f"💀 Потеря: {actual_loss} {EMOJIS['coin']}"
+
+    else:
+        return "Ничего"
 
         reward = get_reward(case)
         reward_text = await process_reward(interaction.user, reward, case)
@@ -1412,43 +1507,45 @@ class BlackjackView(View):
             score = sum(cards)
         return score
 
-    def create_embed(self):
-        player_score = self.calculate_score(self.player_cards)
-        dealer_score = self.calculate_score(self.dealer_cards)
-        
-        embed = discord.Embed(title="🃏 Блэкджек", color=0x2ecc71)
+def create_embed(self):
+    page_cases = self.pages[self.current_page]
+    embed = discord.Embed(
+        title=f"🎁 Доступные кейсы (Страница {self.current_page + 1}/{self.total_pages})",
+        color=0xff69b4
+    )
+
+    for case in page_cases:
+        case_id = case[0]
+        case_name = case[1]
+        case_price = case[2]
+        case_rewards = json.loads(case[3])
+
+        # Формируем описание наград с правильными процентами
+        rewards_text = ""
+        for reward in case_rewards:
+            chance_percent = reward['chance'] * 100
+            if reward['type'] == 'coins':
+                min_amount = reward['amount'][0]
+                max_amount = reward['amount'][1]
+                rewards_text += f"• 💰 Монеты: {min_amount}–{max_amount} ({chance_percent:.0f}%)\n"
+            elif reward['type'] == 'special_item':
+                item_name = reward['name']
+                rewards_text += f"• 🎁 {item_name} ({chance_percent:.0f}%)\n"
+            elif reward['type'] == 'bonus':
+                multiplier = reward['multiplier']
+                rewards_text += f"• ⭐ Бонус x{multiplier} ({chance_percent:.0f}%)\n"
+            elif reward['type'] == 'loss':
+                min_loss = reward['amount'][0]
+                max_loss = reward['amount'][1]
+                rewards_text += f"• 💀 Потеря: {min_loss}–{max_loss} монет ({chance_percent:.0f}%)\n"
+
         embed.add_field(
-            name="Ваши карты",
-            value=f"{' '.join(['🂠' for _ in self.player_cards])} (Очки: {player_score})",
+            name=f"{case_name} — {case_price} {EMOJIS['coin']} (ID: {case_id})",
+            value=rewards_text,
             inline=False
         )
-        embed.add_field(
-            name="Карты дилера", 
-            value=f"{' '.join(['🂠' for _ in self.dealer_cards])} (Очки: {dealer_score})",
-            inline=False
-        )
-        embed.add_field(name="Ставка", value=f"{self.bet} {EMOJIS['coin']}", inline=True)
-        
-        if self.game_over:
-            if player_score > 21:
-                embed.description = "💥 Перебор! Вы проиграли."
-                embed.color = 0xff0000
-            elif dealer_score > 21:
-                embed.description = "🎉 Дилер перебрал! Вы выиграли."
-                embed.color = 0x00ff00
-            elif player_score > dealer_score:
-                embed.description = "🎉 Вы выиграли!"
-                embed.color = 0x00ff00
-            elif player_score < dealer_score:
-                embed.description = "❌ Вы проиграли."
-                embed.color = 0xff0000
-            else:
-                embed.description = "🤝 Ничья!"
-                embed.color = 0xffff00
-        else:
-            embed.description = "Выберите действие:"
-            
-        return embed
+
+    return embed
 
     @discord.ui.button(label='Взять карту', style=discord.ButtonStyle.primary)
     async def hit(self, interaction: discord.Interaction, button: Button):
@@ -3627,3 +3724,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+

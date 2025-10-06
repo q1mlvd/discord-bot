@@ -205,48 +205,216 @@ ACHIEVEMENTS = {
 
 # Система работ
 WORKS = {
-    'programmer': {'name': '💻 Программист', 'description': 'Написать код для проекта', 'min_reward': 500, 'max_reward': 1500},
-    'designer': {'name': '🎨 Дизайнер', 'description': 'Создать дизайн интерфейса', 'min_reward': 400, 'max_reward': 1200},
-    'writer': {'name': '📝 Копирайтер', 'description': 'Написать статьи для блога', 'min_reward': 300, 'max_reward': 1000},
-    'translator': {'name': '🌐 Переводчик', 'description': 'Перевести документы', 'min_reward': 350, 'max_reward': 1100},
-    'tester': {'name': '🐛 Тестировщик', 'description': 'Найти баги в приложении', 'min_reward': 450, 'max_reward': 1300},
-    'manager': {'name': '📊 Менеджер', 'description': 'Управление проектом', 'min_reward': 600, 'max_reward': 1800},
-    'security': {'name': '🛡️ Аналитик безопасности', 'description': 'Проверить систему на уязвимости', 'min_reward': 700, 'max_reward': 2000},
-    'data_scientist': {'name': '📈 Data Scientist', 'description': 'Проанализировать данные', 'min_reward': 550, 'max_reward': 1600}
+    'miner': {
+        'name': '⛏️ Шахтер', 
+        'description': 'Добыть 10 единиц руды в шахте',
+        'task': 'Найдите и добыйте 10 едицин редкой руды',
+        'reward': 800,
+        'cooldown': 3600
+    },
+    'hunter': {
+        'name': '🏹 Охотник', 
+        'description': 'Охотиться на диких зверей в лесу',
+        'task': 'Поймайте 3 редких зверя в глубинах леса',
+        'reward': 1200,
+        'cooldown': 3600
+    },
+    'fisherman': {
+        'name': '🎣 Рыбак', 
+        'description': 'Рыбачить на озере',
+        'task': 'Поймайте 5 крупных рыб в горном озере',
+        'reward': 1500,
+        'cooldown': 3600
+    }
 }
 
-# Безопасный доступ к данным пользователя
-def get_user_data_safe(user_data):
-    """Безопасное извлечение данных пользователя из кортежа"""
-    if not user_data:
-        return {
-            'user_id': 0,
-            'balance': 100,
-            'daily_streak': 0,
-            'last_daily': None,
-            'inventory': '{"cases": {}, "items": {}}',
-            'created_at': datetime.datetime.now()
-        }
-    
+# Класс для работы с заданиями
+class WorkView(View):
+    def __init__(self, user_id, work_type):
+        super().__init__(timeout=300)  # 5 минут на выполнение
+        self.user_id = user_id
+        self.work_type = work_type
+        self.work_data = WORKS[work_type]
+
+    @discord.ui.button(label='✅ Выполнить задание', style=discord.ButtonStyle.success)
+    async def complete_work(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Это не ваша работа!", ephemeral=True)
+            return
+        
+        # Проверяем кулдаун
+        cursor = db.conn.cursor()
+        cursor.execute('SELECT last_completed FROM user_works WHERE user_id = %s AND work_type = %s', 
+                      (interaction.user.id, self.work_type))
+        result = cursor.fetchone()
+        
+        if result and result[0]:
+            last_completed = result[0]
+            cooldown_seconds = self.work_data['cooldown']
+            if (datetime.datetime.now() - last_completed).total_seconds() < cooldown_seconds:
+                remaining = cooldown_seconds - (datetime.datetime.now() - last_completed).total_seconds()
+                minutes = int(remaining // 60)
+                seconds = int(remaining % 60)
+                await interaction.response.send_message(
+                    f"⏰ Эту работу можно выполнить again через {minutes} минут {seconds} секунд!",
+                    ephemeral=True
+                )
+                return
+        
+        # Выполняем работу
+        reward = self.work_data['reward']
+        
+        # Применяем бафы
+        final_reward = db.apply_buff_to_amount(interaction.user.id, reward, 'multiplier')
+        final_reward = db.apply_buff_to_amount(interaction.user.id, final_reward, 'all_bonus')
+        
+        # Обновляем базу данных
+        db.complete_work(interaction.user.id, self.work_type, final_reward)
+        
+        embed = discord.Embed(
+            title=f"💼 {self.work_data['name']} - Задание выполнено!",
+            description=f"**Задание:** {self.work_data['task']}\n\n🎉 Вы успешно выполнили работу!",
+            color=0x00ff00
+        )
+        embed.add_field(name="💰 Заработок", value=f"{final_reward} {EMOJIS['coin']}", inline=True)
+        embed.add_field(name="⏰ Следующее выполнение", value="Через 1 час", inline=True)
+        embed.set_footer(text="Используйте /works для просмотра статистики")
+        
+        await interaction.response.edit_message(embed=embed, view=None)
+
+    @discord.ui.button(label='❌ Отменить', style=discord.ButtonStyle.danger)
+    async def cancel_work(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ Это не ваша работа!", ephemeral=True)
+            return
+        
+        await interaction.response.edit_message(
+            content="❌ Работа отменена.",
+            embed=None,
+            view=None
+        )
+
+# Команда для начала работы
+@bot.tree.command(name="work", description="Начать работу и заработать монеты")
+@app_commands.describe(work_type="Тип работы")
+@app_commands.choices(work_type=[
+    app_commands.Choice(name="⛏️ Шахтер (800 монет)", value="miner"),
+    app_commands.Choice(name="🏹 Охотник (1200 монет)", value="hunter"),
+    app_commands.Choice(name="🎣 Рыбак (1500 монет)", value="fisherman")
+])
+async def work_command(interaction: discord.Interaction, work_type: app_commands.Choice[str]):
     try:
-        return {
-            'user_id': user_data[0] if len(user_data) > 0 else 0,
-            'balance': user_data[1] if len(user_data) > 1 else 100,
-            'daily_streak': user_data[2] if len(user_data) > 2 else 0,
-            'last_daily': user_data[3] if len(user_data) > 3 else None,
-            'inventory': user_data[4] if len(user_data) > 4 else '{"cases": {}, "items": {}}',
-            'created_at': user_data[5] if len(user_data) > 5 else datetime.datetime.now()
-        }
-    except (IndexError, TypeError) as e:
-        print(f"⚠️ Ошибка в get_user_data_safe: {e}")
-        return {
-            'user_id': 0,
-            'balance': 100,
-            'daily_streak': 0,
-            'last_daily': None,
-            'inventory': '{"cases": {}, "items": {}}',
-            'created_at': datetime.datetime.now()
-        }
+        work_data = WORKS[work_type.value]
+        
+        # Проверяем кулдаун
+        cursor = db.conn.cursor()
+        cursor.execute('SELECT last_completed FROM user_works WHERE user_id = %s AND work_type = %s', 
+                      (interaction.user.id, work_type.value))
+        result = cursor.fetchone()
+        
+        if result and result[0]:
+            last_completed = result[0]
+            cooldown_seconds = work_data['cooldown']
+            if (datetime.datetime.now() - last_completed).total_seconds() < cooldown_seconds:
+                remaining = cooldown_seconds - (datetime.datetime.now() - last_completed).total_seconds()
+                minutes = int(remaining // 60)
+                seconds = int(remaining % 60)
+                await interaction.response.send_message(
+                    f"⏰ Эту работу можно выполнить again через {minutes} минут {seconds} секунд!",
+                    ephemeral=True
+                )
+                return
+        
+        # Создаем embed с информацией о работе
+        embed = discord.Embed(
+            title=f"💼 {work_data['name']}",
+            description=work_data['description'],
+            color=0x3498db
+        )
+        embed.add_field(name="📝 Задание", value=work_data['task'], inline=False)
+        embed.add_field(name="💰 Награда", value=f"{work_data['reward']} {EMOJIS['coin']}", inline=True)
+        embed.add_field(name="⏰ Время выполнения", value="Мгновенно", inline=True)
+        embed.add_field(name="⏱️ Кулдаун", value="1 час", inline=True)
+        embed.set_footer(text="Нажмите кнопку ниже чтобы выполнить задание")
+        
+        view = WorkView(interaction.user.id, work_type.value)
+        await interaction.response.send_message(embed=embed, view=view)
+        
+    except Exception as e:
+        print(f"❌ Ошибка в команде work: {e}")
+        error_embed = discord.Embed(
+            title="❌ Ошибка начала работы",
+            description="Произошла ошибка при начале работы. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
+
+# Команда для просмотра статистики работ
+@bot.tree.command(name="works", description="Показать статистику выполненных работ")
+async def works_stats(interaction: discord.Interaction):
+    try:
+        user_works = db.get_user_works(interaction.user.id)
+        
+        embed = discord.Embed(title="💼 Статистика работ", color=0x3498db)
+        
+        # Показываем доступные работы
+        works_info = ""
+        for work_id, work_data in WORKS.items():
+            # Проверяем кулдаун
+            cursor = db.conn.cursor()
+            cursor.execute('SELECT last_completed FROM user_works WHERE user_id = %s AND work_type = %s', 
+                          (interaction.user.id, work_id))
+            result = cursor.fetchone()
+            
+            status = "✅ Доступно"
+            if result and result[0]:
+                last_completed = result[0]
+                cooldown_seconds = work_data['cooldown']
+                if (datetime.datetime.now() - last_completed).total_seconds() < cooldown_seconds:
+                    remaining = cooldown_seconds - (datetime.datetime.now() - last_completed).total_seconds()
+                    minutes = int(remaining // 60)
+                    seconds = int(remaining % 60)
+                    status = f"⏰ Через {minutes}м {seconds}с"
+            
+            works_info += f"**{work_data['name']}** - {work_data['reward']} {EMOJIS['coin']} - {status}\n"
+        
+        embed.add_field(name="📊 Доступные работы", value=works_info, inline=False)
+        
+        # Показываем статистику выполненных работ
+        if user_works:
+            stats_text = ""
+            total_earned = 0
+            total_works = 0
+            
+            for work in user_works:
+                work_type = work[0]
+                count = work[1]
+                total_works += count
+                
+                if work_type in WORKS:
+                    work_name = WORKS[work_type]['name']
+                    work_reward = WORKS[work_type]['reward']
+                    earned = count * work_reward
+                    total_earned += earned
+                    
+                    stats_text += f"**{work_name}:** {count} раз ({earned} {EMOJIS['coin']})\n"
+            
+            embed.add_field(name="📈 Выполненные работы", value=stats_text, inline=False)
+            embed.add_field(name="🔢 Всего работ", value=f"{total_works} выполненных заданий", inline=True)
+            embed.add_field(name="💰 Всего заработано", value=f"{total_earned} {EMOJIS['coin']}", inline=True)
+        else:
+            embed.add_field(name="📈 Выполненные работы", value="Вы еще не выполнили ни одной работы", inline=False)
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        print(f"❌ Ошибка в команде works: {e}")
+        error_embed = discord.Embed(
+            title="❌ Ошибка загрузки статистики",
+            description="Произошла ошибка при загрузке статистики работ.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 # Исправленный класс Database для PostgreSQL
 class Database:
@@ -411,7 +579,7 @@ class Database:
             raise
 
 def initialize_default_data(self):
-    """Инициализация начальных данных с ПРАВИЛЬНЫМИ ПРОЦЕНТАМИ"""
+    """Инициализация начальных данных с правильными отступами"""
     try:
         cursor = self.conn.cursor()
         
@@ -420,11 +588,10 @@ def initialize_default_data(self):
         current_count = cursor.fetchone()[0]
         print(f"🔍 Текущее количество кейсов в базе: {current_count}")
         
-        # Если кейсов нет, добавляем их с ПРАВИЛЬНЫМИ ПРОЦЕНТАМИ
+        # Если кейсов нет, добавляем их
         if current_count == 0:
-            print("🔄 Добавление кейсов с правильными процентами...")
+            print("🔄 Добавление кейсов...")
             
-            # ОСНОВНЫЕ КЕЙСЫ (ID 1-5)
             balanced_cases = [
                 # 📦 Малый кейс — 50 🪙 (ID: 1)
                 ('📦 Малый кейс', 50, json.dumps([
@@ -575,19 +742,15 @@ def initialize_default_data(self):
                 cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', 
                              (case[0], case[1], case[2]))
             
-            print(f"✅ Добавлено {len(balanced_cases)} кейсов с правильными процентами!")
-            
-            # Проверяем суммы процентов для каждого кейса
-            print("🔍 Проверка процентов кейсов:")
-            for i, case in enumerate(balanced_cases, 1):
-                rewards = json.loads(case[2])
-                total_chance = sum(reward['chance'] for reward in rewards)
-                print(f"   Кейс {i}: {case[0]} - сумма процентов: {total_chance:.2f} ({'✅' if 0.99 <= total_chance <= 1.01 else '❌'})")
-                
-        else:
-            print(f"✅ В базе уже есть {current_count} кейсов, пропускаем инициализацию")
-            
-        # ... остальной код инициализации предметов и т.д.
+            print(f"✅ Добавлено {len(balanced_cases)} кейсов!")
+
+        # Проверяем и добавляем предметы если нужно
+        cursor.execute('SELECT COUNT(*) FROM items')
+        items_count = cursor.fetchone()[0]
+        
+        if items_count == 0:
+            print("🔄 Добавление предметов...")
+            # Добавьте ваши предметы здесь...
         
         self.conn.commit()
         print("✅ Начальные данные успешно инициализированы!")
@@ -3724,4 +3887,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 

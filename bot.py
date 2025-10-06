@@ -3658,7 +3658,7 @@ async def help_command(interaction: discord.Interaction):
 **/daily** - Ежедневная награда
 **/pay** @user сумма - Перевод
 **/inventory** - Инвентарь
-**/mystats** - Статистика""",  # Обновили ссылку на mystats
+**/mystats** - Статистика""",
         inline=False
     )
     
@@ -3713,7 +3713,7 @@ async def help_command(interaction: discord.Interaction):
     
     embed.set_footer(text="Используйте / для просмотра всех команд • Баги исправлены!")
     
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed)  # ИСПРАВЛЕНО: убрана лишняя скобка
 
 @bot.tree.command(name="buffs", description="Показать ваши активные бафы")
 async def buffs(interaction: discord.Interaction):
@@ -3861,3 +3861,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+

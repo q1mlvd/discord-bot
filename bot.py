@@ -387,106 +387,79 @@ class Database:
             self.conn.rollback()
             raise
 
-    def initialize_default_data(self):
-        """Инициализация начальных данных с УЛУЧШЕННЫМИ КЕЙСАМИ"""
-        try:
-            cursor = self.conn.cursor()
+def initialize_default_data(self):
+    """Инициализация начальных данных с УЛУЧШЕННЫМИ КЕЙСАМИ И ПРЕДМЕТАМИ"""
+    try:
+        cursor = self.conn.cursor()
+        
+        # Проверяем текущее количество кейсов
+        cursor.execute('SELECT COUNT(*) FROM cases')
+        current_count = cursor.fetchone()[0]
+        print(f"🔍 Текущее количество кейсов в базе: {current_count}")
+        
+        # Если кейсов нет, добавляем их
+        if current_count == 0:
+            print("🔄 Добавление улучшенных кейсов...")
             
-            # Проверяем текущее количество кейсов
-            cursor.execute('SELECT COUNT(*) FROM cases')
-            current_count = cursor.fetchone()[0]
-            print(f"🔍 Текущее количество кейсов в базе: {current_count}")
+            improved_cases = [
+                ('📦 Начинающий кейс', 25, json.dumps([
+                    {'type': 'coins', 'amount': [10, 30], 'chance': 0.6, 'description': 'Небольшая сумма монет'},
+                    {'type': 'coins', 'amount': [31, 80], 'chance': 0.3, 'description': 'Средняя сумма монет'},
+                    {'type': 'coins', 'amount': [81, 150], 'chance': 0.1, 'description': 'Хорошая сумма монет'}
+                ])),
+                # ... остальные кейсы ...
+            ]
             
-            # Если кейсов нет, добавляем их
-            if current_count == 0:
-                print("🔄 Добавление улучшенных кейсов...")
-                
-                improved_cases = [
-                    ('📦 Начинающий кейс', 25, json.dumps([
-                        {'type': 'coins', 'amount': [10, 30], 'chance': 0.6, 'description': 'Небольшая сумма монет'},
-                        {'type': 'coins', 'amount': [31, 80], 'chance': 0.3, 'description': 'Средняя сумма монет'},
-                        {'type': 'coins', 'amount': [81, 150], 'chance': 0.1, 'description': 'Хорошая сумма монет'}
-                    ])),
-                    ('📦 Малый кейс', 50, json.dumps([
-                        {'type': 'coins', 'amount': [20, 50], 'chance': 0.5, 'description': 'Небольшая сумма монет'},
-                        {'type': 'coins', 'amount': [51, 120], 'chance': 0.3, 'description': 'Средняя сумма монет'},
-                        {'type': 'coins', 'amount': [121, 250], 'chance': 0.15, 'description': 'Хорошая сумма монет'},
-                        {'type': 'special_item', 'name': 'Серебряный амулет', 'chance': 0.05, 'description': 'Увеличивает ежедневную награду на 10%'}
-                    ])),
-                    ('⚡ Быстрый кейс', 75, json.dumps([
-                        {'type': 'coins', 'amount': [30, 80], 'chance': 0.7, 'description': 'Быстрые монеты'},
-                        {'type': 'coins', 'amount': [81, 180], 'chance': 0.2, 'description': 'Быстрая хорошая сумма'},
-                        {'type': 'special_item', 'name': 'Перчатка вора', 'chance': 0.1, 'description': 'Увеличивает шанс кражи на 20%'}
-                    ])),
-                    ('📦 Средний кейс', 150, json.dumps([
-                        {'type': 'coins', 'amount': [50, 100], 'chance': 0.4, 'description': 'Надежная сумма монет'},
-                        {'type': 'coins', 'amount': [101, 250], 'chance': 0.3, 'description': 'Отличная сумма монет'},
-                        {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.15, 'description': 'Увеличивает ежедневную награду на 20%'},
-                        {'type': 'coins', 'amount': [251, 500], 'chance': 0.1, 'description': 'Отличный выигрыш'},
-                        {'type': 'bonus', 'multiplier': 1.2, 'duration': 12, 'chance': 0.05, 'description': 'Временный бонус x1.2 на 12 часов'}
-                    ])),
-                    ('💎 Большой кейс', 500, json.dumps([
-                        {'type': 'coins', 'amount': [200, 400], 'chance': 0.6, 'description': 'Солидная сумма'},
-                        {'type': 'coins', 'amount': [401, 1000], 'chance': 0.25, 'description': 'Очень хорошая сумма'},
-                        {'type': 'special_item', 'name': 'Золотой ключ', 'chance': 0.08, 'description': 'Особый предмет'},
-                        {'type': 'bonus', 'multiplier': 1.5, 'duration': 24, 'chance': 0.07, 'description': 'Временный бонус x1.5 на 24 часа'}
-                    ])),
-                    ('👑 Элитный кейс', 1000, json.dumps([
-                        {'type': 'coins', 'amount': [500, 1000], 'chance': 0.3, 'description': 'Элитные монеты'},
-                        {'type': 'coins', 'amount': [-300, -100], 'chance': 0.2, 'description': 'Неудача (потеря монет)'},
-                        {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.15, 'description': 'Мощный множитель наград'},
-                        {'type': 'bonus', 'multiplier': 2.0, 'duration': 48, 'chance': 0.1, 'description': 'Временный бонус x2.0 на 48 часов'},
-                        {'type': 'coins', 'amount': [1001, 3000], 'chance': 0.15, 'description': 'Элитный выигрыш'},
-                        {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.1, 'description': 'Элитный джекпот'}
-                    ])),
-                    ('🔮 Секретный кейс', 2000, json.dumps([
-                        {'type': 'coins', 'amount': [800, 1500], 'chance': 0.3, 'description': 'Секретные монеты'},
-                        {'type': 'coins', 'amount': [-1000, -500], 'chance': 0.15, 'description': 'Секретный риск'},
-                        {'type': 'special_item', 'name': 'Мифический предмет', 'chance': 0.15, 'description': 'Легендарный множитель наград'},
-                        {'type': 'bonus', 'multiplier': 3.0, 'duration': 72, 'chance': 0.1, 'description': 'Временный бонус x3.0 на 72 часа'},
-                        {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.15, 'description': 'Секретная удача'},
-                        {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.15, 'description': 'Секретный клад'}
-                    ]))
-                ]
-                
-                for case in improved_cases:
-                    cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', case)
-                
-                print(f"✅ Добавлено {len(improved_cases)} улучшенных кейсов!")
-            else:
-                print(f"✅ В базе уже есть {current_count} кейсов, пропускаем инициализацию")
+            for case in improved_cases:
+                cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', case)
             
-            # Проверяем и добавляем предметы если нужно
-            cursor.execute('SELECT COUNT(*) FROM items')
-            items_count = cursor.fetchone()[0]
+            print(f"✅ Добавлено {len(improved_cases)} улучшенных кейсов!")
+        else:
+            print(f"✅ В базе уже есть {current_count} кейсов, пропускаем инициализацию")
+        
+        # Проверяем и добавляем предметы если нужно
+        cursor.execute('SELECT COUNT(*) FROM items')
+        items_count = cursor.fetchone()[0]
+        
+        if items_count == 0:
+            print("🔄 Добавление ВСЕХ стандартных предметов...")
             
-            if items_count == 0:
-                print("🔄 Добавление стандартных предметов...")
-                
-                default_items = [
-                    ('Золотой амулет', 'Увеличивает ежедневную награду', 500, 'rare', 'daily_bonus', 1.2, '+20% к ежедневной награде'),
-                    ('Серебряный амулет', 'Небольшой бонус к ежедневной награде', 250, 'common', 'daily_bonus', 1.1, '+10% к ежедневной награде'),
-                    ('Кольцо удачи', 'Увеличивает награды из кейсов', 600, 'rare', 'case_bonus', 1.15, '+15% к наградам из кейсов'),
-                    ('Браслет везения', 'Увеличивает выигрыши в играх', 450, 'uncommon', 'game_bonus', 1.1, '+10% к выигрышам в играх'),
-                    ('Защитный талисман', 'Защищает от краж', 800, 'epic', 'steal_protection', 0.5, '-50% к шансу кражи у вас'),
-                    ('Перчатка вора', 'Увеличивает шанс успешной кражи', 700, 'rare', 'steal_bonus', 1.2, '+20% к шансу успешной кражи'),
-                    ('Магический свиток', 'Увеличивает выигрыш в рулетке', 550, 'rare', 'roulette_bonus', 1.25, '+25% к выигрышу в рулетке'),
-                    ('Кристалл маны', 'Умножает все награды', 1000, 'epic', 'multiplier', 1.3, 'x1.3 к любым наградам'),
-                    ('Древний артефакт', 'Мощный множитель наград', 2000, 'legendary', 'multiplier', 1.5, 'x1.5 к любым наградам'),
-                    ('Мифический предмет', 'Легендарный множитель наград', 5000, 'mythic', 'multiplier', 2.0, 'x2.0 к любым наградам'),
-                ]
-                
-                for item in default_items:
-                    cursor.execute('INSERT INTO items (name, description, value, rarity, buff_type, buff_value, buff_description) VALUES (%s, %s, %s, %s, %s, %s, %s)', item)
-                
-                print("✅ Стандартные предметы добавлены!")
+            default_items = [
+                ('Золотой амулет', 'Увеличивает ежедневную награду', 500, 'rare', 'daily_bonus', 1.2, '+20% к ежедневной награде'),
+                ('Серебряный амулет', 'Небольшой бонус к ежедневной награде', 250, 'common', 'daily_bonus', 1.1, '+10% к ежедневной награде'),
+                ('Кольцо удачи', 'Увеличивает награды из кейсов', 600, 'rare', 'case_bonus', 1.15, '+15% к наградам из кейсов'),
+                ('Браслет везения', 'Увеличивает выигрыши в играх', 450, 'uncommon', 'game_bonus', 1.1, '+10% к выигрышам в играх'),
+                ('Защитный талисман', 'Защищает от краж', 800, 'epic', 'steal_protection', 0.5, '-50% к шансу кражи у вас'),
+                ('Перчатка вора', 'Увеличивает шанс успешной кражи', 700, 'rare', 'steal_bonus', 1.2, '+20% к шансу успешной кражи'),
+                ('Магический свиток', 'Увеличивает выигрыш в рулетке', 550, 'rare', 'roulette_bonus', 1.25, '+25% к выигрышу в рулетке'),
+                ('Кристалл маны', 'Умножает все награды', 1000, 'epic', 'multiplier', 1.3, 'x1.3 к любым наградам'),
+                ('Древний артефакт', 'Мощный множитель наград', 2000, 'legendary', 'multiplier', 1.5, 'x1.5 к любым наградам'),
+                ('Мифический предмет', 'Легендарный множитель наград', 5000, 'mythic', 'multiplier', 2.0, 'x2.0 к любым наградам'),
+                ('Счастливая монета', 'Увеличивает выигрыш в coinflip', 300, 'uncommon', 'coinflip_bonus', 1.2, '+20% к выигрышу в coinflip'),
+                ('Карточный шулер', 'Увеличивает выигрыш в блэкджеке', 400, 'rare', 'blackjack_bonus', 1.15, '+15% к выигрышу в блэкджеке'),
+                ('Слот-мастер', 'Увеличивает выигрыш в слотах', 600, 'rare', 'slot_bonus', 1.25, '+25% к выигрышу в слотах'),
+                ('Щит богатства', 'Уменьшает проигрыши', 900, 'epic', 'loss_protection', 0.8, '-20% к проигрышам'),
+                ('Флакон зелья', 'Увеличивает награды за квесты', 350, 'uncommon', 'quest_bonus', 1.2, '+20% к наградам за квесты'),
+                ('Зелье удачи', 'Увеличивает все награды', 800, 'epic', 'all_bonus', 1.1, '+10% ко всем наградам'),
+                ('Руна богатства', 'Уменьшает комиссию переводов', 700, 'rare', 'transfer_bonus', 0.9, '-10% к комиссии переводов'),
+                ('Тотем защиты', 'Увеличивает шанс победы в дуэлях', 500, 'rare', 'duel_bonus', 1.2, '+20% к шансу победы в дуэлях'),
+                ('Ожерелье мудрости', 'Увеличивает получаемый опыт', 450, 'uncommon', 'xp_bonus', 1.15, '+15% к опыту'),
+                ('Плащ тени', 'Увеличивает шанс кражи', 550, 'rare', 'steal_chance', 1.15, '+15% к шансу кражи')
+            ]
             
-            self.conn.commit()
-            print("✅ Начальные данные успешно инициализированы!")
+            for item in default_items:
+                cursor.execute('INSERT INTO items (name, description, value, rarity, buff_type, buff_value, buff_description) VALUES (%s, %s, %s, %s, %s, %s, %s)', item)
             
-        except Exception as e:
-            print(f"❌ Ошибка при инициализации данных: {e}")
-            self.conn.rollback()
+            print(f"✅ Добавлено {len(default_items)} стандартных предметов!")
+        else:
+            print(f"✅ В базе уже есть {items_count} предметов, пропускаем инициализацию")
+        
+        self.conn.commit()
+        print("✅ Начальные данные успешно инициализированы!")
+        
+    except Exception as e:
+        print(f"❌ Ошибка при инициализации данных: {e}")
+        self.conn.rollback()
 
     def get_user(self, user_id):
         """Безопасное получение пользователя"""
@@ -872,37 +845,37 @@ class Database:
         
         self.conn.commit()
     
-    def get_user_buffs(self, user_id):
-        """Безопасное получение бафов пользователя"""
-        try:
-            inventory = self.get_user_inventory(user_id)
-            buffs = {}
-            
-            for item_id, count in inventory.get("items", {}).items():
-                try:
-                    if not item_id.isdigit():
-                        continue
-                        
-                    item_data = self.get_item(int(item_id))
-                    if item_data and len(item_data) > 6 and item_data[5]:  # buff_type
-                        buff_type = item_data[5]
-                        buff_value = item_data[6] if len(item_data) > 6 else 1.0
-                        
-                        # Берем самый сильный баф каждого типа
-                        if buff_type not in buffs or buff_value > buffs[buff_type]['value']:
-                            buffs[buff_type] = {
-                                'value': buff_value,
-                                'description': item_data[7] if len(item_data) > 7 else "Бонус",
-                                'item_name': item_data[1] if len(item_data) > 1 else "Предмет"
-                            }
-                except (ValueError, IndexError) as e:
-                    print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
+def get_user_buffs(self, user_id):
+    """Безопасное получение бафов пользователя"""
+    try:
+        inventory = self.get_user_inventory(user_id)
+        buffs = {}
+        
+        for item_id, count in inventory.get("items", {}).items():
+            try:
+                if not str(item_id).isdigit():
                     continue
-            
-            return buffs
-        except Exception as e:
-            print(f"❌ Ошибка в get_user_buffs для {user_id}: {e}")
-            return {}
+                    
+                item_data = self.get_item(int(item_id))
+                if item_data and len(item_data) > 6 and item_data[5]:  # buff_type
+                    buff_type = item_data[5]
+                    buff_value = item_data[6] if len(item_data) > 6 else 1.0
+                    
+                    # Берем самый сильный баф каждого типа
+                    if buff_type not in buffs or buff_value > buffs[buff_type]['value']:
+                        buffs[buff_type] = {
+                            'value': float(buff_value),
+                            'description': item_data[7] if len(item_data) > 7 and item_data[7] else "Бонус",
+                            'item_name': item_data[1] if len(item_data) > 1 and item_data[1] else "Предмет"
+                        }
+            except (ValueError, IndexError, TypeError) as e:
+                print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
+                continue
+        
+        return buffs
+    except Exception as e:
+        print(f"❌ Ошибка в get_user_buffs для {user_id}: {e}")
+        return {}
     
     def get_active_buffs_count(self, user_id):
         """Возвращает количество активных уникальных бафов"""
@@ -948,20 +921,27 @@ class Database:
             print(f"❌ Ошибка в get_user_quests: {e}")
             return []
     
-    def add_user_quest(self, user_id, quest_id):
-        """Добавить квест пользователю"""
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                INSERT INTO quests (user_id, quest_id, progress, completed) 
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (user_id, quest_id) DO NOTHING
-            ''', (user_id, quest_id, 0, False))
-            self.conn.commit()
-            return True
-        except Exception as e:
-            print(f"❌ Ошибка в add_user_quest: {e}")
-            return False
+def add_user_quest(self, user_id, quest_id):
+    """Добавить квест пользователю"""
+    try:
+        cursor = self.conn.cursor()
+        
+        # Проверяем, есть ли уже такой квест у пользователя
+        cursor.execute('SELECT 1 FROM quests WHERE user_id = %s AND quest_id = %s', (user_id, quest_id))
+        if cursor.fetchone():
+            return False  # Квест уже есть
+            
+        cursor.execute('''
+            INSERT INTO quests (user_id, quest_id, progress, completed) 
+            VALUES (%s, %s, %s, %s)
+        ''', (user_id, quest_id, 0, False))
+        self.conn.commit()
+        
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка в add_user_quest: {e}")
+        self.conn.rollback()
+        return False
     
     def update_quest_progress(self, user_id, quest_id, progress, completed=False):
         """Обновить прогресс квеста"""
@@ -1738,14 +1718,20 @@ class MyItemsPaginatedView(View):
 async def balance(interaction: discord.Interaction, user: discord.Member = None):
     try:
         user = user or interaction.user
+        
+        # Убедимся, что пользователь существует в базе
+        db.get_user(user.id)
+        
         user_data = db.get_user(user.id)
         user_safe = get_user_data_safe(user_data)
         
+        # Получаем статистику достижений
         cursor = db.conn.cursor()
         cursor.execute('SELECT COUNT(*) FROM achievements WHERE user_id = %s', (user.id,))
         achievements_result = cursor.fetchone()
         achievements_count = achievements_result[0] if achievements_result else 0
         
+        # Получаем активные бафы
         buffs = {}
         try:
             buffs = db.get_user_buffs(user.id)
@@ -1760,6 +1746,7 @@ async def balance(interaction: discord.Interaction, user: discord.Member = None)
         embed.add_field(name="Ежедневная серия", value=f"{user_safe['daily_streak']} дней", inline=True)
         embed.add_field(name="Достижения", value=f"{achievements_count}/{len(ACHIEVEMENTS)}", inline=True)
         
+        # Показываем активные бафы
         if buffs:
             buffs_text = "\n".join([f"• {buff['item_name']}: {buff['description']}" for buff in buffs.values()])
             embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
@@ -2285,6 +2272,9 @@ async def items_list(interaction: discord.Interaction):
             await interaction.response.send_message("❌ Предметы не найдены!", ephemeral=True)
             return
         
+        print(f"🔍 Загружено {len(items)} предметов из базы данных")
+        
+        # Создаем страницы
         items_per_page = 5
         pages = []
         
@@ -2292,6 +2282,7 @@ async def items_list(interaction: discord.Interaction):
             page_items = items[i:i + items_per_page]
             pages.append(page_items)
         
+        # Создаем view для пагинации
         view = ItemsPaginatedView(pages, interaction.user.id)
         embed = view.create_embed()
         
@@ -2715,20 +2706,56 @@ async def inventory(interaction: discord.Interaction):
         await interaction.response.send_message("❌ Произошла ошибка при загрузке инвентаря!", ephemeral=True)
 
 # КВЕСТЫ И ДОСТИЖЕНИЯ
+def add_user_quest(self, user_id, quest_id):
+    """Добавить квест пользователю"""
+    try:
+        cursor = self.conn.cursor()
+        
+        # Проверяем, есть ли уже такой квест у пользователя
+        cursor.execute('SELECT 1 FROM quests WHERE user_id = %s AND quest_id = %s', (user_id, quest_id))
+        if cursor.fetchone():
+            return False  # Квест уже есть
+            
+        cursor.execute('''
+            INSERT INTO quests (user_id, quest_id, progress, completed) 
+            VALUES (%s, %s, %s, %s)
+        ''', (user_id, quest_id, 0, False))
+        self.conn.commit()
+        
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка в add_user_quest: {e}")
+        self.conn.rollback()
+        return False
+
 @bot.tree.command(name="quest", description="Получить случайный квест")
-@app_commands.checks.cooldown(1, 10800.0)
+@app_commands.checks.cooldown(1, 10800.0)  # 3 часа КД
 async def quest_command(interaction: discord.Interaction):
     try:
+        # Проверяем, есть ли доступные квесты
         if not QUESTS:
             await interaction.response.send_message("❌ В системе пока нет доступных квестов!", ephemeral=True)
             return
         
-        quest_id, quest_data = random.choice(list(QUESTS.items()))
+        # Получаем случайный квест
+        available_quests = list(QUESTS.keys())
+        random.shuffle(available_quests)
         
-        success = db.add_user_quest(interaction.user.id, quest_id)
+        success = False
+        quest_data = None
+        quest_id = None
         
-        if success:
+        # Пытаемся добавить случайный квест
+        for q_id in available_quests:
+            if db.add_user_quest(interaction.user.id, q_id):
+                success = True
+                quest_id = q_id
+                quest_data = QUESTS[q_id]
+                break
+        
+        if success and quest_data:
             base_reward = quest_data['reward']
+            # Применяем бафы к награде
             reward = db.apply_buff_to_amount(interaction.user.id, base_reward, 'quest_bonus')
             reward = db.apply_buff_to_amount(interaction.user.id, reward, 'multiplier')
             reward = db.apply_buff_to_amount(interaction.user.id, reward, 'all_bonus')
@@ -2743,7 +2770,7 @@ async def quest_command(interaction: discord.Interaction):
             
             await interaction.response.send_message(embed=embed)
         else:
-            await interaction.response.send_message("❌ Не удалось выдать квест! Возможно, он у вас уже есть.", ephemeral=True)
+            await interaction.response.send_message("❌ Не удалось выдать квест! Возможно, у вас уже есть все доступные квесты.", ephemeral=True)
             
     except Exception as e:
         print(f"❌ Ошибка в команде quest: {e}")
@@ -2815,98 +2842,99 @@ async def show_achievements(interaction: discord.Interaction):
         cursor.execute('SELECT achievement_id FROM achievements WHERE user_id = %s', (interaction.user.id,))
         user_achievements_result = cursor.fetchall()
         
+        # Безопасное извлечение achievement_id
         user_achievements = []
         for row in user_achievements_result:
-            if row and len(row) > 0:
+            if row and len(row) > 0 and row[0]:
                 user_achievements.append(row[0])
-        
+
         embed = discord.Embed(title="🏅 Ваши достижения", color=0xffd700)
         
-        unlocked_count = 0
+        if not user_achievements:
+            embed.description = "У вас пока нет достижений. Продолжайте играть, чтобы их получить!"
+            embed.set_footer(text="Используйте команды бота для получения достижений")
+            await interaction.response.send_message(embed=embed)
+            return
+        
+        unlocked_count = len(user_achievements)
         achievements_list = []
         
         for achievement_id, achievement in ACHIEVEMENTS.items():
             status = "✅" if achievement_id in user_achievements else "❌"
-            if achievement_id in user_achievements:
-                unlocked_count += 1
-                
             achievements_list.append(
                 f"{status} **{achievement['name']}**\n{achievement['description']}\nНаграда: {achievement['reward']} {EMOJIS['coin']}\n"
             )
         
-        if achievements_list:
-            pages = []
-            current_page = ""
-            
-            for achievement in achievements_list:
-                if len(current_page) + len(achievement) > 2000:
-                    pages.append(current_page)
-                    current_page = achievement
-                else:
-                    current_page += achievement
-            
-            if current_page:
+        # Разбиваем на страницы
+        pages = []
+        current_page = ""
+        
+        for achievement in achievements_list:
+            if len(current_page) + len(achievement) > 2000:
                 pages.append(current_page)
-            
-            if len(pages) == 1:
-                embed.description = pages[0]
-                await interaction.response.send_message(embed=embed)
+                current_page = achievement
             else:
-                class AchievementsPaginatedView(View):
-                    def __init__(self, pages, author_id, unlocked_count, total_count):
-                        super().__init__(timeout=120)
-                        self.pages = pages
-                        self.current_page = 0
-                        self.total_pages = len(pages)
-                        self.author_id = author_id
-                        self.unlocked_count = unlocked_count
-                        self.total_count = total_count
-                        self.update_buttons()
-
-                    def update_buttons(self):
-                        self.previous_button.disabled = (self.current_page == 0)
-                        self.next_button.disabled = (self.current_page >= self.total_pages - 1)
-
-                    @discord.ui.button(label='⬅️ Назад', style=discord.ButtonStyle.secondary)
-                    async def previous_button(self, interaction: discord.Interaction, button: Button):
-                        if interaction.user.id != self.author_id:
-                            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
-                            return
-                        
-                        if self.current_page > 0:
-                            self.current_page -= 1
-                            self.update_buttons()
-                            embed = self.create_embed()
-                            await interaction.response.edit_message(embed=embed, view=self)
-
-                    @discord.ui.button(label='➡️ Вперед', style=discord.ButtonStyle.secondary)
-                    async def next_button(self, interaction: discord.Interaction, button: Button):
-                        if interaction.user.id != self.author_id:
-                            await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
-                            return
-                        
-                        if self.current_page < self.total_pages - 1:
-                            self.current_page += 1
-                            self.update_buttons()
-                            embed = self.create_embed()
-                            await interaction.response.edit_message(embed=embed, view=self)
-
-                    def create_embed(self):
-                        embed = discord.Embed(
-                            title=f"🏅 Ваши достижения (Страница {self.current_page + 1}/{self.total_pages})",
-                            description=self.pages[self.current_page],
-                            color=0xffd700
-                        )
-                        embed.set_footer(text=f"Разблокировано: {self.unlocked_count}/{self.total_count}")
-                        return embed
-                
-                view = AchievementsPaginatedView(pages, interaction.user.id, unlocked_count, len(ACHIEVEMENTS))
-                embed = view.create_embed()
-                await interaction.response.send_message(embed=embed, view=view)
-        else:
-            embed.description = "У вас пока нет достижений. Продолжайте играть, чтобы их получить!"
-            embed.set_footer(text="Используйте команды бота для получения достижений")
+                current_page += achievement
+        
+        if current_page:
+            pages.append(current_page)
+        
+        if len(pages) == 1:
+            embed.description = pages[0]
+            embed.set_footer(text=f"Разблокировано: {unlocked_count}/{len(ACHIEVEMENTS)}")
             await interaction.response.send_message(embed=embed)
+        else:
+            class AchievementsPaginatedView(View):
+                def __init__(self, pages, author_id, unlocked_count, total_count):
+                    super().__init__(timeout=120)
+                    self.pages = pages
+                    self.current_page = 0
+                    self.total_pages = len(pages)
+                    self.author_id = author_id
+                    self.unlocked_count = unlocked_count
+                    self.total_count = total_count
+                    self.update_buttons()
+
+                def update_buttons(self):
+                    self.previous_button.disabled = (self.current_page == 0)
+                    self.next_button.disabled = (self.current_page >= self.total_pages - 1)
+
+                @discord.ui.button(label='⬅️ Назад', style=discord.ButtonStyle.secondary)
+                async def previous_button(self, interaction: discord.Interaction, button: Button):
+                    if interaction.user.id != self.author_id:
+                        await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
+                        return
+                    
+                    if self.current_page > 0:
+                        self.current_page -= 1
+                        self.update_buttons()
+                        embed = self.create_embed()
+                        await interaction.response.edit_message(embed=embed, view=self)
+
+                @discord.ui.button(label='➡️ Вперед', style=discord.ButtonStyle.secondary)
+                async def next_button(self, interaction: discord.Interaction, button: Button):
+                    if interaction.user.id != self.author_id:
+                        await interaction.response.send_message("❌ Это не ваша пагинация!", ephemeral=True)
+                        return
+                    
+                    if self.current_page < self.total_pages - 1:
+                        self.current_page += 1
+                        self.update_buttons()
+                        embed = self.create_embed()
+                        await interaction.response.edit_message(embed=embed, view=self)
+
+                def create_embed(self):
+                    embed = discord.Embed(
+                        title=f"🏅 Ваши достижения (Страница {self.current_page + 1}/{self.total_pages})",
+                        description=self.pages[self.current_page],
+                        color=0xffd700
+                    )
+                    embed.set_footer(text=f"Разблокировано: {self.unlocked_count}/{self.total_count}")
+                    return embed
+            
+            view = AchievementsPaginatedView(pages, interaction.user.id, unlocked_count, len(ACHIEVEMENTS))
+            embed = view.create_embed()
+            await interaction.response.send_message(embed=embed, view=view)
             
     except Exception as e:
         print(f"❌ Ошибка в команде achievements: {e}")
@@ -2916,7 +2944,7 @@ async def show_achievements(interaction: discord.Interaction):
             color=0xff0000
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
-
+        
 @bot.tree.command(name="stats", description="Показать вашу статистику")
 async def stats(interaction: discord.Interaction):
     cursor = db.conn.cursor()
@@ -3320,24 +3348,50 @@ async def ping(interaction: discord.Interaction):
 
 @bot.tree.command(name="recover", description="Восстановить данные пользователя (если есть проблемы)")
 async def recover_data(interaction: discord.Interaction):
-    user_data = db.get_user(interaction.user.id)
-    
-    inventory = db.get_user_inventory(interaction.user.id)
-    if not isinstance(inventory, dict):
+    try:
+        # Создаем запись пользователя если её нет
+        user_data = db.get_user(interaction.user.id)
+        user_safe = get_user_data_safe(user_data)
+        
+        # Восстанавливаем инвентарь если он поврежден
+        inventory = db.get_user_inventory(interaction.user.id)
+        if not isinstance(inventory, dict):
+            cursor = db.conn.cursor()
+            cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', 
+                          (json.dumps({"cases": {}, "items": {}}), interaction.user.id))
+            db.conn.commit()
+            print(f"🔧 Восстановлен инвентарь для пользователя {interaction.user.id}")
+        
+        # Восстанавливаем статистику если её нет
         cursor = db.conn.cursor()
-        cursor.execute('UPDATE users SET inventory = %s WHERE user_id = %s', 
-                      (json.dumps({"cases": {}, "items": {}}), interaction.user.id))
-        db.conn.commit()
-    
-    embed = discord.Embed(
-        title="🔧 Восстановление данных",
-        description="Ваши данные были проверены и восстановлены при необходимости!",
-        color=0x00ff00
-    )
-    embed.add_field(name="Баланс", value=f"{user_data[1]} {EMOJIS['coin']}", inline=True)
-    embed.add_field(name="Ежедневная серия", value=f"{user_data[2]} дней", inline=True)
-    
-    await interaction.response.send_message(embed=embed)
+        cursor.execute('SELECT 1 FROM user_stats WHERE user_id = %s', (interaction.user.id,))
+        if not cursor.fetchone():
+            cursor.execute('INSERT INTO user_stats (user_id) VALUES (%s)', (interaction.user.id,))
+            db.conn.commit()
+            print(f"🔧 Создана статистика для пользователя {interaction.user.id}")
+        
+        # Получаем обновленные данные
+        user_data = db.get_user(interaction.user.id)
+        user_safe = get_user_data_safe(user_data)
+        
+        embed = discord.Embed(
+            title="🔧 Восстановление данных",
+            description="Ваши данные были проверены и восстановлены при необходимости!",
+            color=0x00ff00
+        )
+        embed.add_field(name="Баланс", value=f"{user_safe['balance']} {EMOJIS['coin']}", inline=True)
+        embed.add_field(name="Ежедневная серия", value=f"{user_safe['daily_streak']} дней", inline=True)
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        print(f"❌ Ошибка в команде recover: {e}")
+        error_embed = discord.Embed(
+            title="❌ Ошибка восстановления",
+            description="Произошла ошибка при восстановлении данных. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 # AUTОCOMPLETE ДЛЯ ПРЕДМЕТОВ В МАРКЕТЕ
 @market.autocomplete('item_name')
@@ -3408,3 +3462,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+

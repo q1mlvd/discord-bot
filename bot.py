@@ -416,7 +416,6 @@ async def works_stats(interaction: discord.Interaction):
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
-# Команда для просмотра статистики работ
 @bot.tree.command(name="works", description="Показать статистику выполненных работ")
 async def works_stats(interaction: discord.Interaction):
     try:
@@ -424,53 +423,30 @@ async def works_stats(interaction: discord.Interaction):
         
         embed = discord.Embed(title="💼 Статистика работ", color=0x3498db)
         
-        # Показываем доступные работы
-        works_info = ""
-        for work_id, work_data in WORKS.items():
-            # Проверяем кулдаун
-            cursor = db.conn.cursor()
-            cursor.execute('SELECT last_completed FROM user_works WHERE user_id = %s AND work_type = %s', 
-                          (interaction.user.id, work_id))
-            result = cursor.fetchone()
-            
-            status = "✅ Доступно"
-            if result and result[0]:
-                last_completed = result[0]
-                cooldown_seconds = work_data['cooldown']
-                if (datetime.datetime.now() - last_completed).total_seconds() < cooldown_seconds:
-                    remaining = cooldown_seconds - (datetime.datetime.now() - last_completed).total_seconds()
-                    minutes = int(remaining // 60)
-                    seconds = int(remaining % 60)
-                    status = f"⏰ Через {minutes}м {seconds}с"
-            
-            works_info += f"**{work_data['name']}** - {work_data['reward']} {EMOJIS['coin']} - {status}\n"
+        if not user_works:
+            embed.description = "Вы еще не выполнили ни одной работы. Используйте `/work` чтобы начать!"
+            await interaction.response.send_message(embed=embed)
+            return
         
-        embed.add_field(name="📊 Доступные работы", value=works_info, inline=False)
+        works_info = {
+            'miner': '⛏️ Шахтер',
+            'hunter': '🏹 Охотник', 
+            'fisherman': '🎣 Рыбак'
+        }
         
-        # Показываем статистику выполненных работ
-        if user_works:
-            stats_text = ""
-            total_earned = 0
-            total_works = 0
+        total_works = 0
+        works_text = ""
+        
+        for work in user_works:
+            work_type = work[0]
+            count = work[1]
+            total_works += count
             
-            for work in user_works:
-                work_type = work[0]
-                count = work[1]
-                total_works += count
-                
-                if work_type in WORKS:
-                    work_name = WORKS[work_type]['name']
-                    work_reward = WORKS[work_type]['reward']
-                    earned = count * work_reward
-                    total_earned += earned
-                    
-                    stats_text += f"**{work_name}:** {count} раз ({earned} {EMOJIS['coin']})\n"
-            
-            embed.add_field(name="📈 Выполненные работы", value=stats_text, inline=False)
-            embed.add_field(name="🔢 Всего работ", value=f"{total_works} выполненных заданий", inline=True)
-            embed.add_field(name="💰 Всего заработано", value=f"{total_earned} {EMOJIS['coin']}", inline=True)
-        else:
-            embed.add_field(name="📈 Выполненные работы", value="Вы еще не выполнили ни одной работы", inline=False)
+            work_name = works_info.get(work_type, work_type)
+            works_text += f"**{work_name}:** {count} раз\n"
+        
+        embed.add_field(name="📊 Выполненные работы", value=works_text, inline=False)
+        embed.add_field(name="🔢 Всего работ", value=f"{total_works} выполненных заданий", inline=True)
         
         await interaction.response.send_message(embed=embed)
         
@@ -3896,13 +3872,14 @@ async def market_item_autocomplete(interaction: discord.Interaction, current: st
         print(f"❌ Ошибка в autocomplete: {e}")
         return []
 
-# Команда для принудительной синхронизации
 @bot.tree.command(name="sync", description="Синхронизировать команды (админ)")
 @is_admin()
 async def sync_commands(interaction: discord.Interaction):
     try:
         await interaction.response.defer(ephemeral=True)
         
+        # Очищаем все команды и синхронизируем заново
+        bot.tree.clear_commands(guild=None)
         synced = await bot.tree.sync()
         
         embed = discord.Embed(
@@ -3910,10 +3887,6 @@ async def sync_commands(interaction: discord.Interaction):
             description=f"Синхронизировано {len(synced)} команд",
             color=0x00ff00
         )
-        
-        if synced:
-            commands_list = "\n".join([f"• `/{cmd.name}`" for cmd in synced])
-            embed.add_field(name="Синхронизированные команды:", value=commands_list, inline=False)
         
         await interaction.followup.send(embed=embed, ephemeral=True)
         
@@ -3938,6 +3911,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

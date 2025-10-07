@@ -63,6 +63,28 @@ class CustomBot(commands.Bot):
             print(f"❌ Ошибка синхронизации: {e}")
             traceback.print_exc()
 
+def get_user_data_safe(user_data):
+    """Безопасное извлечение данных пользователя из кортежа"""
+    if not user_data:
+        return {
+            'user_id': 0,
+            'balance': 100,
+            'daily_streak': 0,
+            'last_daily': None,
+            'inventory': '{"cases": {}, "items": {}}',
+            'created_at': datetime.datetime.now()
+        }
+    
+    # Предполагаемая структура кортежа: (user_id, balance, daily_streak, last_daily, inventory, created_at)
+    return {
+        'user_id': user_data[0] if len(user_data) > 0 else 0,
+        'balance': user_data[1] if len(user_data) > 1 else 100,
+        'daily_streak': user_data[2] if len(user_data) > 2 else 0,
+        'last_daily': user_data[3] if len(user_data) > 3 else None,
+        'inventory': user_data[4] if len(user_data) > 4 else '{"cases": {}, "items": {}}',
+        'created_at': user_data[5] if len(user_data) > 5 else datetime.datetime.now()
+    }
+
 # Получение переменных окружения
 def get_database_url():
     """Получаем DATABASE_URL разными способами"""
@@ -231,7 +253,7 @@ WORKS = {
 # Класс для работы с заданиями
 class WorkView(View):
     def __init__(self, user_id, work_type):
-        super().__init__(timeout=300)  # 5 минут на выполнение
+        super().__init__(timeout=300)
         self.user_id = user_id
         self.work_type = work_type
         self.work_data = WORKS[work_type]
@@ -264,19 +286,15 @@ class WorkView(View):
         # Выполняем работу
         reward = self.work_data['reward']
         
-        # Применяем бафы
-        final_reward = db.apply_buff_to_amount(interaction.user.id, reward, 'multiplier')
-        final_reward = db.apply_buff_to_amount(interaction.user.id, final_reward, 'all_bonus')
-        
         # Обновляем базу данных
-        db.complete_work(interaction.user.id, self.work_type, final_reward)
+        db.complete_work(interaction.user.id, self.work_type, reward)
         
         embed = discord.Embed(
             title=f"💼 {self.work_data['name']} - Задание выполнено!",
             description=f"**Задание:** {self.work_data['task']}\n\n🎉 Вы успешно выполнили работу!",
             color=0x00ff00
         )
-        embed.add_field(name="💰 Заработок", value=f"{final_reward} {EMOJIS['coin']}", inline=True)
+        embed.add_field(name="💰 Заработок", value=f"{reward} {EMOJIS['coin']}", inline=True)
         embed.add_field(name="⏰ Следующее выполнение", value="Через 1 час", inline=True)
         embed.set_footer(text="Используйте /works для просмотра статистики")
         
@@ -294,7 +312,8 @@ class WorkView(View):
             view=None
         )
 
-# Команда для начала работы
+# ========== КОМАНДЫ ==========
+
 @bot.tree.command(name="work", description="Начать работу и заработать монеты")
 @app_commands.describe(work_type="Тип работы")
 @app_commands.choices(work_type=[
@@ -350,7 +369,6 @@ async def work_command(interaction: discord.Interaction, work_type: app_commands
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 # Команда для просмотра статистики работ
-# Команда для просмотра статистики работ
 @bot.tree.command(name="works", description="Показать статистику выполненных работ")
 async def works_stats(interaction: discord.Interaction):
     try:
@@ -405,49 +423,6 @@ async def works_stats(interaction: discord.Interaction):
             embed.add_field(name="💰 Всего заработано", value=f"{total_earned} {EMOJIS['coin']}", inline=True)
         else:
             embed.add_field(name="📈 Выполненные работы", value="Вы еще не выполнили ни одной работы", inline=False)
-        
-        await interaction.response.send_message(embed=embed)
-        
-    except Exception as e:
-        print(f"❌ Ошибка в команде works: {e}")
-        error_embed = discord.Embed(
-            title="❌ Ошибка загрузки статистики",
-            description="Произошла ошибка при загрузке статистики работ.",
-            color=0xff0000
-        )
-        await interaction.response.send_message(embed=error_embed, ephemeral=True)
-
-@bot.tree.command(name="works", description="Показать статистику выполненных работ")
-async def works_stats(interaction: discord.Interaction):
-    try:
-        user_works = db.get_user_works(interaction.user.id)
-        
-        embed = discord.Embed(title="💼 Статистика работ", color=0x3498db)
-        
-        if not user_works:
-            embed.description = "Вы еще не выполнили ни одной работы. Используйте `/work` чтобы начать!"
-            await interaction.response.send_message(embed=embed)
-            return
-        
-        works_info = {
-            'miner': '⛏️ Шахтер',
-            'hunter': '🏹 Охотник', 
-            'fisherman': '🎣 Рыбак'
-        }
-        
-        total_works = 0
-        works_text = ""
-        
-        for work in user_works:
-            work_type = work[0]
-            count = work[1]
-            total_works += count
-            
-            work_name = works_info.get(work_type, work_type)
-            works_text += f"**{work_name}:** {count} раз\n"
-        
-        embed.add_field(name="📊 Выполненные работы", value=works_text, inline=False)
-        embed.add_field(name="🔢 Всего работ", value=f"{total_works} выполненных заданий", inline=True)
         
         await interaction.response.send_message(embed=embed)
         
@@ -1055,6 +1030,16 @@ class Database:
         except Exception as e:
             print(f"❌ Ошибка в get_user_inventory_safe: {e}")
             return {"cases": {}, "items": {}}
+
+# Создаем экземпляр базы данных
+try:
+    db = Database()
+    print("✅ База данных успешно инициализирована!")
+except Exception as e:
+    print(f"💥 Критическая ошибка при инициализации базы данных: {e}")
+    traceback.print_exc()
+    exit(1)
+
     
     def get_all_items_safe(self):
         """Безопасное получение всех предметов"""
@@ -1324,6 +1309,38 @@ class Database:
         except Exception as e:
             print(f"❌ Ошибка в get_user_works: {e}")
             return []
+
+    def complete_work(self, user_id, work_type, reward):
+        """Зарегистрировать выполнение работы"""
+        try:
+            cursor = self.conn.cursor()
+            
+            cursor.execute('SELECT 1 FROM user_works WHERE user_id = %s AND work_type = %s', (user_id, work_type))
+            if cursor.fetchone():
+                cursor.execute('''
+                    UPDATE user_works SET completed_count = completed_count + 1, last_completed = CURRENT_TIMESTAMP 
+                    WHERE user_id = %s AND work_type = %s
+                ''', (user_id, work_type))
+            else:
+                cursor.execute('''
+                    INSERT INTO user_works (user_id, work_type, completed_count) 
+                    VALUES (%s, %s, 1)
+                ''', (user_id, work_type))
+            
+            self.update_balance(user_id, reward)
+            
+            cursor.execute('SELECT work_completed FROM user_stats WHERE user_id = %s', (user_id,))
+            if cursor.fetchone():
+                cursor.execute('UPDATE user_stats SET work_completed = work_completed + 1 WHERE user_id = %s', (user_id,))
+            else:
+                cursor.execute('INSERT INTO user_stats (user_id, work_completed) VALUES (%s, 1)', (user_id,))
+            
+            self.conn.commit()
+            return True
+        except Exception as e:
+            print(f"❌ Ошибка в complete_work: {e}")
+            self.conn.rollback()
+            return False
 
     def complete_work(self, user_id, work_type, reward):
         """Зарегистрировать выполнение работы"""
@@ -2129,20 +2146,8 @@ async def balance(interaction: discord.Interaction, user: discord.Member = None)
     try:
         user = user or interaction.user
         
-        db.get_user(user.id)
         user_data = db.get_user(user.id)
         user_safe = get_user_data_safe(user_data)
-        
-        cursor = db.conn.cursor()
-        cursor.execute('SELECT COUNT(*) FROM achievements WHERE user_id = %s', (user.id,))
-        achievements_result = cursor.fetchone()
-        achievements_count = achievements_result[0] if achievements_result else 0
-        
-        buffs = {}
-        try:
-            buffs = db.get_user_buffs(user.id)
-        except Exception as e:
-            print(f"⚠️ Ошибка получения бафов для пользователя {user.id}: {e}")
         
         embed = discord.Embed(
             title=f"{EMOJIS['coin']} Баланс {user.display_name}",
@@ -2150,11 +2155,6 @@ async def balance(interaction: discord.Interaction, user: discord.Member = None)
         )
         embed.add_field(name="Баланс", value=f"{user_safe['balance']} {EMOJIS['coin']}", inline=True)
         embed.add_field(name="Ежедневная серия", value=f"{user_safe['daily_streak']} дней", inline=True)
-        embed.add_field(name="Достижения", value=f"{achievements_count}/{len(ACHIEVEMENTS)}", inline=True)
-        
-        if buffs:
-            buffs_text = "\n".join([f"• {buff['item_name']}: {buff['description']}" for buff in buffs.values()])
-            embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
         
         if user.avatar:
             embed.set_thumbnail(url=user.avatar.url)
@@ -3690,20 +3690,8 @@ async def admin_viewtransactions(interaction: discord.Interaction, user: discord
 async def help_command(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🎮 Экономический Бот - Помощь",
-        description="Добро пожаловать в улучшенную экономическую игру! Исправлены баги, добавлены работы и сбалансирована экономика.",
+        description="Добро пожаловать в экономическую систему с работами!",
         color=0x3498db
-    )
-    
-    embed.add_field(
-        name="🛠️ Основные исправления",
-        value="""• ✅ Исправлена кража (шанс увеличен)
-• ✅ Сбалансированы кейсы (лучшая окупаемость)
-• ✅ Добавлены недостающие предметы
-• ✅ Исправлены достижения
-• ✅ Улучшен маркетплейс
-• ✅ Добавлена система работ
-• ✅ Исправлена статистика""",
-        inline=False
     )
     
     embed.add_field(
@@ -3712,6 +3700,8 @@ async def help_command(interaction: discord.Interaction):
 **/daily** - Ежедневная награда
 **/pay** @user сумма - Перевод
 **/inventory** - Инвентарь
+**/work** - Начать работу
+**/works** - Статистика работ
 **/mystats** - Статистика""",
         inline=False
     )
@@ -3720,7 +3710,10 @@ async def help_command(interaction: discord.Interaction):
         name="💼 Система работ",
         value="""**/work** - Выполнить работу (КД 1 час)
 **/works** - Статистика работ
-**Награда:** 300-2000 монет + бафы""",
+**Доступные работы:**
+• ⛏️ Шахтер - 800 монет
+• 🏹 Охотник - 1200 монет  
+• 🎣 Рыбак - 1500 монет""",
         inline=False
     )
     
@@ -3901,10 +3894,9 @@ async def sync_commands(interaction: discord.Interaction):
 
 # ЗАПУСК БОТА
 if __name__ == "__main__":
-    print("🚀 Запуск улучшенного экономического бота...")
+    print("🚀 Запуск экономического бота...")
     print(f"🔑 Токен: {'✅ Найден' if BOT_TOKEN else '❌ Отсутствует'}")
     print(f"🗄️ База данных: {'✅ Подключена' if DATABASE_URL else '❌ Ошибка'}")
-    print(f"👑 Админы: {len(ADMIN_IDS)} пользователей")
     print("=" * 50)
     
     try:
@@ -3912,12 +3904,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
-
-
-
-
-
-
-
-
-

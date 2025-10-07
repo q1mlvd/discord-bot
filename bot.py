@@ -203,7 +203,7 @@ ACHIEVEMENTS = {
     'gambling_legend': {'name': 'Легенда азарта', 'description': 'Выиграйте 50 раз в каждой игре', 'reward': 10000}
 }
 
-# Система работ
+# Улучшенная система работ - ТОЛЬКО 3 КОНКРЕТНЫХ РАБОТЫ
 WORKS = {
     'miner': {
         'name': '⛏️ Шахтер', 
@@ -345,6 +345,73 @@ async def work_command(interaction: discord.Interaction, work_type: app_commands
         error_embed = discord.Embed(
             title="❌ Ошибка начала работы",
             description="Произошла ошибка при начале работы. Попробуйте позже.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
+
+# Команда для просмотра статистики работ
+@bot.tree.command(name="works", description="Показать статистику выполненных работ")
+async def works_stats(interaction: discord.Interaction):
+    try:
+        user_works = db.get_user_works(interaction.user.id)
+        
+        embed = discord.Embed(title="💼 Статистика работ", color=0x3498db)
+        
+        # Показываем доступные работы
+        works_info = ""
+        for work_id, work_data in WORKS.items():
+            # Проверяем кулдаун
+            cursor = db.conn.cursor()
+            cursor.execute('SELECT last_completed FROM user_works WHERE user_id = %s AND work_type = %s', 
+                          (interaction.user.id, work_id))
+            result = cursor.fetchone()
+            
+            status = "✅ Доступно"
+            if result and result[0]:
+                last_completed = result[0]
+                cooldown_seconds = work_data['cooldown']
+                if (datetime.datetime.now() - last_completed).total_seconds() < cooldown_seconds:
+                    remaining = cooldown_seconds - (datetime.datetime.now() - last_completed).total_seconds()
+                    minutes = int(remaining // 60)
+                    seconds = int(remaining % 60)
+                    status = f"⏰ Через {minutes}м {seconds}с"
+            
+            works_info += f"**{work_data['name']}** - {work_data['reward']} {EMOJIS['coin']} - {status}\n"
+        
+        embed.add_field(name="📊 Доступные работы", value=works_info, inline=False)
+        
+        # Показываем статистику выполненных работ
+        if user_works:
+            stats_text = ""
+            total_earned = 0
+            total_works = 0
+            
+            for work in user_works:
+                work_type = work[0]
+                count = work[1]
+                total_works += count
+                
+                if work_type in WORKS:
+                    work_name = WORKS[work_type]['name']
+                    work_reward = WORKS[work_type]['reward']
+                    earned = count * work_reward
+                    total_earned += earned
+                    
+                    stats_text += f"**{work_name}:** {count} раз ({earned} {EMOJIS['coin']})\n"
+            
+            embed.add_field(name="📈 Выполненные работы", value=stats_text, inline=False)
+            embed.add_field(name="🔢 Всего работ", value=f"{total_works} выполненных заданий", inline=True)
+            embed.add_field(name="💰 Всего заработано", value=f"{total_earned} {EMOJIS['coin']}", inline=True)
+        else:
+            embed.add_field(name="📈 Выполненные работы", value="Вы еще не выполнили ни одной работы", inline=False)
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        print(f"❌ Ошибка в команде works: {e}")
+        error_embed = discord.Embed(
+            title="❌ Ошибка загрузки статистики",
+            description="Произошла ошибка при загрузке статистики работ.",
             color=0xff0000
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
@@ -593,11 +660,11 @@ def initialize_default_data(self):
             print("🔄 Добавление кейсов...")
             
             balanced_cases = [
-                # 📦 Малый кейс — 50 🪙 (ID: 1)
-                ('📦 Малый кейс', 50, json.dumps([
-                    {'type': 'coins', 'amount': [10, 40], 'chance': 0.8, 'description': 'Базовые монеты'},
-                    {'type': 'coins', 'amount': [41, 100], 'chance': 0.15, 'description': 'Улучшенные монеты'},
-                    {'type': 'coins', 'amount': [101, 300], 'chance': 0.05, 'description': 'Премиум монеты'}
+                # Ваши кейсы здесь...
+                ('📦 Начинающий кейс', 50, json.dumps([
+                    {'type': 'coins', 'amount': [20, 60], 'chance': 0.7, 'description': 'Небольшая сумма для старта'},
+                    {'type': 'coins', 'amount': [61, 150], 'chance': 0.25, 'description': 'Неплохой стартовый капитал'},
+                    {'type': 'special_item', 'name': 'Серебряный амулет', 'chance': 0.05, 'description': 'Амулет для увеличения ежедневных наград'}
                 ])),
                 
                 # 📦 Средний кейс — 150 🪙 (ID: 2)
@@ -743,7 +810,7 @@ def initialize_default_data(self):
                              (case[0], case[1], case[2]))
             
             print(f"✅ Добавлено {len(balanced_cases)} кейсов!")
-
+        
         # Проверяем и добавляем предметы если нужно
         cursor.execute('SELECT COUNT(*) FROM items')
         items_count = cursor.fetchone()[0]
@@ -3887,5 +3954,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 

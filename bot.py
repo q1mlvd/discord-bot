@@ -350,6 +350,7 @@ async def work_command(interaction: discord.Interaction, work_type: app_commands
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 # Команда для просмотра статистики работ
+# Команда для просмотра статистики работ
 @bot.tree.command(name="works", description="Показать статистику выполненных работ")
 async def works_stats(interaction: discord.Interaction):
     try:
@@ -3911,6 +3912,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

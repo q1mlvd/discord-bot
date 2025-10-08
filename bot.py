@@ -610,15 +610,15 @@ def initialize_default_data(self):
         # Если кейсов нет, добавляем их
         if current_count == 0:
             print("🔄 Добавление кейсов...")
-                
-                # ВСЕ 15 КЕЙСОВ С УЛУЧШЕННЫМИ ШАНСАМИ
-                balanced_cases = [
-                    # 📦 Малый кейс — 50 🪙 (ID: 1)
-                    ('📦 Малый кейс', 50, json.dumps([
-                        {'type': 'coins', 'amount': [10, 40], 'chance': 0.8, 'description': 'Небольшая сумма монет'},
-                        {'type': 'coins', 'amount': [41, 100], 'chance': 0.15, 'description': 'Средняя сумма монет'},
-                        {'type': 'coins', 'amount': [101, 300], 'chance': 0.05, 'description': 'Хорошая сумма монет'}
-                    ])),
+            
+            # ВСЕ 15 КЕЙСОВ С УЛУЧШЕННЫМИ ШАНСАМИ
+            balanced_cases = [
+                # 📦 Малый кейс — 50 🪙 (ID: 1)
+                ('📦 Малый кейс', 50, json.dumps([
+                    {'type': 'coins', 'amount': [10, 40], 'chance': 0.8, 'description': 'Небольшая сумма монет'},
+                    {'type': 'coins', 'amount': [41, 100], 'chance': 0.15, 'description': 'Средняя сумма монет'},
+                    {'type': 'coins', 'amount': [101, 300], 'chance': 0.05, 'description': 'Хорошая сумма монет'}
+                ])),
                     
                     # 📦 Средний кейс — 150 🪙 (ID: 2)
                     ('📦 Средний кейс', 150, json.dumps([
@@ -755,15 +755,15 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [50001, 80000], 'chance': 0.15, 'description': 'Небесные монеты'},
                         {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.25, 'description': 'Власть богов'}
                     ]))
-                ]
-                
+            ]
+            
             for case in balanced_cases:
                 cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', 
                              (case[0], case[1], case[2]))
-                
-            print(f"✅ Добавлено {len(balanced_cases)} кейсов!")
             
-        # ИСПРАВЛЕННАЯ ПРОВЕРКА ПРЕДМЕТОВ
+            print(f"✅ Добавлено {len(balanced_cases)} кейсов!")
+        
+        # Проверяем и добавляем предметы если нужно
         cursor.execute('SELECT COUNT(*) FROM items')
         result = cursor.fetchone()
         items_count = result[0] if result else 0
@@ -826,6 +826,7 @@ def initialize_default_data(self):
     except Exception as e:
         print(f"❌ Ошибка при инициализации данных: {e}")
         self.conn.rollback()
+
     # Остальные методы класса Database остаются без изменений...
     def get_user(self, user_id):
         """Безопасное получение пользователя"""
@@ -3870,4 +3871,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 

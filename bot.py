@@ -460,183 +460,176 @@ class Database:
                     print("💥 Не удалось подключиться к базе данных после нескольких попыток")
                     raise
 
-def create_tables(self):
-    """Создание таблиц с улучшенной обработкой ошибок"""
-    try:
-        cursor = self.conn.cursor()
-        
-        print("🔄 Создание таблиц...")
+    def create_tables(self):
+        """Создание таблиц с улучшенной обработкой ошибок"""
+        try:
+            cursor = self.conn.cursor()
+            
+            print("🔄 Создание таблиц...")
             
             # Таблица пользователей
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    user_id BIGINT PRIMARY KEY,
-                    balance INTEGER DEFAULT 100,
-                    daily_streak INTEGER DEFAULT 0,
-                    last_daily TEXT,
-                    inventory TEXT DEFAULT '{}',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
+CREATE TABLE IF NOT EXISTS users (
+    user_id BIGINT PRIMARY KEY,
+    balance INTEGER DEFAULT 100,
+    daily_streak INTEGER DEFAULT 0,
+    last_daily TEXT,
+    inventory TEXT DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+''')
             
             # Таблица транзакций
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS transactions (
-                    id SERIAL PRIMARY KEY,
-                    user_id BIGINT,
-                    type TEXT,
-                    amount INTEGER,
-                    target_user_id BIGINT,
-                    description TEXT,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
+CREATE TABLE IF NOT EXISTS transactions (
+    id SERIAL PRIMARY KEY,
+    user_id BIGINT,
+    type TEXT,
+    amount INTEGER,
+    target_user_id BIGINT,
+    description TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+''')
             
             # Таблица кейсов
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS cases (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT,
-                    price INTEGER,
-                    rewards TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
+CREATE TABLE IF NOT EXISTS cases (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    price INTEGER,
+    rewards TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+''')
             
             # Таблица маркета
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS market (
-                    id SERIAL PRIMARY KEY,
-                    seller_id BIGINT,
-                    item_name TEXT,
-                    price INTEGER,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
+CREATE TABLE IF NOT EXISTS market (
+    id SERIAL PRIMARY KEY,
+    seller_id BIGINT,
+    item_name TEXT,
+    price INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+''')
             
             # Таблица достижений
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS achievements (
-                    user_id BIGINT,
-                    achievement_id TEXT,
-                    unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (user_id, achievement_id)
-                )
-            ''')
+CREATE TABLE IF NOT EXISTS achievements (
+    user_id BIGINT,
+    achievement_id TEXT,
+    unlocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, achievement_id)
+)
+''')
             
             # Таблица дуэлей
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS duels (
-                    id SERIAL PRIMARY KEY,
-                    challenger_id BIGINT,
-                    target_id BIGINT,
-                    bet INTEGER,
-                    status TEXT DEFAULT 'pending',
-                    winner_id BIGINT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
+CREATE TABLE IF NOT EXISTS duels (
+    id SERIAL PRIMARY KEY,
+    challenger_id BIGINT,
+    target_id BIGINT,
+    bet INTEGER,
+    status TEXT DEFAULT 'pending',
+    winner_id BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+''')
             
             # Таблица предметов
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS items (
-                    id SERIAL PRIMARY KEY,
-                    name TEXT,
-                    description TEXT,
-                    value INTEGER,
-                    rarity TEXT,
-                    buff_type TEXT,
-                    buff_value REAL,
-                    buff_description TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
+CREATE TABLE IF NOT EXISTS items (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    description TEXT,
+    value INTEGER,
+    rarity TEXT,
+    buff_type TEXT,
+    buff_value REAL,
+    buff_description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+''')
             
             # Таблица статистики пользователей
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS user_stats (
-                    user_id BIGINT PRIMARY KEY,
-                    cases_opened INTEGER DEFAULT 0,
-                    duels_won INTEGER DEFAULT 0,
-                    steals_successful INTEGER DEFAULT 0,
-                    steals_failed INTEGER DEFAULT 0,
-                    roulette_wins INTEGER DEFAULT 0,
-                    slot_wins INTEGER DEFAULT 0,
-                    blackjack_wins INTEGER DEFAULT 0,
-                    coinflip_wins INTEGER DEFAULT 0,
-                    daily_claimed INTEGER DEFAULT 0,
-                    total_earned INTEGER DEFAULT 0,
-                    market_sales INTEGER DEFAULT 0,
-                    gifts_sent INTEGER DEFAULT 0,
-                    consecutive_wins INTEGER DEFAULT 0,
-                    items_collected INTEGER DEFAULT 0,
-                    work_completed INTEGER DEFAULT 0,
-                    last_win_time TIMESTAMP
-                )
-            ''')
+CREATE TABLE IF NOT EXISTS user_stats (
+    user_id BIGINT PRIMARY KEY,
+    cases_opened INTEGER DEFAULT 0,
+    duels_won INTEGER DEFAULT 0,
+    steals_successful INTEGER DEFAULT 0,
+    steals_failed INTEGER DEFAULT 0,
+    roulette_wins INTEGER DEFAULT 0,
+    slot_wins INTEGER DEFAULT 0,
+    blackjack_wins INTEGER DEFAULT 0,
+    coinflip_wins INTEGER DEFAULT 0,
+    daily_claimed INTEGER DEFAULT 0,
+    total_earned INTEGER DEFAULT 0,
+    market_sales INTEGER DEFAULT 0,
+    gifts_sent INTEGER DEFAULT 0,
+    consecutive_wins INTEGER DEFAULT 0,
+    items_collected INTEGER DEFAULT 0,
+    work_completed INTEGER DEFAULT 0,
+    last_win_time TIMESTAMP
+)
+''')
             
             # Таблица работ пользователей
             cursor.execute('''
-                CREATE TABLE IF NOT EXISTS user_works (
-                    user_id BIGINT,
-                    work_type TEXT,
-                    completed_count INTEGER DEFAULT 0,
-                    last_completed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (user_id, work_type)
-                )
-            ''')
+CREATE TABLE IF NOT EXISTS user_works (
+    user_id BIGINT,
+    work_type TEXT,
+    completed_count INTEGER DEFAULT 0,
+    last_completed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, work_type)
+)
+''')
             
-        self.conn.commit()
-        print("✅ Все таблицы успешно созданы!")
+            self.conn.commit()
+            print("✅ Все таблицы успешно созданы!")
             
-        # Инициализация начальных данных
-        self.initialize_default_data()
-        
-    except Exception as e:
-        print(f"❌ Ошибка при создании таблиц: {e}")
-        self.conn.rollback()
-        raise
+            # Инициализация начальных данных
+            self.initialize_default_data()
+            
+        except Exception as e:
+            print(f"❌ Ошибка при создании таблиц: {e}")
+            self.conn.rollback()
+            raise
 
-def initialize_default_data(self):
-    """Инициализация начальных данных с правильными отступами"""
-    try:
-        cursor = self.conn.cursor()
-        
-        # Проверяем текущее количество кейсов
-        cursor.execute('SELECT COUNT(*) FROM cases')
-        current_count = cursor.fetchone()[0]
-        print(f"🔍 Текущее количество кейсов в базе: {current_count}")
-        
-        # Если кейсов нет, добавляем их
-        if current_count == 0:
-            print("🔄 Добавление кейсов...")
+    def initialize_default_data(self):
+        """Инициализация начальных данных"""
+        try:
+            cursor = self.conn.cursor()
             
-            # ВСЕ 15 КЕЙСОВ С УЛУЧШЕННЫМИ ШАНСАМИ
-            balanced_cases = [
-                # 📦 Малый кейс — 50 🪙 (ID: 1)
-                ('📦 Малый кейс', 50, json.dumps([
-                    {'type': 'coins', 'amount': [10, 40], 'chance': 0.8, 'description': 'Небольшая сумма монет'},
-                    {'type': 'coins', 'amount': [41, 100], 'chance': 0.15, 'description': 'Средняя сумма монет'},
-                    {'type': 'coins', 'amount': [101, 300], 'chance': 0.05, 'description': 'Хорошая сумма монет'}
-                ])),
-                    
-                    # 📦 Средний кейс — 150 🪙 (ID: 2)
+            # Проверяем текущее количество кейсов
+            cursor.execute('SELECT COUNT(*) FROM cases')
+            current_count = cursor.fetchone()[0]
+            print(f"🔍 Текущее количество кейсов в базе: {current_count}")
+            
+            # Если кейсов нет, добавляем их
+            if current_count == 0:
+                print("🔄 Добавление кейсов...")
+                
+                # ВСЕ 15 КЕЙСОВ
+                balanced_cases = [
+                    ('📦 Малый кейс', 50, json.dumps([
+                        {'type': 'coins', 'amount': [10, 40], 'chance': 0.8, 'description': 'Небольшая сумма монет'},
+                        {'type': 'coins', 'amount': [41, 100], 'chance': 0.15, 'description': 'Средняя сумма монет'},
+                        {'type': 'coins', 'amount': [101, 300], 'chance': 0.05, 'description': 'Хорошая сумма монет'}
+                    ])),
                     ('📦 Средний кейс', 150, json.dumps([
                         {'type': 'coins', 'amount': [50, 120], 'chance': 0.7, 'description': 'Стандартные монеты'},
                         {'type': 'coins', 'amount': [121, 300], 'chance': 0.2, 'description': 'Улучшенные монеты'},
                         {'type': 'special_item', 'name': 'Магический свиток', 'chance': 0.05, 'description': 'Бонус к рулетке'},
                         {'type': 'coins', 'amount': [301, 800], 'chance': 0.05, 'description': 'Премиум монеты'}
                     ])),
-                    
-                    # 💎 Большой кейс — 500 🪙 (ID: 3)
                     ('💎 Большой кейс', 500, json.dumps([
                         {'type': 'coins', 'amount': [200, 400], 'chance': 0.6, 'description': 'Стандартные монеты'},
                         {'type': 'coins', 'amount': [401, 1000], 'chance': 0.25, 'description': 'Улучшенные монеты'},
                         {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.08, 'description': 'Бонус к ежедневным'},
                         {'type': 'bonus', 'multiplier': 1.5, 'chance': 0.07, 'description': 'Бонус множитель'}
                     ])),
-                    
-                    # 👑 Элитный кейс — 1000 🪙 (ID: 4)
                     ('👑 Элитный кейс', 1000, json.dumps([
                         {'type': 'coins', 'amount': [500, 1000], 'chance': 0.3, 'description': 'Элитные монеты'},
                         {'type': 'loss', 'amount': [100, 300], 'chance': 0.2, 'description': 'Риск потери'},
@@ -645,8 +638,6 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [1001, 3000], 'chance': 0.15, 'description': 'Премиум монеты'},
                         {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.1, 'description': 'Элитные монеты'}
                     ])),
-                    
-                    # 🔮 Секретный кейс — 2000 🪙 (ID: 5)
                     ('🔮 Секретный кейс', 2000, json.dumps([
                         {'type': 'coins', 'amount': [800, 1500], 'chance': 0.3, 'description': 'Секретные монеты'},
                         {'type': 'loss', 'amount': [500, 1000], 'chance': 0.15, 'description': 'Высокий риск'},
@@ -655,8 +646,6 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [1501, 3000], 'chance': 0.15, 'description': 'Бонусные монеты'},
                         {'type': 'coins', 'amount': [4001, 7000], 'chance': 0.15, 'description': 'Максимальные монеты'}
                     ])),
-                    
-                    # ⚔️ Боевой кейс — 3 500 🪙 (ID: 6)
                     ('⚔️ Боевой кейс', 3500, json.dumps([
                         {'type': 'coins', 'amount': [1000, 3000], 'chance': 0.4, 'description': 'Боевые монеты'},
                         {'type': 'loss', 'amount': [500, 1000], 'chance': 0.1, 'description': 'Тактический риск'},
@@ -665,8 +654,6 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [3001, 6000], 'chance': 0.15, 'description': 'Победные монеты'},
                         {'type': 'special_item', 'name': 'Тотем защиты', 'chance': 0.1, 'description': 'Защита в дуэлях'}
                     ])),
-                    
-                    # 💎 Премиум кейс — 5 000 🪙 (ID: 7)
                     ('💎 Премиум кейс', 5000, json.dumps([
                         {'type': 'coins', 'amount': [2000, 4000], 'chance': 0.4, 'description': 'Премиум монеты'},
                         {'type': 'special_item', 'name': 'Золотой амулет', 'chance': 0.2, 'description': 'Элитный амулет'},
@@ -675,8 +662,6 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [5001, 8000], 'chance': 0.1, 'description': 'Эксклюзивные монеты'},
                         {'type': 'special_item', 'name': 'Кристалл маны', 'chance': 0.1, 'description': 'Мощный множитель'}
                     ])),
-                    
-                    # 🔥 Адский кейс — 7 500 🪙 (ID: 8)
                     ('🔥 Адский кейс', 7500, json.dumps([
                         {'type': 'coins', 'amount': [3000, 6000], 'chance': 0.35, 'description': 'Адские монеты'},
                         {'type': 'loss', 'amount': [2000, 3000], 'chance': 0.15, 'description': 'Адский риск'},
@@ -685,8 +670,6 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [6001, 10000], 'chance': 0.1, 'description': 'Демонические монеты'},
                         {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.1, 'description': 'Древняя сила'}
                     ])),
-                    
-                    # ⚡ Легендарный кейс — 10 000 🪙 (ID: 9)
                     ('⚡ Легендарный кейс', 10000, json.dumps([
                         {'type': 'coins', 'amount': [5000, 8000], 'chance': 0.3, 'description': 'Легендарные монеты'},
                         {'type': 'special_item', 'name': 'Кольцо удачи', 'chance': 0.2, 'description': 'Удача в кейсах'},
@@ -695,8 +678,6 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [8001, 15000], 'chance': 0.15, 'description': 'Мифические монеты'},
                         {'type': 'special_item', 'name': 'Карточный шулер', 'chance': 0.15, 'description': 'Бонус к блэкджеку'}
                     ])),
-                    
-                    # 🌌 Космический кейс — 15 000 🪙 (ID: 10)
                     ('🌌 Космический кейс', 15000, json.dumps([
                         {'type': 'coins', 'amount': [8000, 15000], 'chance': 0.3, 'description': 'Космические монеты'},
                         {'type': 'special_item', 'name': 'Ожерелье мудрости', 'chance': 0.2, 'description': 'Мудрость и опыт'},
@@ -705,8 +686,6 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [15001, 25000], 'chance': 0.15, 'description': 'Галактические монеты'},
                         {'type': 'special_item', 'name': 'Руна богатства', 'chance': 0.15, 'description': 'Богатство и удача'}
                     ])),
-                    
-                    # 💠 Кристальный кейс — 20 000 🪙 (ID: 11)
                     ('💠 Кристальный кейс', 20000, json.dumps([
                         {'type': 'coins', 'amount': [10000, 20000], 'chance': 0.3, 'description': 'Кристальные монеты'},
                         {'type': 'special_item', 'name': 'Кристалл маны', 'chance': 0.15, 'description': 'Магическая сила'},
@@ -715,8 +694,6 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [20001, 30000], 'chance': 0.15, 'description': 'Изумрудные монеты'},
                         {'type': 'special_item', 'name': 'Зелье удачи', 'chance': 0.2, 'description': 'Удача во всем'}
                     ])),
-                    
-                    # 👁️ Теневой кейс — 25 000 🪙 (ID: 12)
                     ('👁️ Теневой кейс', 25000, json.dumps([
                         {'type': 'coins', 'amount': [12000, 22000], 'chance': 0.3, 'description': 'Теневые монеты'},
                         {'type': 'special_item', 'name': 'Плащ тени', 'chance': 0.15, 'description': 'Теневая мощь'},
@@ -725,8 +702,6 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [22001, 35000], 'chance': 0.15, 'description': 'Призрачные монеты'},
                         {'type': 'special_item', 'name': 'Защитный талисман', 'chance': 0.2, 'description': 'Абсолютная защита'}
                     ])),
-                    
-                    # 🌈 Радужный кейс — 30 000 🪙 (ID: 13)
                     ('🌈 Радужный кейс', 30000, json.dumps([
                         {'type': 'coins', 'amount': [15000, 25000], 'chance': 0.25, 'description': 'Радужные монеты'},
                         {'type': 'special_item', 'name': 'Слот-мастер', 'chance': 0.2, 'description': 'Мастер слотов'},
@@ -735,8 +710,6 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [25001, 40000], 'chance': 0.15, 'description': 'Разноцветные монеты'},
                         {'type': 'special_item', 'name': 'Счастливая монета', 'chance': 0.2, 'description': 'Удача в coinflip'}
                     ])),
-                    
-                    # 🩸 Кровавый кейс — 40 000 🪙 (ID: 14)
                     ('🩸 Кровавый кейс', 40000, json.dumps([
                         {'type': 'coins', 'amount': [18000, 30000], 'chance': 0.25, 'description': 'Кровавые монеты'},
                         {'type': 'special_item', 'name': 'Флакон зелья', 'chance': 0.2, 'description': 'Магическое зелье'},
@@ -745,8 +718,6 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [30001, 45000], 'chance': 0.15, 'description': 'Драконьи монеты'},
                         {'type': 'special_item', 'name': 'Щит богатства', 'chance': 0.2, 'description': 'Защита богатства'}
                     ])),
-                    
-                    # 🌟 Божественный кейс — 50 000 🪙 (ID: 15)
                     ('🌟 Божественный кейс', 50000, json.dumps([
                         {'type': 'coins', 'amount': [25000, 50000], 'chance': 0.2, 'description': 'Божественные монеты'},
                         {'type': 'special_item', 'name': 'Зелье удачи', 'chance': 0.2, 'description': 'Божественная удача'},
@@ -755,79 +726,78 @@ def initialize_default_data(self):
                         {'type': 'coins', 'amount': [50001, 80000], 'chance': 0.15, 'description': 'Небесные монеты'},
                         {'type': 'special_item', 'name': 'Древний артефакт', 'chance': 0.25, 'description': 'Власть богов'}
                     ]))
-            ]
+                ]
+                
+                for case in balanced_cases:
+                    cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', 
+                                 (case[0], case[1], case[2]))
+                
+                print(f"✅ Добавлено {len(balanced_cases)} кейсов!")
             
-            for case in balanced_cases:
-                cursor.execute('INSERT INTO cases (name, price, rewards) VALUES (%s, %s, %s)', 
-                             (case[0], case[1], case[2]))
+            # Проверяем и добавляем предметы если нужно
+            cursor.execute('SELECT COUNT(*) FROM items')
+            result = cursor.fetchone()
+            items_count = result[0] if result else 0
             
-            print(f"✅ Добавлено {len(balanced_cases)} кейсов!")
-        
-        # Проверяем и добавляем предметы если нужно
-        cursor.execute('SELECT COUNT(*) FROM items')
-        result = cursor.fetchone()
-        items_count = result[0] if result else 0
-        
-        print(f"🔍 Текущее количество предметов в базе: {items_count}")
-        
-        if items_count < 33:
-            print("🔄 Добавление ВСЕХ стандартных предметов...")
+            print(f"🔍 Текущее количество предметов в базе: {items_count}")
             
-            # Очищаем таблицу и добавляем все предметы заново
-            cursor.execute('DELETE FROM items')
+            if items_count < 33:
+                print("🔄 Добавление ВСЕХ стандартных предметов...")
+                
+                # Очищаем таблицу и добавляем все предметы заново
+                cursor.execute('DELETE FROM items')
+                
+                # ВСЕ 33 ПРЕДМЕТА
+                default_items = [
+                    ('Золотой амулет', 'Увеличивает ежедневную награду', 500, 'rare', 'daily_bonus', 1.2, '+20% к ежедневной награде'),
+                    ('Серебряный амулет', 'Небольшой бонус к ежедневной награде', 250, 'common', 'daily_bonus', 1.1, '+10% к ежедневной награде'),
+                    ('Кольцо удачи', 'Увеличивает награды из кейсов', 600, 'rare', 'case_bonus', 1.15, '+15% к наградам из кейсов'),
+                    ('Браслет везения', 'Увеличивает выигрыши в играх', 450, 'uncommon', 'game_bonus', 1.1, '+10% к выигрышам в играх'),
+                    ('Защитный талисман', 'Защищает от краж', 800, 'epic', 'steal_protection', 0.5, '-50% к шансу кражи у вас'),
+                    ('Перчатка вора', 'Увеличивает шанс успешной кражи', 700, 'rare', 'steal_bonus', 1.2, '+20% к шансу успешной кражи'),
+                    ('Магический свиток', 'Увеличивает выигрыш в рулетке', 550, 'rare', 'roulette_bonus', 1.25, '+25% к выигрышу в рулетке'),
+                    ('Кристалл маны', 'Умножает все награды', 1000, 'epic', 'multiplier', 1.3, 'x1.3 к любым наградам'),
+                    ('Древний артефакт', 'Мощный множитель наград', 2000, 'legendary', 'multiplier', 1.5, 'x1.5 к любым наградам'),
+                    ('Мифический предмет', 'Легендарный множитель наград', 5000, 'mythic', 'multiplier', 2.0, 'x2.0 к любым наградам'),
+                    ('Счастливая монета', 'Увеличивает выигрыш в coinflip', 300, 'uncommon', 'coinflip_bonus', 1.2, '+20% к выигрышу в coinflip'),
+                    ('Карточный шулер', 'Увеличивает выигрыш в блэкджеке', 400, 'rare', 'blackjack_bonus', 1.15, '+15% к выигрышу в блэкджеке'),
+                    ('Слот-мастер', 'Увеличивает выигрыш в слотах', 600, 'rare', 'slot_bonus', 1.25, '+25% к выигрышу в слотах'),
+                    ('Щит богатства', 'Уменьшает проигрыши', 900, 'epic', 'loss_protection', 0.8, '-20% к проигрышам'),
+                    ('Флакон зелья', 'Увеличивает награды за квесты', 350, 'uncommon', 'quest_bonus', 1.2, '+20% к наградам за квесты'),
+                    ('Зелье удачи', 'Увеличивает все награды', 800, 'epic', 'all_bonus', 1.1, '+10% ко всем наградам'),
+                    ('Руна богатства', 'Уменьшает комиссию переводов', 700, 'rare', 'transfer_bonus', 0.9, '-10% к комиссии переводов'),
+                    ('Тотем защиты', 'Увеличивает шанс победы в дуэлях', 500, 'rare', 'duel_bonus', 1.2, '+20% к шансу победы в дуэлях'),
+                    ('Ожерелье мудрости', 'Увеличивает получаемый опыт', 450, 'uncommon', 'xp_bonus', 1.15, '+15% к опыту'),
+                    ('Плащ тени', 'Увеличивает шанс кражи', 550, 'rare', 'steal_chance', 1.15, '+15% к шансу кражи'),
+                    ('Железный щит', 'Базовая защита от краж', 200, 'common', 'steal_protection', 0.8, '-20% к шансу кражи у вас'),
+                    ('Бронзовый медальон', 'Небольшой бонус к играм', 150, 'common', 'game_bonus', 1.05, '+5% к выигрышам в играх'),
+                    ('Серебряный кулон', 'Бонус к рулетке', 300, 'uncommon', 'roulette_bonus', 1.1, '+10% к выигрышу в рулетке'),
+                    ('Золотой перстень', 'Бонус к слотам', 400, 'uncommon', 'slot_bonus', 1.15, '+15% к выигрышу в слотах'),
+                    ('Изумрудный амулет', 'Бонус к блэкджеку', 350, 'uncommon', 'blackjack_bonus', 1.1, '+10% к выигрышу в блэкджеке'),
+                    ('Рубиновый талисман', 'Бонус к кейсам', 500, 'rare', 'case_bonus', 1.1, '+10% к наградам из кейсов'),
+                    ('Сапфировый оберег', 'Защита от потерь', 600, 'rare', 'loss_protection', 0.9, '-10% к проигрышам'),
+                    ('Аметистовый жезл', 'Бонус к переводам', 400, 'uncommon', 'transfer_bonus', 0.95, '-5% к комиссии переводов'),
+                    ('Топазный скипетр', 'Бонус к дуэлям', 450, 'uncommon', 'duel_bonus', 1.1, '+10% к шансу победы в дуэлях'),
+                    ('Опаловый артефакт', 'Небольшой множитель', 800, 'rare', 'multiplier', 1.1, 'x1.1 к любым наградам'),
+                    ('Алмазная корона', 'Улучшенная защита', 1200, 'epic', 'steal_protection', 0.3, '-70% к шансу кражи у вас'),
+                    ('Платиновый диск', 'Улучшенный бонус к играм', 900, 'epic', 'game_bonus', 1.2, '+20% к выигрышам в играх'),
+                    ('Титановый щит', 'Максимальная защита', 2000, 'legendary', 'loss_protection', 0.5, '-50% к проигрышам')
+                ]
+                
+                for item in default_items:
+                    cursor.execute('INSERT INTO items (name, description, value, rarity, buff_type, buff_value, buff_description) VALUES (%s, %s, %s, %s, %s, %s, %s)', item)
+                
+                print(f"✅ Добавлено {len(default_items)} стандартных предметов!")
+            else:
+                print(f"✅ В базе уже есть {items_count} предметов, пропускаем инициализацию")
             
-            # ИСПРАВЛЕННЫЙ СПИСОК ПРЕДМЕТОВ (33 предмета)
-            default_items = [
-                ('Золотой амулет', 'Увеличивает ежедневную награду', 500, 'rare', 'daily_bonus', 1.2, '+20% к ежедневной награде'),
-                ('Серебряный амулет', 'Небольшой бонус к ежедневной награде', 250, 'common', 'daily_bonus', 1.1, '+10% к ежедневной награде'),
-                ('Кольцо удачи', 'Увеличивает награды из кейсов', 600, 'rare', 'case_bonus', 1.15, '+15% к наградам из кейсов'),
-                ('Браслет везения', 'Увеличивает выигрыши в играх', 450, 'uncommon', 'game_bonus', 1.1, '+10% к выигрышам в играх'),
-                ('Защитный талисман', 'Защищает от краж', 800, 'epic', 'steal_protection', 0.5, '-50% к шансу кражи у вас'),
-                ('Перчатка вора', 'Увеличивает шанс успешной кражи', 700, 'rare', 'steal_bonus', 1.2, '+20% к шансу успешной кражи'),
-                ('Магический свиток', 'Увеличивает выигрыш в рулетке', 550, 'rare', 'roulette_bonus', 1.25, '+25% к выигрышу в рулетке'),
-                ('Кристалл маны', 'Умножает все награды', 1000, 'epic', 'multiplier', 1.3, 'x1.3 к любым наградам'),
-                ('Древний артефакт', 'Мощный множитель наград', 2000, 'legendary', 'multiplier', 1.5, 'x1.5 к любым наградам'),
-                ('Мифический предмет', 'Легендарный множитель наград', 5000, 'mythic', 'multiplier', 2.0, 'x2.0 к любым наградам'),
-                ('Счастливая монета', 'Увеличивает выигрыш в coinflip', 300, 'uncommon', 'coinflip_bonus', 1.2, '+20% к выигрышу в coinflip'),
-                ('Карточный шулер', 'Увеличивает выигрыш в блэкджеке', 400, 'rare', 'blackjack_bonus', 1.15, '+15% к выигрышу в блэкджеке'),
-                ('Слот-мастер', 'Увеличивает выигрыш в слотах', 600, 'rare', 'slot_bonus', 1.25, '+25% к выигрышу в слотах'),
-                ('Щит богатства', 'Уменьшает проигрыши', 900, 'epic', 'loss_protection', 0.8, '-20% к проигрышам'),
-                ('Флакон зелья', 'Увеличивает награды за квесты', 350, 'uncommon', 'quest_bonus', 1.2, '+20% к наградам за квесты'),
-                ('Зелье удачи', 'Увеличивает все награды', 800, 'epic', 'all_bonus', 1.1, '+10% ко всем наградам'),
-                ('Руна богатства', 'Уменьшает комиссию переводов', 700, 'rare', 'transfer_bonus', 0.9, '-10% к комиссии переводов'),
-                ('Тотем защиты', 'Увеличивает шанс победы в дуэлях', 500, 'rare', 'duel_bonus', 1.2, '+20% к шансу победы в дуэлях'),
-                ('Ожерелье мудрости', 'Увеличивает получаемый опыт', 450, 'uncommon', 'xp_bonus', 1.15, '+15% к опыту'),
-                ('Плащ тени', 'Увеличивает шанс кражи', 550, 'rare', 'steal_chance', 1.15, '+15% к шансу кражи'),
-                ('Железный щит', 'Базовая защита от краж', 200, 'common', 'steal_protection', 0.8, '-20% к шансу кражи у вас'),
-                ('Бронзовый медальон', 'Небольшой бонус к играм', 150, 'common', 'game_bonus', 1.05, '+5% к выигрышам в играх'),
-                ('Серебряный кулон', 'Бонус к рулетке', 300, 'uncommon', 'roulette_bonus', 1.1, '+10% к выигрышу в рулетке'),
-                ('Золотой перстень', 'Бонус к слотам', 400, 'uncommon', 'slot_bonus', 1.15, '+15% к выигрышу в слотах'),
-                ('Изумрудный амулет', 'Бонус к блэкджеку', 350, 'uncommon', 'blackjack_bonus', 1.1, '+10% к выигрышу в блэкджеке'),
-                ('Рубиновый талисман', 'Бонус к кейсам', 500, 'rare', 'case_bonus', 1.1, '+10% к наградам из кейсов'),
-                ('Сапфировый оберег', 'Защита от потерь', 600, 'rare', 'loss_protection', 0.9, '-10% к проигрышам'),
-                ('Аметистовый жезл', 'Бонус к переводам', 400, 'uncommon', 'transfer_bonus', 0.95, '-5% к комиссии переводов'),
-                ('Топазный скипетр', 'Бонус к дуэлям', 450, 'uncommon', 'duel_bonus', 1.1, '+10% к шансу победы в дуэлях'),
-                ('Опаловый артефакт', 'Небольшой множитель', 800, 'rare', 'multiplier', 1.1, 'x1.1 к любым наградам'),
-                ('Алмазная корона', 'Улучшенная защита', 1200, 'epic', 'steal_protection', 0.3, '-70% к шансу кражи у вас'),
-                ('Платиновый диск', 'Улучшенный бонус к играм', 900, 'epic', 'game_bonus', 1.2, '+20% к выигрышам в играх'),
-                ('Титановый щит', 'Максимальная защита', 2000, 'legendary', 'loss_protection', 0.5, '-50% к проигрышам')
-            ]
+            self.conn.commit()
+            print("✅ Начальные данные успешно инициализированы!")
             
-            for item in default_items:
-                cursor.execute('INSERT INTO items (name, description, value, rarity, buff_type, buff_value, buff_description) VALUES (%s, %s, %s, %s, %s, %s, %s)', item)
-            
-            print(f"✅ Добавлено {len(default_items)} стандартных предметов!")
-        else:
-            print(f"✅ В базе уже есть {items_count} предметов, пропускаем инициализацию")
-        
-        self.conn.commit()
-        print("✅ Начальные данные успешно инициализированы!")
-        
-    except Exception as e:
-        print(f"❌ Ошибка при инициализации данных: {e}")
-        self.conn.rollback()
+        except Exception as e:
+            print(f"❌ Ошибка при инициализации данных: {e}")
+            self.conn.rollback()
 
-    # Остальные методы класса Database остаются без изменений...
     def get_user(self, user_id):
         """Безопасное получение пользователя"""
         try:
@@ -1036,16 +1006,6 @@ def initialize_default_data(self):
         except Exception as e:
             print(f"❌ Ошибка в get_user_inventory_safe: {e}")
             return {"cases": {}, "items": {}}
-
-# Создаем экземпляр базы данных
-try:
-    db = Database()
-    print("✅ База данных успешно инициализирована!")
-except Exception as e:
-    print(f"💥 Критическая ошибка при инициализации базы данных: {e}")
-    traceback.print_exc()
-    exit(1)
-
     
     def get_all_items_safe(self):
         """Безопасное получение всех предметов"""
@@ -1315,38 +1275,6 @@ except Exception as e:
         except Exception as e:
             print(f"❌ Ошибка в get_user_works: {e}")
             return []
-
-    def complete_work(self, user_id, work_type, reward):
-        """Зарегистрировать выполнение работы"""
-        try:
-            cursor = self.conn.cursor()
-            
-            cursor.execute('SELECT 1 FROM user_works WHERE user_id = %s AND work_type = %s', (user_id, work_type))
-            if cursor.fetchone():
-                cursor.execute('''
-                    UPDATE user_works SET completed_count = completed_count + 1, last_completed = CURRENT_TIMESTAMP 
-                    WHERE user_id = %s AND work_type = %s
-                ''', (user_id, work_type))
-            else:
-                cursor.execute('''
-                    INSERT INTO user_works (user_id, work_type, completed_count) 
-                    VALUES (%s, %s, 1)
-                ''', (user_id, work_type))
-            
-            self.update_balance(user_id, reward)
-            
-            cursor.execute('SELECT work_completed FROM user_stats WHERE user_id = %s', (user_id,))
-            if cursor.fetchone():
-                cursor.execute('UPDATE user_stats SET work_completed = work_completed + 1 WHERE user_id = %s', (user_id,))
-            else:
-                cursor.execute('INSERT INTO user_stats (user_id, work_completed) VALUES (%s, 1)', (user_id,))
-            
-            self.conn.commit()
-            return True
-        except Exception as e:
-            print(f"❌ Ошибка в complete_work: {e}")
-            self.conn.rollback()
-            return False
 
     def complete_work(self, user_id, work_type, reward):
         """Зарегистрировать выполнение работы"""
@@ -3871,6 +3799,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

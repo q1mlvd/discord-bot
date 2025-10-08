@@ -1437,6 +1437,7 @@ class ImprovedCasesView(View):
         page_cases = self.pages[self.current_page]
         embed = discord.Embed(
             title=f"📦 Список кейсов (Страница {self.current_page + 1}/{self.total_pages})",
+            description="**Полное описание всех кейсов:**",
             color=0xff69b4
         )
 
@@ -1446,13 +1447,135 @@ class ImprovedCasesView(View):
             case_price = case[2]
             case_rewards = json.loads(case[3])
 
+            # Полное описание наград для каждого кейса
+            rewards_description = self.get_full_rewards_description(case_rewards)
+            
+            field_value = f"**Цена:** {case_price} {EMOJIS['coin']}\n"
+            field_value += f"**ID:** {case_id}\n\n"
+            field_value += f"**Награды:**\n{rewards_description}"
+
             embed.add_field(
-                name=f"{case_name} (ID: {case_id})",
-                value=f"Цена: {case_price} {EMOJIS['coin']}",
+                name=f"{case_name}",
+                value=field_value,
                 inline=False
             )
 
         return embed
+
+    def get_full_rewards_description(self, rewards):
+        """Создает полное описание всех наград кейса"""
+        description = ""
+        
+        for reward in rewards:
+            chance_percent = reward['chance'] * 100
+            if reward['type'] == 'coins':
+                min_amount = reward['amount'][0]
+                max_amount = reward['amount'][1]
+                description += f"💰 **Монеты:** {min_amount}-{max_amount} ({chance_percent:.1f}%)\n"
+            elif reward['type'] == 'special_item':
+                item_name = reward['name']
+                description += f"🎁 **Предмет:** {item_name} ({chance_percent:.1f}%)\n"
+            elif reward['type'] == 'bonus':
+                multiplier = reward['multiplier']
+                description += f"⭐ **Бонус:** x{multiplier} ({chance_percent:.1f}%)\n"
+            elif reward['type'] == 'loss':
+                min_loss = reward['amount'][0]
+                max_loss = reward['amount'][1]
+                description += f"💀 **Потеря:** {min_loss}-{max_loss} монет ({chance_percent:.1f}%)\n"
+        
+        return description
+
+def get_full_rewards_description(self, rewards):
+    """Создает полное детальное описание всех наград кейса"""
+    description = ""
+    
+    # Группируем по типам для лучшего отображения
+    coins_rewards = []
+    item_rewards = []
+    bonus_rewards = []
+    loss_rewards = []
+    
+    for reward in rewards:
+        chance_percent = reward['chance'] * 100
+        if reward['type'] == 'coins':
+            min_amount = reward['amount'][0]
+            max_amount = reward['amount'][1]
+            coins_rewards.append(f"• {min_amount}-{max_amount} монет ({chance_percent:.1f}%)")
+        elif reward['type'] == 'special_item':
+            item_name = reward['name']
+            item_rewards.append(f"• {item_name} ({chance_percent:.1f}%)")
+        elif reward['type'] == 'bonus':
+            multiplier = reward['multiplier']
+            bonus_rewards.append(f"• Множитель x{multiplier} ({chance_percent:.1f}%)")
+        elif reward['type'] == 'loss':
+            min_loss = reward['amount'][0]
+            max_loss = reward['amount'][1]
+            loss_rewards.append(f"• Потеря {min_loss}-{max_loss} монет ({chance_percent:.1f}%)")
+    
+    if coins_rewards:
+        description += "💰 **Монеты:**\n" + "\n".join(coins_rewards) + "\n\n"
+    
+    if item_rewards:
+        description += "🎁 **Предметы:**\n" + "\n".join(item_rewards) + "\n\n"
+    
+    if bonus_rewards:
+        description += "⭐ **Бонусы:**\n" + "\n".join(bonus_rewards) + "\n\n"
+    
+    if loss_rewards:
+        description += "💀 **Риски:**\n" + "\n".join(loss_rewards) + "\n\n"
+    
+    # Добавляем статистику
+    total_chance = sum(reward['chance'] for reward in rewards) * 100
+    description += f"📊 **Статистика:**\n• Общий шанс: {total_chance:.1f}%\n• Всего вариантов: {len(rewards)}"
+    
+    return description
+
+def create_embed(self):
+    page_cases = self.pages[self.current_page]
+    embed = discord.Embed(
+        title=f"📦 Список кейсов (Страница {self.current_page + 1}/{self.total_pages})",
+        color=0xff69b4
+    )
+
+    for case in page_cases:
+        case_id = case[0]
+        case_name = case[1]
+        case_price = case[2]
+        case_rewards = json.loads(case[3])
+
+        # Формируем краткое описание наград
+        rewards_summary = self.get_rewards_summary(case_rewards)
+        
+        embed.add_field(
+            name=f"{case_name} (ID: {case_id})",
+            value=f"**Цена:** {case_price} {EMOJIS['coin']}\n**Награды:** {rewards_summary}",
+            inline=False
+        )
+
+    return embed
+
+def get_rewards_summary(self, rewards):
+    """Создает краткое описание наград кейса"""
+    summary = []
+    
+    for reward in rewards:
+        chance_percent = reward['chance'] * 100
+        if reward['type'] == 'coins':
+            min_amount = reward['amount'][0]
+            max_amount = reward['amount'][1]
+            summary.append(f"💰 {min_amount}-{max_amount} ({chance_percent:.1f}%)")
+        elif reward['type'] == 'special_item':
+            item_name = reward['name']
+            summary.append(f"🎁 {item_name} ({chance_percent:.1f}%)")
+        elif reward['type'] == 'bonus':
+            multiplier = reward['multiplier']
+            summary.append(f"⭐ x{multiplier} ({chance_percent:.1f}%)")
+        elif reward['type'] == 'loss':
+            min_loss = reward['amount'][0]
+            max_loss = reward['amount'][1]
+            summary.append(f"💀 -{min_loss}-{max_loss} ({chance_percent:.1f}%)")
+    
+    return " | ".join(summary[:3]) + ("..." if len(summary) > 3 else "")
 
 class CaseView(View):
     def __init__(self, case_id, user_id):
@@ -2168,7 +2291,7 @@ async def daily(interaction: discord.Interaction):
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
 
 # Команды кейсов
-@bot.tree.command(name="cases", description="Показать список доступных кейсов")
+@bot.tree.command(name="cases", description="Показать список доступных кейсов с полным описанием")
 async def cases_list(interaction: discord.Interaction):
     try:
         cases = db.get_cases()
@@ -2180,8 +2303,9 @@ async def cases_list(interaction: discord.Interaction):
         pages = []
         current_page = []
         
+        # Уменьшаем до 2 кейсов на страницу для лучшего отображения
         for i, case in enumerate(cases):
-            if i > 0 and i % 3 == 0:
+            if i > 0 and i % 2 == 0:  # было 3, стало 2
                 pages.append(current_page)
                 current_page = []
             current_page.append(case)
@@ -3091,6 +3215,34 @@ async def inventory(interaction: discord.Interaction):
         print(f"❌ Ошибка в команде inventory: {e}")
         await interaction.response.send_message("❌ Произошла ошибка при загрузке инвентаря!", ephemeral=True)
 
+@bot.tree.command(name="force_sync", description="Принудительная синхронизация команд (админ)")
+@is_admin()
+async def force_sync(interaction: discord.Interaction):
+    try:
+        await interaction.response.defer(ephemeral=True)
+        
+        # Полностью очищаем все команды
+        bot.tree.clear_commands(guild=None)
+        
+        # Синхронизируем заново
+        synced = await bot.tree.sync()
+        
+        embed = discord.Embed(
+            title="✅ Принудительная синхронизация завершена",
+            description=f"Синхронизировано {len(synced)} команд",
+            color=0x00ff00
+        )
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Ошибка синхронизации",
+            description=f"```{e}```",
+            color=0xff0000
+        )
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
+
 @bot.tree.command(name="achievements", description="Показать ваши достижения")
 async def show_achievements(interaction: discord.Interaction):
     try:
@@ -3777,6 +3929,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

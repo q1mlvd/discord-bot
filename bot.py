@@ -3038,54 +3038,6 @@ async def work_error(interaction: discord.Interaction, error: app_commands.AppCo
     else:
         raise error
 
-@bot.tree.command(name="works", description="Показать статистику выполненных работ")
-async def works_stats(interaction: discord.Interaction):
-    try:
-        user_works = db.get_user_works(interaction.user.id)
-        
-        embed = discord.Embed(title="💼 Статистика работ", color=0x3498db)
-        
-        if not user_works:
-            embed.description = "Вы еще не выполнили ни одной работы. Используйте `/work` чтобы начать!"
-            await interaction.response.send_message(embed=embed)
-            return
-        
-        works_info = {
-            'programmer': '💻 Программист',
-            'designer': '🎨 Дизайнер', 
-            'writer': '📝 Копирайтер',
-            'translator': '🌐 Переводчик',
-            'tester': '🐛 Тестировщик',
-            'manager': '📊 Менеджер',
-            'security': '🛡️ Аналитик безопасности',
-            'data_scientist': '📈 Data Scientist'
-        }
-        
-        total_works = 0
-        works_text = ""
-        
-        for work in user_works:
-            work_type = work[0]
-            count = work[1]
-            total_works += count
-            
-            work_name = works_info.get(work_type, work_type)
-            works_text += f"**{work_name}:** {count} раз\n"
-        
-        embed.add_field(name="📊 Выполненные работы", value=works_text, inline=False)
-        embed.add_field(name="🔢 Всего работ", value=f"{total_works} выполненных заданий", inline=True)
-        
-        await interaction.response.send_message(embed=embed)
-        
-    except Exception as e:
-        print(f"❌ Ошибка в команде works: {e}")
-        error_embed = discord.Embed(
-            title="❌ Ошибка загрузки статистики",
-            description="Произошла ошибка при загрузке статистики работ.",
-            color=0xff0000
-        )
-        await interaction.response.send_message(embed=error_embed, ephemeral=True)
-
 @bot.tree.command(name="inventory", description="Показать ваш инвентарь")
 async def inventory(interaction: discord.Interaction):
     try:
@@ -3799,6 +3751,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

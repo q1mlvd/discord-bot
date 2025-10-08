@@ -3200,6 +3200,32 @@ async def show_achievements(interaction: discord.Interaction):
             color=0xff0000
         )
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
+
+@bot.tree.command(name="sync_commands", description="Принудительная синхронизация команд (админ)")
+@is_admin()
+async def sync_commands(interaction: discord.Interaction):
+    try:
+        await interaction.response.defer(ephemeral=True)
+        
+        # Очищаем все команды и синхронизируем заново
+        bot.tree.clear_commands(guild=None)
+        synced = await bot.tree.sync()
+        
+        embed = discord.Embed(
+            title="✅ Синхронизация завершена",
+            description=f"Синхронизировано {len(synced)} команд",
+            color=0x00ff00
+        )
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Ошибка синхронизации",
+            description=f"```{e}```",
+            color=0xff0000
+        )
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
         
 @bot.tree.command(name="mystats", description="Показать вашу статистику")
 async def mystats(interaction: discord.Interaction):
@@ -3751,6 +3777,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

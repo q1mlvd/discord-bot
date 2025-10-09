@@ -586,11 +586,11 @@ CREATE TABLE IF NOT EXISTS user_works (
 )
 ''')
             
-            self.conn.commit()
-            print("✅ Все таблицы успешно созданы!")
-            
-            # Инициализация начальных данных
-            self.initialize_default_data()
+self.conn.commit()
+print("✅ Все таблицы успешно созданы!")
+
+# Проверяем и добавляем отсутствующие столбцы
+self.add_missing_columns()
             
         except Exception as e:
             print(f"❌ Ошибка при создании таблиц: {e}")
@@ -1039,6 +1039,40 @@ CREATE TABLE IF NOT EXISTS user_works (
             return True
         return False
 
+def add_missing_columns(self):
+    """Добавляем отсутствующие столбцы в существующие таблицы"""
+    try:
+        cursor = self.conn.cursor()
+        
+        # Проверяем и добавляем столбцы в таблицу items
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='items' and column_name='buff_type'
+        """)
+        if not cursor.fetchone():
+            print("🔄 Добавляем отсутствующие столбцы в таблицу items...")
+            cursor.execute("ALTER TABLE items ADD COLUMN buff_type TEXT")
+            cursor.execute("ALTER TABLE items ADD COLUMN buff_value REAL")
+            cursor.execute("ALTER TABLE items ADD COLUMN buff_description TEXT")
+        
+        # Проверяем и добавляем столбец work_completed в user_stats
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='user_stats' and column_name='work_completed'
+        """)
+        if not cursor.fetchone():
+            print("🔄 Добавляем столбец work_completed в user_stats...")
+            cursor.execute("ALTER TABLE user_stats ADD COLUMN work_completed INTEGER DEFAULT 0")
+        
+        self.conn.commit()
+        print("✅ Отсутствующие столбцы добавлены!")
+        
+    except Exception as e:
+        print(f"❌ Ошибка при добавлении столбцов: {e}")
+        self.conn.rollback()
+
     def update_user_stat(self, user_id, stat_name, increment=1):
         """Обновляет статистику пользователя и проверяет достижения"""
         try:
@@ -1186,37 +1220,44 @@ CREATE TABLE IF NOT EXISTS user_works (
         
         self.conn.commit()
     
-    def get_user_buffs(self, user_id):
-        """Безопасное получение бафов пользователя"""
-        try:
-            inventory = self.get_user_inventory(user_id)
-            buffs = {}
-            
-            for item_id, count in inventory.get("items", {}).items():
-                try:
-                    if not str(item_id).isdigit():
-                        continue
-                        
-                    item_data = self.get_item(int(item_id))
-                    if item_data and len(item_data) > 6 and item_data[5]:
-                        buff_type = item_data[5]
-                        buff_value = item_data[6] if len(item_data) > 6 else 1.0
-                        
+def get_user_buffs(self, user_id):
+    """Безопасное получение бафов пользователя"""
+    try:
+        inventory = self.get_user_inventory_safe(user_id)
+        buffs = {}
+        
+        for item_id, count in inventory.get("items", {}).items():
+            try:
+                if not str(item_id).isdigit():
+                    continue
+                    
+                item_data = self.get_item(int(item_id))
+                if item_data and len(item_data) > 6:
+                    # Правильные индексы для полей бафов
+                    buff_type = item_data[5]  # buff_type
+                    buff_value = item_data[6] if len(item_data) > 6 and item_data[6] is not None else 1.0  # buff_value
+                    buff_description = item_data[7] if len(item_data) > 7 and item_data[7] else "Без описания"  # buff_description
+                    item_name = item_data[1] if len(item_data) > 1 and item_data[1] else f"Предмет {item_id}"
+                    
+                    # Проверяем, что buff_type существует
+                    if buff_type and buff_type.strip():
+                        # Сохраняем самый сильный баф каждого типа
                         if buff_type not in buffs or buff_value > buffs[buff_type]['value']:
                             buffs[buff_type] = {
                                 'value': float(buff_value),
-                                'description': item_data[7] if len(item_data) > 7 and item_data[7] else "Бонус",
-                                'item_name': item_data[1] if len(item_data) > 1 and item_data[1] else "Предмет"
+                                'description': buff_description,
+                                'item_name': item_name
                             }
-                except (ValueError, IndexError, TypeError) as e:
-                    print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
-                    continue
-            
-            return buffs
-        except Exception as e:
-            print(f"❌ Ошибка в get_user_buffs для {user_id}: {e}")
-            return {}
-    
+                            
+            except (ValueError, IndexError, TypeError) as e:
+                print(f"⚠️ Ошибка обработки предмета {item_id}: {e}")
+                continue
+        
+        return buffs
+    except Exception as e:
+        print(f"❌ Ошибка в get_user_buffs для {user_id}: {e}")
+        return {}
+
     def get_active_buffs_count(self, user_id):
         """Возвращает количество активных уникальных бафов"""
         buffs = self.get_user_buffs(user_id)
@@ -1347,6 +1388,36 @@ async def test_command(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+@bot.tree.command(name="items", description="Показать все доступные предметы с бафами")
+async def items_list(interaction: discord.Interaction):
+    try:
+        items = db.get_all_items_safe()
+        
+        if not items:
+            await interaction.response.send_message("Предметы не найдены!", ephemeral=True)
+            return
+        
+        # Создаем страницы
+        pages = []
+        current_page = []
+        
+        for i, item in enumerate(items):
+            if i > 0 and i % 3 == 0:  # 3 предмета на страницу
+                pages.append(current_page)
+                current_page = []
+            current_page.append(item)
+        
+        if current_page:
+            pages.append(current_page)
+        
+        view = ItemsPaginatedView(pages, interaction.user.id)
+        embed = view.create_embed()
+        await interaction.response.send_message(embed=embed, view=view)
+        
+    except Exception as e:
+        print(f"❌ Ошибка в команде items: {e}")
+        await interaction.response.send_message("❌ Произошла ошибка при загрузке предметов!", ephemeral=True)
+
 # Улучшенная функция проверки прав администратора
 def is_admin():
     async def predicate(interaction: discord.Interaction) -> bool:
@@ -1461,6 +1532,94 @@ class ImprovedCasesView(View):
             )
 
         return embed
+
+    def create_embed(self):
+    page_items = self.pages[self.current_page]
+    embed = discord.Embed(
+        title=f"🎒 Инвентарь {self.author_name} (Страница {self.current_page + 1}/{self.total_pages})",
+        description="**Активные предметы автоматически дают бонусы! Самый сильный предмет каждого типа действует.**",
+        color=0x3498db
+    )
+    
+    user = bot.get_user(self.author_id)
+    self.author_name = user.display_name if user else "Пользователь"
+    
+    for item_data, count in page_items:
+        try:
+            item_name = item_data[1] if len(item_data) > 1 else "Неизвестный предмет"
+            item_description = item_data[2] if len(item_data) > 2 else "Описание отсутствует"
+            item_rarity = item_data[4] if len(item_data) > 4 else "common"
+            buff_type = item_data[5] if len(item_data) > 5 else None
+            buff_value = item_data[6] if len(item_data) > 6 else 1.0
+            buff_description = item_data[7] if len(item_data) > 7 else "Без особого эффекта"
+            
+            rarity_emoji = {
+                'common': '⚪',
+                'uncommon': '🟢', 
+                'rare': '🔵',
+                'epic': '🟣',
+                'legendary': '🟠',
+                'mythic': '🟡'
+            }.get(item_rarity, '⚪')
+            
+            # Формируем описание эффекта
+            effect_text = buff_description
+            if buff_type and buff_value != 1.0:
+                effect_text = f"{buff_description} (x{buff_value})"
+            
+            field_value = f"**Количество:** ×{count}\n"
+            field_value += f"**Описание:** {item_description}\n"
+            field_value += f"**Эффект:** {effect_text}\n"
+            field_value += f"**Редкость:** {rarity_emoji} {item_rarity.capitalize()}"
+            
+            embed.add_field(
+                name=f"{item_name}",
+                value=field_value,
+                inline=False
+            )
+            
+        except Exception as e:
+            print(f"⚠️ Ошибка обработки предмета в инвентаре: {e}")
+            continue
+    
+    # Добавляем информацию об активных бафах
+    try:
+        buffs = db.get_user_buffs(self.author_id)
+        if buffs:
+            buffs_text = "\n".join([f"• **{buff['item_name']}**: {buff['description']} (x{buff['value']})" for buff in buffs.values()])
+            embed.add_field(
+                name="🎯 Активные бафы (самые сильные)",
+                value=buffs_text,
+                inline=False
+            )
+    except Exception as e:
+        print(f"⚠️ Ошибка получения бафов: {e}")
+    
+    embed.set_footer(text="💡 Предметы можно продать на маркетплейсе или использовать для улучшения")
+    return embed
+
+    def create_embed(self):
+    """Создает embed для отображения состояния игры"""
+    player_score = self.calculate_score(self.player_cards)
+    dealer_score = self.calculate_score(self.dealer_cards[:1])
+
+    embed = discord.Embed(title="🃏 Блэкджек", color=0x00ff00)
+    embed.add_field(
+        name="Ваши карты",
+        value=f"{' '.join(['🂠'] * len(self.player_cards))} (Очки: {player_score})",
+        inline=False
+    )
+    embed.add_field(
+        name="Карты дилера", 
+        value=f"{'🂠' if self.dealer_cards else ''} ?",
+        inline=False
+    )
+    embed.add_field(
+        name="Ставка",
+        value=f"{self.bet} {EMOJIS['coin']}",
+        inline=True
+    )
+    return embed
 
     def get_full_rewards_description(self, rewards):
         """Создает полное описание всех наград кейса"""
@@ -3215,6 +3374,36 @@ async def inventory(interaction: discord.Interaction):
         print(f"❌ Ошибка в команде inventory: {e}")
         await interaction.response.send_message("❌ Произошла ошибка при загрузке инвентаря!", ephemeral=True)
 
+@bot.tree.command(name="check_buffs", description="Проверить активные бафы")
+async def check_buffs(interaction: discord.Interaction):
+    try:
+        buffs = db.get_user_buffs(interaction.user.id)
+        
+        embed = discord.Embed(title="🎯 Проверка бафов", color=0x00ff00)
+        
+        if not buffs:
+            embed.description = "У вас нет активных бафов. Получите предметы из кейсов!"
+            await interaction.response.send_message(embed=embed)
+            return
+        
+        for buff_type, buff_info in buffs.items():
+            embed.add_field(
+                name=f"✨ {buff_info['item_name']}",
+                value=f"**Тип:** {buff_type}\n**Эффект:** {buff_info['description']}\n**Множитель:** x{buff_info['value']}",
+                inline=False
+            )
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except Exception as e:
+        print(f"❌ Ошибка в команде check_buffs: {e}")
+        error_embed = discord.Embed(
+            title="❌ Ошибка проверки бафов",
+            description="Произошла ошибка при проверке бафов.",
+            color=0xff0000
+        )
+        await interaction.response.send_message(embed=error_embed, ephemeral=True)
+
 @bot.tree.command(name="force_sync", description="Принудительная синхронизация команд (админ)")
 @is_admin()
 async def force_sync(interaction: discord.Interaction):
@@ -3552,9 +3741,9 @@ async def leaderboard(interaction: discord.Interaction, type: app_commands.Choic
         # Исправленный запрос для лидерборда по предметам
         cursor.execute('''
             SELECT u.user_id, 
-                   (SELECT COUNT(*) FROM jsonb_object_keys(u.inventory->'items')) as unique_items
+                   (SELECT COUNT(*) FROM jsonb_each_text(u.inventory::jsonb->'items')) as unique_items
             FROM users u
-            WHERE u.inventory->'items' IS NOT NULL 
+            WHERE u.inventory::jsonb->'items' IS NOT NULL
             ORDER BY unique_items DESC LIMIT 10
         ''')
         title = "📦 Лидеры по уникальным предметам"
@@ -3929,10 +4118,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
-
-
-
-
-
-
 

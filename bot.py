@@ -1725,23 +1725,30 @@ class CaseView(View):
             await interaction.response.send_message("❌ Недостаточно монет!", ephemeral=True)
             return
 
-        # Спин анимация
-        embed = discord.Embed(title="🎰 Открытие кейса...", color=0xffd700)
-        await interaction.response.edit_message(embed=embed, view=None)
+        # Отключаем кнопку сразу
+        button.disabled = True
+        button.label = "⏳ Открывается..."
+        await interaction.response.edit_message(view=self)
 
+        # Анимация открытия с правильным использованием API
+        message = await interaction.original_response()
+        
         for i in range(3):
+            embed = discord.Embed(
+                title="🎰 Открытие кейса...",
+                description="🎁" * (i + 1) + "📦" * (3 - i - 1),
+                color=0xffd700
+            )
+            await message.edit(embed=embed)
             await asyncio.sleep(1)
-            embed.description = "🎁" * (i + 1)
-            await interaction.edit_original_response(embed=embed)
 
-        # Определение награды
+        # Определение награды и обработка
         case = {
             'name': case_data[1],
             'price': case_data[2],
             'rewards': json.loads(case_data[3])
         }
         
-        # Функции для работы с наградами
         def get_reward(case):
             rewards = case['rewards']
             rand = random.random()
@@ -1752,39 +1759,39 @@ class CaseView(View):
                     return reward
             return rewards[0]
 
-async def process_reward(user, reward, case):
-    user_id = user.id
-    if reward['type'] == 'coins':
-        amount = random.randint(reward['amount'][0], reward['amount'][1])
-        # Применяем бафы
-        amount = db.apply_buff_to_amount(user_id, amount, 'case_bonus')
-        amount = db.apply_buff_to_amount(user_id, amount, 'multiplier')
-        amount = db.apply_buff_to_amount(user_id, amount, 'all_bonus')
-        db.update_balance(user_id, amount)
-        db.log_transaction(user_id, 'case_reward', amount, description=f"Кейс: {case['name']}")
-        return f"💰 Монеты: {amount} {EMOJIS['coin']}"
+        async def process_reward(user, reward, case):
+            user_id = user.id
+            if reward['type'] == 'coins':
+                amount = random.randint(reward['amount'][0], reward['amount'][1])
+                # Применяем бафы
+                amount = db.apply_buff_to_amount(user_id, amount, 'case_bonus')
+                amount = db.apply_buff_to_amount(user_id, amount, 'multiplier')
+                amount = db.apply_buff_to_amount(user_id, amount, 'all_bonus')
+                db.update_balance(user_id, amount)
+                db.log_transaction(user_id, 'case_reward', amount, description=f"Кейс: {case['name']}")
+                return f"💰 **Монеты:** {amount} {EMOJIS['coin']}"
 
-    elif reward['type'] == 'special_item':
-        item_name = reward['name']
-        db.add_item_to_inventory(user_id, item_name)
-        return f"🎁 Предмет: {item_name}"
+            elif reward['type'] == 'special_item':
+                item_name = reward['name']
+                db.add_item_to_inventory(user_id, item_name)
+                return f"🎁 **Предмет:** {item_name}"
 
-    elif reward['type'] == 'bonus':
-        amount = case['price'] * reward['multiplier']
-        db.update_balance(user_id, amount)
-        db.log_transaction(user_id, 'case_bonus', amount, description=f"Бонус из кейса: {case['name']}")
-        return f"⭐ Бонус: {amount} {EMOJIS['coin']} (x{reward['multiplier']})"
+            elif reward['type'] == 'bonus':
+                amount = case['price'] * reward['multiplier']
+                db.update_balance(user_id, amount)
+                db.log_transaction(user_id, 'case_bonus', amount, description=f"Бонус из кейса: {case['name']}")
+                return f"⭐ **Бонус:** {amount} {EMOJIS['coin']} (x{reward['multiplier']})"
 
-    elif reward['type'] == 'loss':
-        amount = random.randint(reward['amount'][0], reward['amount'][1])
-        # Применяем защиту от потерь
-        actual_loss = db.apply_buff_to_amount(user_id, amount, 'loss_protection')
-        db.update_balance(user_id, -actual_loss)
-        db.log_transaction(user_id, 'case_loss', -actual_loss, description=f"Потеря из кейса: {case['name']}")
-        return f"💀 Потеря: {actual_loss} {EMOJIS['coin']}"
+            elif reward['type'] == 'loss':
+                amount = random.randint(reward['amount'][0], reward['amount'][1])
+                # Применяем защиту от потерь
+                actual_loss = db.apply_buff_to_amount(user_id, amount, 'loss_protection')
+                db.update_balance(user_id, -actual_loss)
+                db.log_transaction(user_id, 'case_loss', -actual_loss, description=f"Потеря из кейса: {case['name']}")
+                return f"💀 **Потеря:** {actual_loss} {EMOJIS['coin']}"
 
-    else:
-        return "Ничего"
+            else:
+                return "❌ Ничего"
 
         reward = get_reward(case)
         reward_text = await process_reward(interaction.user, reward, case)
@@ -1796,13 +1803,21 @@ async def process_reward(user, reward, case):
         # Обновляем статистику открытия кейсов
         db.update_user_stat(interaction.user.id, 'cases_opened')
 
+        # Финальное сообщение
         embed = discord.Embed(
             title=f"🎉 {case['name']} открыт!",
             description=reward_text,
             color=0x00ff00
         )
-        embed.add_field(name="Стоимость", value=f"{case_price} {EMOJIS['coin']}", inline=True)
-        await interaction.edit_original_response(embed=embed)
+        embed.add_field(name="💸 Стоимость", value=f"{case_price} {EMOJIS['coin']}", inline=True)
+        
+        # Показываем активные бафы, которые повлияли
+        buffs = db.get_user_buffs(interaction.user.id)
+        if buffs:
+            buffs_text = "\n".join([f"• {buff['item_name']}: {buff['description']}" for buff in buffs.values()])
+            embed.add_field(name="🎯 Активные бафы", value=buffs_text, inline=False)
+        
+        await message.edit(embed=embed, view=None)
 
 class CoinFlipView(View):
     def __init__(self, user_id, bet):
@@ -3447,7 +3462,7 @@ async def show_achievements(interaction: discord.Interaction):
         else:
             class AchievementsPaginatedView(View):
                 def __init__(self, pages, author_id, unlocked_count, total_count):
-                    super().__init__(timeout=120)
+                    super().__init__(timeout=300)
                     self.pages = pages
                     self.current_page = 0
                     self.total_pages = len(pages)
@@ -4082,6 +4097,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

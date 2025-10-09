@@ -7,7 +7,7 @@ import json
 import random
 import datetime
 import traceback
-import asyncio
+import asynciof
 
 # Импорт PostgreSQL
 try:
@@ -4082,6 +4082,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

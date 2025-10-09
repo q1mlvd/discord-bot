@@ -460,15 +460,15 @@ class Database:
                     print("💥 Не удалось подключиться к базе данных после нескольких попыток")
                     raise
 
-    def create_tables(self):
-        """Создание таблиц с улучшенной обработкой ошибок"""
-        try:
-            cursor = self.conn.cursor()
-            
-            print("🔄 Создание таблиц...")
-            
-            # Таблица пользователей
-            cursor.execute('''
+def create_tables(self):
+    """Создание таблиц с улучшенной обработкой ошибок"""
+    try:
+        cursor = self.conn.cursor()
+        
+        print("🔄 Создание таблиц...")
+        
+        # Таблица пользователей
+        cursor.execute('''
 CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT PRIMARY KEY,
     balance INTEGER DEFAULT 100,
@@ -478,9 +478,9 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 ''')
-            
-            # Таблица транзакций
-            cursor.execute('''
+        
+        # Таблица транзакций
+        cursor.execute('''
 CREATE TABLE IF NOT EXISTS transactions (
     id SERIAL PRIMARY KEY,
     user_id BIGINT,
@@ -491,9 +491,9 @@ CREATE TABLE IF NOT EXISTS transactions (
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 ''')
-            
-            # Таблица кейсов
-            cursor.execute('''
+        
+        # Таблица кейсов
+        cursor.execute('''
 CREATE TABLE IF NOT EXISTS cases (
     id SERIAL PRIMARY KEY,
     name TEXT,
@@ -502,9 +502,9 @@ CREATE TABLE IF NOT EXISTS cases (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 ''')
-            
-            # Таблица маркета
-            cursor.execute('''
+        
+        # Таблица маркета
+        cursor.execute('''
 CREATE TABLE IF NOT EXISTS market (
     id SERIAL PRIMARY KEY,
     seller_id BIGINT,
@@ -513,9 +513,9 @@ CREATE TABLE IF NOT EXISTS market (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 ''')
-            
-            # Таблица достижений
-            cursor.execute('''
+        
+        # Таблица достижений
+        cursor.execute('''
 CREATE TABLE IF NOT EXISTS achievements (
     user_id BIGINT,
     achievement_id TEXT,
@@ -523,9 +523,9 @@ CREATE TABLE IF NOT EXISTS achievements (
     PRIMARY KEY (user_id, achievement_id)
 )
 ''')
-            
-            # Таблица дуэлей
-            cursor.execute('''
+        
+        # Таблица дуэлей
+        cursor.execute('''
 CREATE TABLE IF NOT EXISTS duels (
     id SERIAL PRIMARY KEY,
     challenger_id BIGINT,
@@ -536,9 +536,9 @@ CREATE TABLE IF NOT EXISTS duels (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 ''')
-            
-            # Таблица предметов
-            cursor.execute('''
+        
+        # Таблица предметов
+        cursor.execute('''
 CREATE TABLE IF NOT EXISTS items (
     id SERIAL PRIMARY KEY,
     name TEXT,
@@ -551,9 +551,9 @@ CREATE TABLE IF NOT EXISTS items (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 ''')
-            
-            # Таблица статистики пользователей
-            cursor.execute('''
+        
+        # Таблица статистики пользователей
+        cursor.execute('''
 CREATE TABLE IF NOT EXISTS user_stats (
     user_id BIGINT PRIMARY KEY,
     cases_opened INTEGER DEFAULT 0,
@@ -574,9 +574,9 @@ CREATE TABLE IF NOT EXISTS user_stats (
     last_win_time TIMESTAMP
 )
 ''')
-            
-            # Таблица работ пользователей
-            cursor.execute('''
+        
+        # Таблица работ пользователей
+        cursor.execute('''
 CREATE TABLE IF NOT EXISTS user_works (
     user_id BIGINT,
     work_type TEXT,
@@ -585,17 +585,17 @@ CREATE TABLE IF NOT EXISTS user_works (
     PRIMARY KEY (user_id, work_type)
 )
 ''')
-            
-self.conn.commit()
-print("✅ Все таблицы успешно созданы!")
+        
+        self.conn.commit()
+        print("✅ Все таблицы успешно созданы!")
 
-# Проверяем и добавляем отсутствующие столбцы
-self.add_missing_columns()
+        # Проверяем и добавляем отсутствующие столбцы
+        self.add_missing_columns()
             
-        except Exception as e:
-            print(f"❌ Ошибка при создании таблиц: {e}")
-            self.conn.rollback()
-            raise
+    except Exception as e:
+        print(f"❌ Ошибка при создании таблиц: {e}")
+        self.conn.rollback()
+        raise
 
     def initialize_default_data(self):
         """Инициализация начальных данных"""
@@ -4118,4 +4118,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 

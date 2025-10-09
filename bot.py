@@ -1,6 +1,6 @@
 import os
 import discord
-from discord import app_commands
+from discord import app_commandsf
 from discord.ext import commands, tasks
 from discord.ui import Button, View, Select
 import json
@@ -4082,6 +4082,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
 

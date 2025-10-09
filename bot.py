@@ -1508,7 +1508,6 @@ class ImprovedCasesView(View):
         page_cases = self.pages[self.current_page]
         embed = discord.Embed(
             title=f"📦 Список кейсов (Страница {self.current_page + 1}/{self.total_pages})",
-            description="**Полное описание всех кейсов:**",
             color=0xff69b4
         )
 
@@ -1518,108 +1517,39 @@ class ImprovedCasesView(View):
             case_price = case[2]
             case_rewards = json.loads(case[3])
 
-            # Полное описание наград для каждого кейса
-            rewards_description = self.get_full_rewards_description(case_rewards)
+            # Формируем краткое описание наград
+            rewards_summary = self.get_rewards_summary(case_rewards)
             
-            field_value = f"**Цена:** {case_price} {EMOJIS['coin']}\n"
-            field_value += f"**ID:** {case_id}\n\n"
-            field_value += f"**Награды:**\n{rewards_description}"
-
             embed.add_field(
-                name=f"{case_name}",
-                value=field_value,
+                name=f"{case_name} (ID: {case_id})",
+                value=f"**Цена:** {case_price} {EMOJIS['coin']}\n**Награды:** {rewards_summary}",
                 inline=False
             )
 
         return embed
 
-    def create_embed(self):
-    page_items = self.pages[self.current_page]
-    embed = discord.Embed(
-        title=f"🎒 Инвентарь {self.author_name} (Страница {self.current_page + 1}/{self.total_pages})",
-        description="**Активные предметы автоматически дают бонусы! Самый сильный предмет каждого типа действует.**",
-        color=0x3498db
-    )
-    
-    user = bot.get_user(self.author_id)
-    self.author_name = user.display_name if user else "Пользователь"
-    
-    for item_data, count in page_items:
-        try:
-            item_name = item_data[1] if len(item_data) > 1 else "Неизвестный предмет"
-            item_description = item_data[2] if len(item_data) > 2 else "Описание отсутствует"
-            item_rarity = item_data[4] if len(item_data) > 4 else "common"
-            buff_type = item_data[5] if len(item_data) > 5 else None
-            buff_value = item_data[6] if len(item_data) > 6 else 1.0
-            buff_description = item_data[7] if len(item_data) > 7 else "Без особого эффекта"
-            
-            rarity_emoji = {
-                'common': '⚪',
-                'uncommon': '🟢', 
-                'rare': '🔵',
-                'epic': '🟣',
-                'legendary': '🟠',
-                'mythic': '🟡'
-            }.get(item_rarity, '⚪')
-            
-            # Формируем описание эффекта
-            effect_text = buff_description
-            if buff_type and buff_value != 1.0:
-                effect_text = f"{buff_description} (x{buff_value})"
-            
-            field_value = f"**Количество:** ×{count}\n"
-            field_value += f"**Описание:** {item_description}\n"
-            field_value += f"**Эффект:** {effect_text}\n"
-            field_value += f"**Редкость:** {rarity_emoji} {item_rarity.capitalize()}"
-            
-            embed.add_field(
-                name=f"{item_name}",
-                value=field_value,
-                inline=False
-            )
-            
-        except Exception as e:
-            print(f"⚠️ Ошибка обработки предмета в инвентаре: {e}")
-            continue
-    
-    # Добавляем информацию об активных бафах
-    try:
-        buffs = db.get_user_buffs(self.author_id)
-        if buffs:
-            buffs_text = "\n".join([f"• **{buff['item_name']}**: {buff['description']} (x{buff['value']})" for buff in buffs.values()])
-            embed.add_field(
-                name="🎯 Активные бафы (самые сильные)",
-                value=buffs_text,
-                inline=False
-            )
-    except Exception as e:
-        print(f"⚠️ Ошибка получения бафов: {e}")
-    
-    embed.set_footer(text="💡 Предметы можно продать на маркетплейсе или использовать для улучшения")
-    return embed
-
-    def create_embed(self):
-    """Создает embed для отображения состояния игры"""
-    player_score = self.calculate_score(self.player_cards)
-    dealer_score = self.calculate_score(self.dealer_cards[:1])
-
-    embed = discord.Embed(title="🃏 Блэкджек", color=0x00ff00)
-    embed.add_field(
-        name="Ваши карты",
-        value=f"{' '.join(['🂠'] * len(self.player_cards))} (Очки: {player_score})",
-        inline=False
-    )
-    embed.add_field(
-        name="Карты дилера", 
-        value=f"{'🂠' if self.dealer_cards else ''} ?",
-        inline=False
-    )
-    embed.add_field(
-        name="Ставка",
-        value=f"{self.bet} {EMOJIS['coin']}",
-        inline=True
-    )
-    return embed
+    def get_rewards_summary(self, rewards):
+        """Создает краткое описание наград кейса"""
+        summary = []
+        
+        for reward in rewards:
+            chance_percent = reward['chance'] * 100
+            if reward['type'] == 'coins':
+                min_amount = reward['amount'][0]
+                max_amount = reward['amount'][1]
+                summary.append(f"💰 {min_amount}-{max_amount} ({chance_percent:.1f}%)")
+            elif reward['type'] == 'special_item':
+                item_name = reward['name']
+                summary.append(f"🎁 {item_name} ({chance_percent:.1f}%)")
+            elif reward['type'] == 'bonus':
+                multiplier = reward['multiplier']
+                summary.append(f"⭐ x{multiplier} ({chance_percent:.1f}%)")
+            elif reward['type'] == 'loss':
+                min_loss = reward['amount'][0]
+                max_loss = reward['amount'][1]
+                summary.append(f"💀 -{min_loss}-{max_loss} ({chance_percent:.1f}%)")
+        
+        return " | ".join(summary[:3]) + ("..." if len(summary) > 3 else "")
 
     def get_full_rewards_description(self, rewards):
         """Создает полное описание всех наград кейса"""
@@ -4118,5 +4048,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"💥 Критическая ошибка при запуске бота: {e}")
         traceback.print_exc()
+
 
 
